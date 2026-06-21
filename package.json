@@ -1,0 +1,55 @@
+{
+  "name": "supercargo",
+  "version": "0.5.2",
+  "description": "Star Citizen hauling manifest & cargo planning desktop app",
+  "main": "./out/main/index.js",
+  "author": "Travis",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AquatikJustice/SuperCargo.git"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "gen:training": "node scripts/gen-training-data.mjs",
+    "gen:atlas": "node scripts/build-glyph-atlas.mjs",
+    "gen:icon": "node scripts/gen-icon.mjs",
+    "gen:grids": "node scripts/gen-cargo-grids.mjs",
+    "dist": "electron-vite build && electron-builder --win --publish never",
+    "dist:dir": "electron-vite build && electron-builder --win --dir",
+    "publish": "electron-vite build && electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "onnxruntime-node": "^1.27.0",
+    "tesseract.js": "^5.1.1"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.1.1",
+    "@fontsource/rajdhani": "^5.1.0",
+    "@fontsource/saira": "^5.1.0",
+    "@napi-rs/canvas": "^1.0.0",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "zustand": "^5.0.2"
+  }
+}

@@ -1,0 +1,73 @@
+/* Holographic terminal base - pure black void, thin luminous hairlines.
+   Performance constraint (spec 12.1): no backdrop-filter, no animations,
+   no glow box-shadows on large surfaces. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  /* Transparent so the window's inset margin shows the bezel glow over the
+     desktop, not an opaque band. The app shell (App.tsx root) paints solid
+     black, so all actual content sits on black. */
+  background: transparent;
+}
+
+body {
+  color: #dce8ef;
+  font-family: 'Saira', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+::selection {
+  background: rgba(255, 210, 30, 0.25);
+  color: #1a1400;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: #000;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.13);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+button {
+  font-family: inherit;
+}
+
+input,
+select {
+  font-family: inherit;
+}
+
+/* Inputs are the only places text selection / caret should feel native. */
+input {
+  user-select: text;
+}
+
+/* Frameless-window drag regions. */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}

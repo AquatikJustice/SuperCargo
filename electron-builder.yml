@@ -1,0 +1,64 @@
+# electron-builder configuration.
+#
+# IMPORTANT - GitHub Actions are NOT used. Releases are built and published
+# LOCALLY (zero Actions minutes) with:
+#
+#     set GH_TOKEN=<personal access token with repo scope>   (PowerShell: $env:GH_TOKEN="...")
+#     npm run publish
+#
+# That builds the NSIS installer and uploads it + latest.yml directly to a
+# GitHub Release as a draft. `electron-updater` in the app reads latest.yml
+# from the release assets. To produce an installer WITHOUT uploading:
+#
+#     npm run dist
+#
+appId: space.supercargo.app
+productName: SuperCargo
+copyright: Copyright © 2026 Travis
+
+directories:
+  output: release
+  buildResources: build
+
+# electron-vite emits the compiled app into out/
+files:
+  - out/**/*
+  - package.json
+  # the live window/taskbar icon is loaded at runtime from ../../resources/icon.png
+  # (relative to out/main); the exe + installer icon comes from build/icon.ico.
+  - resources/icon.png
+
+# tesseract.js loads its worker script + wasm core from disk at runtime; they
+# must live outside the asar archive or recognition fails in the packaged app.
+asarUnpack:
+  - node_modules/tesseract.js/**
+  - node_modules/tesseract.js-core/**
+  # onnxruntime-node ships native .node/.dll binaries that can't run from inside asar
+  - node_modules/onnxruntime-node/**
+
+# --- Auto-update / publish target -------------------------------------------
+# Update owner/repo before the first publish. electron-updater uses this to
+# find latest.yml in the GitHub Release assets.
+publish:
+  provider: github
+  owner: AquatikJustice
+  repo: SuperCargo
+  releaseType: draft
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: SuperCargo
+  # 'always' recreates the desktop shortcut on every install AND update. Without
+  # it (default true), a silent auto-update's uninstall step removes the shortcut
+  # and the reinstall declines to recreate it, so the icon vanishes after updating.
+  createDesktopShortcut: always

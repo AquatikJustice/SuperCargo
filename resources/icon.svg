@@ -1,0 +1,33 @@
+<svg viewBox="-44 -488 548 548" width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <g stroke="#1c1f25" stroke-width="5.5" stroke-linejoin="round">
+    <polygon points="150,0 150,-150 310,-278 310,-128" fill="#4d545c" />
+    <polygon points="0,-150 150,-150 310,-278 160,-278" fill="#717880" />
+    <polygon points="0,0 150,0 150,-150 0,-150" fill="#8e949c" />
+    <rect x="25.5" y="-97.5" width="99" height="43.5" rx="21.8" fill="none" stroke="#ff9c30" stroke-width="9" />
+    <text x="75" y="-66.6" font-family="'JetBrains Mono', monospace" font-size="26.1" font-weight="700" letter-spacing="1.5" fill="#ff9c30" stroke="none" text-anchor="middle">SCU</text>
+  </g>
+  <g stroke="#1c1f25" stroke-width="5.5" stroke-linejoin="round">
+    <polygon points="300,0 300,-150 460,-278 460,-128" fill="#4d545c" />
+    <polygon points="150,-150 300,-150 460,-278 310,-278" fill="#717880" />
+    <polygon points="150,0 300,0 300,-150 150,-150" fill="#8e949c" />
+    <rect x="175.5" y="-97.5" width="99" height="43.5" rx="21.8" fill="none" stroke="#ff9c30" stroke-width="9" />
+    <text x="225" y="-66.6" font-family="'JetBrains Mono', monospace" font-size="26.1" font-weight="700" letter-spacing="1.5" fill="#ff9c30" stroke="none" text-anchor="middle">SCU</text>
+  </g>
+  <g stroke="#1c1f25" stroke-width="5.5" stroke-linejoin="round">
+    <polygon points="150,-150 150,-300 310,-428 310,-278" fill="#4d545c" />
+    <polygon points="0,-300 150,-300 310,-428 160,-428" fill="#717880" />
+    <polygon points="0,-150 150,-150 150,-300 0,-300" fill="#8e949c" />
+    <rect x="25.5" y="-247.5" width="99" height="43.5" rx="21.8" fill="none" stroke="#ff9c30" stroke-width="9" />
+    <text x="75" y="-216.6" font-family="'JetBrains Mono', monospace" font-size="26.1" font-weight="700" letter-spacing="1.5" fill="#ff9c30" stroke="none" text-anchor="middle">SCU</text>
+  </g>
+  <g>
+    <polygon points="300,-150 300,-300 460,-428 460,-278" fill="#7c74c8" fill-opacity="0.30" />
+    <polygon points="150,-300 300,-300 460,-428 310,-428" fill="#7c74c8" fill-opacity="0.42" />
+    <polygon points="150,-150 300,-150 300,-300 150,-300" fill="#7c74c8" fill-opacity="0.54" />
+    <polygon points="300,-150 300,-300 460,-428 460,-278" fill="none" stroke="#bdb2f2" stroke-width="7" stroke-linejoin="round" />
+    <polygon points="150,-300 300,-300 460,-428 310,-428" fill="none" stroke="#bdb2f2" stroke-width="7" stroke-linejoin="round" />
+    <polygon points="150,-150 300,-150 300,-300 150,-300" fill="none" stroke="#bdb2f2" stroke-width="7" stroke-linejoin="round" />
+    <rect x="175.5" y="-247.5" width="99" height="43.5" rx="21.8" fill="none" stroke="#bdb2f2" stroke-width="6.5" opacity="0.85" />
+    <text x="225" y="-216.6" font-family="'JetBrains Mono', monospace" font-size="26.1" font-weight="700" letter-spacing="1.5" fill="#bdb2f2" stroke="none" opacity="0.85" text-anchor="middle">SCU</text>
+  </g>
+</svg>

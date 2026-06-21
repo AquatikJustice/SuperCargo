@@ -1,0 +1,7 @@
+# CRNN+CTC training for SuperCargo's custom OCR engine.
+# Install torch from https://pytorch.org/get-started/locally/ for your CUDA/CPU.
+torch>=2.1
+numpy>=1.24
+pillow>=10.0
+onnx>=1.15
+onnxruntime>=1.17
