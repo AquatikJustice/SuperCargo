@@ -83,6 +83,13 @@ const RE_REWARD_LABEL_NUM = new RegExp(
 const RE_AUEC = new RegExp(`${NUM}\\s*a?\\s*u\\s?ec`, 'gi')
 // Currency-first form, e.g. "aUEC 88,500".
 const RE_AUEC_PRE = new RegExp(`a?\\s*u\\s?ec\\s*${NUM}`, 'gi')
+// Last resort when neither the "Reward" label nor an aUEC token survives OCR (the
+// reward sits next to a coin glyph that often eats the label, so the number can be
+// the only readable part, e.g. "a 325,250"). Find the largest money-shaped figure:
+// a comma/period-grouped thousands value (88,500 / 325.250) or a bare 5+ digit run.
+// Guard against an objective amount sneaking in: not part of a longer number, not
+// an "n/total" fraction, not glued to "SCU".
+const RE_MONEY = /(?<![\d/.,])(\d{1,3}(?:[.,]\d{3})+|\d{5,})(?!\s*\/)(?!\s*scu)/gi
 
 function toAmount(s: string): number {
   const n = parseInt(s.replace(/[^0-9]/g, ''), 10)
@@ -92,8 +99,9 @@ function toAmount(s: string): number {
 /** Pull the contract reward (aUEC) from the panel text. In priority order:
  *  1) a value next to "Reward" with the aUEC token, 2) a (comma-grouped / 4+ digit)
  *  value next to "Reward" alone (the currency may be a coin icon OCR can't read),
- *  3) the largest "<n> aUEC" figure. Returns undefined when nothing plausible was
- *  read. */
+ *  3) the largest "<n> aUEC" figure, 4) the largest money-shaped number anywhere
+ *  (label and currency both lost to OCR). Returns undefined when nothing plausible
+ *  was read. */
 export function parseReward(text: string): number | undefined {
   for (const re of [RE_REWARD_LABEL_CUR, RE_REWARD_LABEL_NUM]) {
     const m = re.exec(text)
@@ -110,6 +118,13 @@ export function parseReward(text: string): number | undefined {
       const n = toAmount(m[1])
       if (n > best) best = n
     }
+  }
+  if (best > 0) return best
+  RE_MONEY.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = RE_MONEY.exec(text)) !== null) {
+    const n = toAmount(m[1])
+    if (n > best) best = n
   }
   return best > 0 ? best : undefined
 }
