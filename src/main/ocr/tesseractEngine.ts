@@ -67,7 +67,12 @@ export class TesseractEngine implements OcrEngine {
           gzip: true
         })
         // The contract screen is white text on a dark UI, so favor accuracy.
-        await worker.setParameters({ preserve_interword_spaces: '1' })
+        // PSM 3 (auto page segmentation) is critical: the contract panel is two
+        // columns (DETAILS letter on the left, PRIMARY OBJECTIVES on the right).
+        // Without it Tesseract reads straight across both columns and stitches the
+        // left-column pickup prose into the right-column destinations, so a "Deliver
+        // ... to <dropoff>" line ends up matching the pickup (the "Everus" bug).
+        await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: '3' })
         this.worker = worker
         return worker
       } catch (e) {

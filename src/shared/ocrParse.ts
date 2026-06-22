@@ -170,9 +170,17 @@ function cleanFragment(s: string): string {
 const DEST_TAIL =
   /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|contract\w*|mission\w*|location)\b/i
 
+// Distribution-center objectives end "...to HDPC-Farnesway on Hurston." The body
+// suffix isn't part of the location name and blocks the match, so drop it. The
+// Lagrange form ("...at Hurston's L5 Lagrange point") uses "at <body>'s", not
+// "on <body>", so this never touches it.
+const DEST_BODY_SUFFIX =
+  /\s+on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)\b.*$/i
+
 function trimDestinationTail(s: string): string {
   return s
     .split(DEST_TAIL)[0]
+    .replace(DEST_BODY_SUFFIX, '')
     // a trailing amount (reward) with no keyword: only comma-grouped / 4+ digits,
     // so a real "L1"/"Area18"-style number isn't stripped.
     .replace(/\s+\d{1,3}(?:[.,]\d{3})+\s*$/g, '')
