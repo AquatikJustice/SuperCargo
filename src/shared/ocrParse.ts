@@ -31,15 +31,21 @@ export interface ParsedOcr {
   reward?: number
 }
 
+// The "done/total" slash is one of OCR's worst glyphs: a freshly accepted "0/21"
+// routinely comes back "0721" (slash read as 7) or "0|21" / "0l21" / "0I21". So
+// the fraction separator allows those look-alikes. It still consumes exactly one
+// separator char between done and total, so the digit count disambiguates: "0721"
+// -> total 21, "07721" -> total 721.
+const FRAC = '[\\/71|lI]'
 // Inline "Deliver <n>/<total> SCU of <item> to <dest>" (itemspecifics_01 /
 // deliver_resource). The amount we want is the TOTAL required (group 1).
-const RE_DELIVER_TO = /deliver\s+\d+\s*\/\s*(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
+const RE_DELIVER_TO = new RegExp(`deliver\\s+\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\s+of\\s+(.+?)\\s+to\\s+([^.\\n]+)`, 'gi')
 // "<n> SCU of <item> Delivered to <dest>" (delivery_unlimited).
 const RE_DELIVERED_TO = /(\d+)\s*scu\s+of\s+(.+?)\s+delivered\s+to\s+([^.\n]+)/gi
 // Generic fallback "<n> SCU of <item> to <dest>".
 const RE_GENERIC = /(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
 // Panel line "<destination>: <n>/<total> SCU", commodity is the line above it.
-const RE_PANEL_LINE = /^(.+?):\s*\d+\s*\/\s*(\d+)\s*scu\b/i
+const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\b`, 'i')
 // A line we should never treat as a commodity name when scanning upward.
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
 
@@ -185,12 +191,16 @@ function cleanFragment(s: string): string {
 const DEST_TAIL =
   /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|contract\w*|mission\w*|location)\b/i
 
-// Distribution-center objectives end "...to HDPC-Farnesway on Hurston." The body
-// suffix isn't part of the location name and blocks the match, so drop it. The
-// Lagrange form ("...at Hurston's L5 Lagrange point") uses "at <body>'s", not
-// "on <body>", so this never touches it.
+// Two body suffixes the panel tacks onto a destination that aren't part of the
+// location name and block the match:
+//   "...to HDPC-Farnesway on Hurston."          (distribution centers)
+//   "...to Baijini Point above ArcCorp"         (bulk "from <x>" letter contracts)
+// Drop from the suffix on. "on" is scoped to a body name so it can't eat a real
+// "... on ..." location; "above" is always junk here (no freight name contains it).
+// The Lagrange form ("...at Hurston's L5 Lagrange point") uses "at <body>'s", so
+// neither branch touches it.
 const DEST_BODY_SUFFIX =
-  /\s+on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)\b.*$/i
+  /\s+(?:on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)|above)\b.*$/i
 
 function trimDestinationTail(s: string): string {
   return s
