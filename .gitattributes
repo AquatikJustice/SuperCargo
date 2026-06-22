@@ -1,0 +1,4 @@
+# The bundled UEX lists are hashed byte-for-byte (data/uex/hashes.json) and the
+# app compares those hashes against the repo copy. Force LF so the bytes stay
+# identical across platforms, otherwise a CRLF checkout breaks the hash match.
+data/uex/*.json text eol=lf
