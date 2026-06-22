@@ -21,6 +21,7 @@
     "gen:atlas": "node scripts/build-glyph-atlas.mjs",
     "gen:icon": "node scripts/gen-icon.mjs",
     "gen:grids": "node scripts/gen-cargo-grids.mjs",
+    "gen:uex": "node scripts/gen-uex-snapshots.mjs",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",
     "publish": "electron-vite build && electron-builder --win --publish always"

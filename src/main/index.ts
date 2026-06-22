@@ -7,6 +7,7 @@ import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
 import { initUpdater, checkForUpdates, quitAndInstall } from './updater'
 import { syncAll, loadCachedRoster, loadCachedLocations, loadCachedCommodities, getRouteDistances } from './uex'
+import { seedCacheIfNeeded, refreshFromRepo } from './dataSync'
 import { scanActiveContracts } from './scanLog'
 import { randomUUID } from 'node:crypto'
 import { listDisplays } from './capture'
@@ -534,12 +535,20 @@ if (!gotLock) {
       console.warn('[contractData] index build failed:', e)
     }
 
-    // Refresh ships + freight locations from UEXcorp in the background (falls
-    // back to the bundled ship snapshot / cached locations if unavailable).
+    // Keep ships, freight locations and commodities current. Token users get a
+    // live UEXcorp sync (freshest, and it drives route distances). Everyone else
+    // rides the lists we bundle and host in the repo: seed the cache so matching
+    // works at once, then pull any list whose hash changed, in the background.
     if (settings.uexApiKey) {
       void syncAll(settings.uexApiKey).then((result) => {
         if (result.ok) pushRosters()
         else console.warn('[uex] launch sync failed:', result.error)
+      })
+    } else {
+      seedCacheIfNeeded()
+      pushRosters()
+      void refreshFromRepo().then((changed) => {
+        if (changed) pushRosters()
       })
     }
 

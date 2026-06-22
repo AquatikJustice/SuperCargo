@@ -28,6 +28,15 @@ files:
   # (relative to out/main); the exe + installer icon comes from build/icon.ico.
   - resources/icon.png
 
+# Bundled UEX lists (ships, freight locations, commodities). Shipped as an offline
+# seed; the app refreshes them from the repo at launch. Copied to resources/data/uex
+# so dataSync.ts can read them via process.resourcesPath.
+extraResources:
+  - from: data/uex
+    to: data/uex
+    filter:
+      - '*.json'
+
 # tesseract.js loads its worker script + wasm core from disk at runtime; they
 # must live outside the asar archive or recognition fails in the packaged app.
 asarUnpack:
