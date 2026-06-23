@@ -2,70 +2,6 @@
   "source": "https://uexcorp.space/api/2.0/terminals + scunpacked starmap_positions + trade_locations",
   "locations": [
     {
-      "name": "\"The Orphanage\"",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": 18703515181.48589,
-      "y": -22121557649.606583,
-      "z": 182182.046452,
-      "system": "stanton",
-      "body": "Lyria"
-    },
-    {
-      "name": "a Landing Pad Locker in New Babbage",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "a Landing Pad Locker in Orison",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "a Private Landing Pad",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "a Salvage Yard on Daymar",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Daymar"
-    },
-    {
-      "name": "a Salvage Yard on Wala",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Wala"
-    },
-    {
-      "name": "a stash house",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Cellin"
-    },
-    {
-      "name": "Abandoned Section",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
       "name": "ARC-L1 Wide Forest Station",
       "code": "ARC-L1",
       "maxContainerSize": 32,
@@ -235,17 +171,6 @@
       "body": "Yela"
     },
     {
-      "name": "Area 18",
-      "code": "Casaba Area 18",
-      "maxContainerSize": 0,
-      "uexId": 94,
-      "hasElevator": false,
-      "x": 18586917330.719185,
-      "y": -22152033653.831776,
-      "z": -262094.438106,
-      "system": "stanton"
-    },
-    {
       "name": "Area18",
       "code": "TDD Area 18",
       "maxContainerSize": 32,
@@ -267,18 +192,6 @@
       "z": -92750.374668,
       "system": "pyro",
       "body": "Pyro II"
-    },
-    {
-      "name": "Ashburn Channel Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987608095.40264,
-      "y": -2709267602.776548,
-      "z": -37129.182627,
-      "system": "stanton",
-      "body": "Cellin"
     },
     {
       "name": "Ashland",
@@ -322,18 +235,6 @@
       "system": "stanton"
     },
     {
-      "name": "Barton Flats Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": 12905811977.20074,
-      "y": 41172671.04558,
-      "z": -159881.078736,
-      "system": "stanton",
-      "body": "Aberdeen"
-    },
-    {
       "name": "Blackrock Exchange",
       "code": "Shop Blackrock Exchange",
       "maxContainerSize": 0,
@@ -352,18 +253,6 @@
       "uexId": 0,
       "hasElevator": true,
       "body": "Daymar"
-    },
-    {
-      "name": "Bud's Growery",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": 22436110942.544876,
-      "y": 37290194105.7969,
-      "z": 115270.872745,
-      "system": "stanton",
-      "body": "Euterpe"
     },
     {
       "name": "Bueno Ravine",
@@ -424,24 +313,6 @@
       "z": 189412.479765,
       "system": "pyro",
       "body": "Pyro IV"
-    },
-    {
-      "name": "Checkmate",
-      "code": "Checkmate",
-      "maxContainerSize": 32,
-      "uexId": 436,
-      "hasElevator": true,
-      "x": 1833362390.019977,
-      "y": 10434543320.869617,
-      "z": 2570930.841284,
-      "system": "pyro"
-    },
-    {
-      "name": "Checkmate at the L4 Lagrange of Pyro II",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Checkmate Station",
@@ -585,13 +456,6 @@
       "system": "pyro"
     },
     {
-      "name": "Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
       "name": "Dunboro",
       "code": "Shop Dunboro",
       "maxContainerSize": 0,
@@ -601,18 +465,6 @@
       "y": 37186423266.846275,
       "z": 11154.501159,
       "system": "stanton"
-    },
-    {
-      "name": "Dunlow Ridge Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930591389.157986,
-      "y": -2609877833.508542,
-      "z": 75331.286385,
-      "system": "stanton",
-      "body": "Daymar"
     },
     {
       "name": "Dupree Industrial Manufacturing Facility",
@@ -625,18 +477,6 @@
       "z": 68635.15,
       "system": "stanton",
       "body": "Hurston"
-    },
-    {
-      "name": "Eager Flats Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930338994.471264,
-      "y": -2610263682.772551,
-      "z": 190096.59476,
-      "system": "stanton",
-      "body": "Daymar"
     },
     {
       "name": "Echo Isle",
@@ -656,13 +496,6 @@
       "y": 48291979195.72477,
       "z": 2735552.171102,
       "system": "pyro"
-    },
-    {
-      "name": "Endgame at the L3 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Everus Harbor",
@@ -711,18 +544,6 @@
       "body": "Hurston"
     },
     {
-      "name": "Flanagan's Ravine Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987805401.642612,
-      "y": -2708857938.687181,
-      "z": 84996.712245,
-      "system": "stanton",
-      "body": "Cellin"
-    },
-    {
       "name": "Frigid Knot",
       "code": "",
       "maxContainerSize": 0,
@@ -752,13 +573,6 @@
       "y": -8190926212.562624,
       "z": 17665446.105198,
       "system": "pyro"
-    },
-    {
-      "name": "Gaslight at the L2 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Goner's Deal",
@@ -810,17 +624,6 @@
       "body": "microTech"
     },
     {
-      "name": "Grim HEX",
-      "code": "GrimHEX",
-      "maxContainerSize": 32,
-      "uexId": 27,
-      "hasElevator": false,
-      "x": -19023485457.614876,
-      "y": -2613612586.748472,
-      "z": -2042,
-      "system": "stanton"
-    },
-    {
       "name": "GrimHEX",
       "code": "KC Trending GrimHEX",
       "maxContainerSize": 0,
@@ -830,34 +633,6 @@
       "y": -2613612586.748472,
       "z": -2042,
       "system": "stanton"
-    },
-    {
-      "name": "Hangar 11",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Hangar 12",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Hangar 13",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Hangar 13 inside Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "HDMS-Anderson",
@@ -881,14 +656,6 @@
       "y": -31710826.492302,
       "z": 251505.151902,
       "system": "stanton"
-    },
-    {
-      "name": "HDMS-Bezdek on Arial",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Arial"
     },
     {
       "name": "HDMS-Edmond",
@@ -1153,18 +920,6 @@
       "body": "Pyro II"
     },
     {
-      "name": "Julep Ravine Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987722646.958466,
-      "y": -2709065957.364554,
-      "z": -228949.606357,
-      "system": "stanton",
-      "body": "Cellin"
-    },
-    {
       "name": "Jumptown",
       "code": "",
       "maxContainerSize": 0,
@@ -1211,27 +966,6 @@
       "z": -184862.263018,
       "system": "stanton",
       "body": "Daymar"
-    },
-    {
-      "name": "L19 Admin Office in Lorville",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "L19 Habs in Lorville",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "L19 Metro Station in Lorville",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Last Ditch",
@@ -1304,47 +1038,12 @@
       "body": "Hurston"
     },
     {
-      "name": "Magnus Gateway",
+      "name": "Magnus Gateway (Stanton)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
       "hasElevator": true,
       "system": "stanton"
-    },
-    {
-      "name": "Maintenance Area-01",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Maintenance Area-01 inside Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Maintenance Area-02",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Maintenance Area-02 inside Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Maintenance Area-03",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Maker's Point",
@@ -1375,13 +1074,6 @@
       "y": 34145522707.318462,
       "z": 12705743.427003,
       "system": "pyro"
-    },
-    {
-      "name": "Megumi Refueling at the L5 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "MIC-L1 Shallow Frontier Station",
@@ -1507,7 +1199,7 @@
       "system": "stanton"
     },
     {
-      "name": "Nyx Gateway",
+      "name": "Nyx Gateway (Pyro)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -1518,7 +1210,7 @@
       "system": "pyro"
     },
     {
-      "name": "Nyx Gateway",
+      "name": "Nyx Gateway (Stanton)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -1538,13 +1230,6 @@
       "y": -15417844552.575254,
       "z": 226043.640625,
       "system": "pyro"
-    },
-    {
-      "name": "Orbituary above Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Orison",
@@ -1570,46 +1255,6 @@
       "body": "Pyro II"
     },
     {
-      "name": "Outpost Depot",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro III"
-    },
-    {
-      "name": "Outpost Landing Area",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro II"
-    },
-    {
-      "name": "Outpost Main Building",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Adir"
-    },
-    {
-      "name": "Outpost Storage Shed",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro III"
-    },
-    {
-      "name": "Outpost Warehouse",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro III"
-    },
-    {
       "name": "Paradise Cove",
       "code": "",
       "maxContainerSize": 0,
@@ -1631,13 +1276,6 @@
       "y": 13622341259.20288,
       "z": 2752554.224023,
       "system": "pyro"
-    },
-    {
-      "name": "Patch City at the L3 Lagrange of Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "People's Service Station Alpha",
@@ -1726,23 +1364,7 @@
       "body": "Adir"
     },
     {
-      "name": "Pyro 5a Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Ignis"
-    },
-    {
-      "name": "Pyro 5b Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Vatra"
-    },
-    {
-      "name": "Pyro Gateway",
+      "name": "Pyro Gateway (Nyx)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -1753,7 +1375,7 @@
       "system": "nyx"
     },
     {
-      "name": "Pyro Gateway",
+      "name": "Pyro Gateway (Stanton)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -1762,54 +1384,6 @@
       "y": -27979395047.870785,
       "z": -2676322341.089648,
       "system": "stanton"
-    },
-    {
-      "name": "Pyro I Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro I"
-    },
-    {
-      "name": "Pyro II Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro II"
-    },
-    {
-      "name": "Pyro III Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro III"
-    },
-    {
-      "name": "Pyro IV Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro IV"
-    },
-    {
-      "name": "Pyro V Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro V"
-    },
-    {
-      "name": "Pyro VI Abandoned Outpost",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Pyro VI"
     },
     {
       "name": "Rappel",
@@ -1835,13 +1409,6 @@
       "system": "pyro"
     },
     {
-      "name": "Rat's Nest at the L5 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
       "name": "Raven's Roost",
       "code": "",
       "maxContainerSize": 0,
@@ -1852,15 +1419,6 @@
       "z": 932645.25482,
       "system": "stanton",
       "body": "Calliope"
-    },
-    {
-      "name": "Rayari",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "operator": "Rayari",
-      "body": "Yela"
     },
     {
       "name": "Rayari Anvik Research Outpost",
@@ -1965,13 +1523,6 @@
       "system": "pyro"
     },
     {
-      "name": "Rod's Fuel 'N Supplies at the L4 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
       "name": "Rough Landing",
       "code": "Shop Rough Landing",
       "maxContainerSize": 0,
@@ -1993,13 +1544,6 @@
       "y": -43917925431.95215,
       "z": -100477.857041,
       "system": "pyro"
-    },
-    {
-      "name": "Ruin Station above Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Rustville",
@@ -2261,7 +1805,7 @@
       "body": "Pyro I"
     },
     {
-      "name": "Stanton Gateway",
+      "name": "Stanton Gateway (Nyx)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -2272,7 +1816,7 @@
       "system": "nyx"
     },
     {
-      "name": "Stanton Gateway",
+      "name": "Stanton Gateway (Pyro)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -2292,20 +1836,6 @@
       "y": -14008864142.502598,
       "z": 1357701.060931,
       "system": "pyro"
-    },
-    {
-      "name": "Starlight Service Station Entrance",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "Starlight Service Station Habs",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "Stonetree",
@@ -2340,18 +1870,6 @@
       "body": "Hurston"
     },
     {
-      "name": "Tamdon Plains Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930677653.408043,
-      "y": -2610183228.3478494,
-      "z": -259848.699769,
-      "system": "stanton",
-      "body": "Daymar"
-    },
-    {
       "name": "Teasa Spaceport",
       "code": "",
       "maxContainerSize": 0,
@@ -2359,7 +1877,7 @@
       "hasElevator": true
     },
     {
-      "name": "Terra Gateway",
+      "name": "Terra Gateway (Stanton)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
@@ -2368,92 +1886,6 @@
       "y": -5270029473.660545,
       "z": -4339552358.888522,
       "system": "stanton"
-    },
-    {
-      "name": "the abandoned outpost on Cellin",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Cellin"
-    },
-    {
-      "name": "the abandoned outpost on Daymar",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Daymar"
-    },
-    {
-      "name": "the entrance inside Checkmate at the L4 Lagrange of Pyro II",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Endgame at the L3 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Gaslight at the L2 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Megumi Refueling at the L5 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Orbituary above Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Patch City at the L3 Lagrange of Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Rat's Nest at the L5 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Rod's Fuel 'N Supplies at the L4 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the entrance inside Ruin Station above Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
     },
     {
       "name": "The Golden Riviera",
@@ -2466,105 +1898,6 @@
       "z": 5799.239484,
       "system": "pyro",
       "body": "Pyro III"
-    },
-    {
-      "name": "the habs inside Checkmate at the L4 Lagrange of Pyro II",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Dudley & Daughters at the L4 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Endgame at the L3 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Gaslight at the L2 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Megumi Refueling at the L5 Lagrange of Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Orbituary above Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Patch City at the L3 Lagrange of Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Rat's Nest at the L5 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Rod's Fuel 'N Supplies at the L4 Lagrange of Pyro V",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the habs inside Ruin Station above Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the refinery inside Checkmate at the L4 Lagrange of Pyro II",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the refinery inside Orbituary above Pyro III",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the refinery inside Ruin Station above Pyro VI",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
-      "name": "the Terra Mills outpost on Cellin",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "body": "Cellin"
     },
     {
       "name": "The Yard",
@@ -2631,18 +1964,6 @@
       "y": -15417519398.476786,
       "z": -12215.341634,
       "system": "pyro"
-    },
-    {
-      "name": "Wolf Point Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930543959.317673,
-      "y": -2609879698.8653684,
-      "z": 95732.659059,
-      "system": "stanton",
-      "body": "Daymar"
     },
     {
       "name": "Yang's Place",
