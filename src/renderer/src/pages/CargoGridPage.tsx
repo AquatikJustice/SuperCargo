@@ -6,7 +6,7 @@ import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { packBoxes, deriveStops } from '../state/manifest'
 import { layoutStops } from '../state/layout'
-import { buildLoadingPlan, type LoadStop } from '../state/loading'
+import { buildRouteLoadingPlan, type RouteLoadStop } from '../state/loading'
 import { gridsFor, type CargoGrid } from '@shared/cargoGrids'
 import { packCargo, type Placement, type PackBox } from '@shared/packer'
 import { Btn } from '../components/ui'
@@ -125,6 +125,7 @@ export default function CargoGridPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const layout = useStore((s) => s.layout)
+  const route = useStore((s) => s.route)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const setObjectivesDelivered = useStore((s) => s.setObjectivesDelivered)
@@ -203,20 +204,21 @@ export default function CargoGridPage(): React.ReactElement {
     return { origin: o, span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6) }
   }, [grids])
 
-  // --- Loading Mode: step through loading one destination at a time ---
-  const loadPlan = useMemo(() => buildLoadingPlan(contracts, order), [contracts, order])
+  // --- Loading Mode: walk the route, loading at pickups and unloading at drops ---
+  const loadPlan = useMemo(() => (route ? buildRouteLoadingPlan(contracts, route) : []), [contracts, route])
   const [loading, setLoading] = useState(false)
   const [loadIdx, setLoadIdx] = useState(0)
   const done = loading && loadIdx >= loadPlan.length
   const currentLoad = loading && !done ? loadPlan[loadIdx] : undefined
-  const loadedIdxs = useMemo(
-    () => new Set(loadPlan.slice(0, loadIdx).map((s) => s.idx)),
+  const currentObjIds = useMemo(() => new Set(currentLoad?.objectiveIds ?? []), [currentLoad])
+  const loadedObjIds = useMemo(
+    () => new Set(loadPlan.slice(0, loadIdx).flatMap((s) => s.objectiveIds)),
     [loadPlan, loadIdx]
   )
-  const boxMode = (stopIdx: number): BoxMode => {
+  const boxMode = (objectiveId?: string): BoxMode => {
     if (!loading) return 'normal'
-    if (currentLoad && stopIdx === currentLoad.idx) return 'current'
-    if (loadedIdxs.has(stopIdx)) return 'loaded'
+    if (objectiveId && currentObjIds.has(objectiveId)) return 'current'
+    if (objectiveId && loadedObjIds.has(objectiveId)) return 'loaded'
     return 'future'
   }
   const startLoading = (): void => {
@@ -394,7 +396,7 @@ export default function CargoGridPage(): React.ReactElement {
                 pl={pl}
                 grid={g}
                 origin={origin}
-                mode={boxMode(pl.box.stopIdx)}
+                mode={boxMode(pl.box.objectiveId)}
                 onHover={onHover}
                 onLeave={() => setHover(null)}
               />
@@ -432,8 +434,8 @@ export default function CargoGridPage(): React.ReactElement {
   )
 }
 
-// One loading step for a destination: which boxes to pull from the FE (grouped by
-// contract, each labeled with its unique "tell") and load into the glowing section.
+// One step of the route: what to LOAD at this pickup and/or UNLOAD at this drop,
+// each line tagged with its contract "tell" so you can find the right FE mission.
 function LoadingPanel({
   stop,
   done,
@@ -444,7 +446,7 @@ function LoadingPanel({
   onExit,
   onFinish
 }: {
-  stop: LoadStop | undefined
+  stop: RouteLoadStop | undefined
   done: boolean
   idx: number
   total: number
@@ -469,10 +471,10 @@ function LoadingPanel({
     return (
       <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: C.green, textShadow: GLOW }}>
-          ✓ ALL {total} DESTINATIONS LOADED
+          ✓ ROUTE WALKED · {total} STOPS
         </span>
         <span style={{ fontFamily: F.body, fontSize: 12.5, color: C.dim }}>
-          Cargo is grouped by destination. At each stop, unload just that section.
+          You load at pickups and drop along the way. Lock the layout to freeze it.
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
           {navBtn('‹ BACK', onBack, idx === 0)}
@@ -482,49 +484,37 @@ function LoadingPanel({
     )
   }
 
+  const hasLoads = stop.loads.length > 0
+  const hasDrops = stop.drops.length > 0
   return (
     <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, background: C.accFill }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
-          LOADING {idx + 1} / {total}
+          STOP {idx + 1} / {total}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
-          {stop.code ? `${stop.code} · ` : ''}{stop.name}
+          {stop.code ? `${stop.code} · ` : ''}{stop.label}
         </span>
-        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>
-          {stop.boxCount} boxes · {fmt(stop.scu)} SCU
-        </span>
+        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{fmt(stop.loadAfter)} SCU aboard after</span>
         <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-          load into the glowing section
+          the glowing cargo is this stop&apos;s
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {stop.groups.map((g) => (
-          <div key={g.contractId} style={{ borderTop: `1px solid ${C.lineFaint}`, paddingTop: 9 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{g.ref}</span>
-              {g.tell ? (
-                <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
-                  find the contract with <b style={{ color: C.text }}>{g.tell}</b>
-                </span>
-              ) : (
-                <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>
-                  ⚠ no unique tell, match by full box set
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', paddingLeft: 4 }}>
-              {g.stacks.map((s, k) => (
-                <span key={k} style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>
-                  <span style={{ fontFamily: F.mono, color: C.text }}>{s.breakdown}</span>{' '}
-                  <span style={{ color: C.dim }}>{s.commodity}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      {hasLoads && (
+        <LoadSection title="LOAD HERE" color={C.green}>
+          {stop.loads.map((l) => (
+            <LoadLineRow key={`l-${l.objectiveId}`} line={l} verb="load" showDest />
+          ))}
+        </LoadSection>
+      )}
+      {hasDrops && (
+        <LoadSection title="DROP HERE" color={C.acc}>
+          {stop.drops.map((l) => (
+            <LoadLineRow key={`d-${l.objectiveId}`} line={l} verb="drop" />
+          ))}
+        </LoadSection>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {navBtn('‹ BACK', onBack, idx === 0)}
@@ -533,9 +523,53 @@ function LoadingPanel({
           style={{ flex: 1, border: `1px solid ${C.acc}`, background: C.accFillStrong, color: C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: 'pointer' }}
           hoverStyle={{ background: 'rgba(255,210,30,0.26)' }}
         >
-          LOADED ✓ · NEXT DESTINATION
+          {hasLoads ? 'LOADED' : 'DROPPED'} ✓ · NEXT STOP
         </Btn>
         {navBtn('EXIT', onExit)}
+      </div>
+    </div>
+  )
+}
+
+function LoadSection({ title, color, children }: { title: string; color: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div style={{ borderTop: `1px solid ${C.lineFaint}`, paddingTop: 9, marginTop: 4 }}>
+      <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color, marginBottom: 6 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+    </div>
+  )
+}
+
+function LoadLineRow({
+  line,
+  verb,
+  showDest
+}: {
+  line: RouteLoadStop['loads'][number]
+  verb: 'load' | 'drop'
+  showDest?: boolean
+}): React.ReactElement {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
+        {verb === 'load' && line.tell ? (
+          <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
+            find the contract with <b style={{ color: C.text }}>{line.tell}</b>
+          </span>
+        ) : verb === 'load' ? (
+          <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ no unique tell, match by full box set</span>
+        ) : null}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
+        <span style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>{line.breakdown}</span>
+        <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
+        {showDest && (
+          <span style={{ fontFamily: F.body, fontSize: 12, color: C.acc }}>→ {line.destination}</span>
+        )}
+        {showDest && line.multiPickup && (
+          <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup — load what&apos;s here)</span>
+        )}
       </div>
     </div>
   )

@@ -36,6 +36,8 @@ export interface PackBox {
   commodity?: string
   /** 0-based delivery order (0 = first drop-off). Drives accessibility layering. */
   stopIdx: number
+  /** objective this box belongs to, so the loading guide can highlight a stop's cargo. */
+  objectiveId?: string
 }
 
 export interface Placement {

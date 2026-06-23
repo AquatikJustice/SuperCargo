@@ -29,6 +29,15 @@ interface JobInfo {
   destNode: number
   scu: number
   commodity: string
+  contractId: string
+  objectiveId: string
+}
+
+/** Points back at the objective handled at a stop, so the loading guide can resolve
+ *  box counts + tells. */
+export interface StepRef {
+  contractId: string
+  objectiveId: string
 }
 
 export interface RouteModel {
@@ -53,6 +62,10 @@ export interface RouteStep {
   pickups: RouteLegItem[]
   /** cargo delivered here. */
   drops: RouteLegItem[]
+  /** objectives loaded here (deduped), for the loading guide. */
+  loadRefs: StepRef[]
+  /** objectives delivered here (deduped), for the loading guide. */
+  dropRefs: StepRef[]
   /** SCU aboard after this stop. */
   loadAfter: number
 }
@@ -184,7 +197,7 @@ export function buildRouteModel(
         if (pickupNode === destNode) return
         const scu = base + (i < rem ? 1 : 0)
         jobs.push({ pickup: pickupNode, dest: destNode, scu })
-        jobInfo.push({ pickupNode, destNode, scu, commodity: o.commodity })
+        jobInfo.push({ pickupNode, destNode, scu, commodity: o.commodity, contractId: c.id, objectiveId: o.id })
       })
     }
   }
@@ -265,11 +278,26 @@ export function computeRoutePlan(
     const node = model.nodes[nodeIdx]
     const pickups: RouteLegItem[] = []
     const drops: RouteLegItem[] = []
+    const loadSeen = new Set<string>()
+    const dropSeen = new Set<string>()
+    const loadRefs: StepRef[] = []
+    const dropRefs: StepRef[] = []
     model.jobInfo.forEach((j) => {
-      if (j.pickupNode === nodeIdx)
+      if (j.pickupNode === nodeIdx) {
         pickups.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.destNode].label })
-      if (j.destNode === nodeIdx)
+        if (!loadSeen.has(j.objectiveId)) {
+          loadSeen.add(j.objectiveId)
+          loadRefs.push({ contractId: j.contractId, objectiveId: j.objectiveId })
+        }
+      }
+      if (j.destNode === nodeIdx) {
         drops.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.pickupNode].label })
+        // A multi-pickup delivery has one job per pickup, all dropping here; show it once.
+        if (!dropSeen.has(j.objectiveId)) {
+          dropSeen.add(j.objectiveId)
+          dropRefs.push({ contractId: j.contractId, objectiveId: j.objectiveId })
+        }
+      }
     })
     return {
       nodeKey: node.key,
@@ -278,6 +306,8 @@ export function computeRoutePlan(
       region: node.region,
       pickups,
       drops,
+      loadRefs,
+      dropRefs,
       loadAfter: result.loadAfter[k] ?? 0
     }
   })

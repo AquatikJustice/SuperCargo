@@ -233,7 +233,15 @@ export function toHistoryEntry(
 export function packBoxes(
   contracts: HaulingContract[],
   order: string[]
-): Array<{ id: string; size: number; color: string; dest: string; commodity: string; stopIdx: number }> {
+): Array<{
+  id: string
+  size: number
+  color: string
+  dest: string
+  commodity: string
+  stopIdx: number
+  objectiveId: string
+}> {
   const stops = deriveStops(contracts, order)
   const live = activeContracts(contracts)
   const out: Array<{
@@ -243,6 +251,7 @@ export function packBoxes(
     dest: string
     commodity: string
     stopIdx: number
+    objectiveId: string
   }> = []
   let n = 0
   for (const stop of stops) {
@@ -257,7 +266,8 @@ export function packBoxes(
             color: stop.color,
             dest: stop.code || stop.name,
             commodity: o.commodity,
-            stopIdx: stop.idx
+            stopIdx: stop.idx,
+            objectiveId: o.id
           })
         }
       }
