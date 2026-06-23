@@ -16,6 +16,8 @@ export interface StopItem {
   boxStr: string
   boxCount: number
   delivered: boolean
+  /** Per-leg pickups, when this objective loads somewhere other than the contract's. */
+  pickups?: string[]
 }
 
 export interface Stop {
@@ -44,6 +46,8 @@ export interface DerivedContractObjective {
   delivered: boolean
   /** SCU turned in so far (undefined = not marked -> counts as a full turn-in). */
   deliveredScu?: number
+  /** Per-leg pickups, when this objective loads somewhere other than the contract's. */
+  pickups?: string[]
 }
 
 export interface DerivedContract {
@@ -105,7 +109,8 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
           commodity: o.commodity,
           boxStr: boxBreakdown(o.boxes),
           boxCount: boxCount(o.boxes),
-          delivered: o.delivered
+          delivered: o.delivered,
+          pickups: o.pickups
         })
       }
     }
@@ -142,7 +147,8 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
         boxStr: boxBreakdown(o.boxes),
         boxCount: boxCount(o.boxes),
         delivered: o.delivered,
-        deliveredScu: o.deliveredScu
+        deliveredScu: o.deliveredScu,
+        pickups: o.pickups
       }
     })
     return {

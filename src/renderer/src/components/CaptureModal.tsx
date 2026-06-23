@@ -18,11 +18,13 @@ let rowKey = 0
 const newRow = (): ObjRow => ({ key: rowKey++, commodity: '', scuAmount: 0, destination: '' })
 
 function rowFromOcr(o: OcrObjective): ObjRow {
+  const pickups = o.pickups?.map((p) => p.match ?? p.input).filter(Boolean)
   return {
     key: rowKey++,
     commodity: o.commodity.match ?? o.commodity.input,
     scuAmount: o.scuAmount,
     destination: o.destination.match ?? o.destination.input,
+    pickups: pickups && pickups.length ? pickups : undefined,
     ocrCommodity: { raw: o.commodity.input, score: o.commodity.score, matched: !!o.commodity.match },
     ocrDestination: { raw: o.destination.input, score: o.destination.score, matched: !!o.destination.match }
   }
@@ -145,13 +147,25 @@ export default function CaptureModal(): React.ReactElement | null {
 
   const update = (key: number, patch: Partial<ObjRow>): void =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  const mutPickups = (key: number, fn: (ps: string[]) => string[]): void =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, pickups: fn(r.pickups ?? []) } : r)))
+  const addRowPickup = (key: number): void => mutPickups(key, (ps) => [...ps, ''])
+  const setRowPickup = (key: number, i: number, val: string): void =>
+    mutPickups(key, (ps) => ps.map((p, j) => (j === i ? val : p)))
+  const removeRowPickup = (key: number, i: number): void =>
+    mutPickups(key, (ps) => ps.filter((_, j) => j !== i))
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
   const canSubmit = validRows.length > 0
 
   const submit = (): void => {
     if (!canSubmit) return
-    const objectives = validRows.map(({ commodity, scuAmount, destination }) => ({ commodity, scuAmount, destination }))
+    const objectives = validRows.map(({ commodity, scuAmount, destination, pickups }) => ({
+      commodity,
+      scuAmount,
+      destination,
+      pickups: pickups?.map((p) => p.trim()).filter(Boolean)
+    }))
 
     // Opt-in: save the confirmed read as a training sample for the future model.
     if (ocrResult?.ok && ocrResult.sampleId && saveSamples) {
@@ -375,46 +389,86 @@ export default function CaptureModal(): React.ReactElement | null {
 
             {rows.map((r) => {
               const boxes = r.scuAmount > 0 ? boxCount(calculateBoxes(r.scuAmount, maxBox)) : 0
+              const pickups = r.pickups ?? []
               return (
-                <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1.2fr 70px 28px', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
-                  <div>
-                    <Typeahead
-                      value={r.commodity}
-                      options={commodityNames}
-                      onChange={(v) => update(r.key, { commodity: v })}
-                      onSelect={(v) => update(r.key, { commodity: v })}
-                      placeholder="Hydrogen Fuel"
+                <div key={r.key} style={{ padding: '10px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1.2fr 70px 28px', gap: 12, alignItems: 'start' }}>
+                    <div>
+                      <Typeahead
+                        value={r.commodity}
+                        options={commodityNames}
+                        onChange={(v) => update(r.key, { commodity: v })}
+                        onSelect={(v) => update(r.key, { commodity: v })}
+                        placeholder="Hydrogen Fuel"
+                      />
+                      {r.ocrCommodity && <OcrHint hint={r.ocrCommodity} />}
+                    </div>
+                    <input
+                      style={{ ...inputStyle, borderBottom: 0, fontFamily: F.mono, textAlign: 'right' }}
+                      placeholder="0"
+                      inputMode="numeric"
+                      value={r.scuAmount || ''}
+                      onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
                     />
-                    {r.ocrCommodity && <OcrHint hint={r.ocrCommodity} />}
+                    <div>
+                      <Typeahead
+                        value={r.destination}
+                        options={locationNames}
+                        onChange={(v) => update(r.key, { destination: v })}
+                        onSelect={(v) => update(r.key, { destination: v })}
+                        placeholder="HUR-L5 High Course Station"
+                      />
+                      {r.ocrDestination && <OcrHint hint={r.ocrDestination} />}
+                    </div>
+                    <span style={{ fontFamily: F.mono, fontSize: 13, color: boxes ? C.body : C.faint, textAlign: 'right', paddingTop: 7 }}>{boxes} box</span>
+                    <Btn
+                      onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.key !== r.key) : rs))}
+                      style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', justifyContent: 'center', padding: 2, marginTop: 6 }}
+                      hoverStyle={{ color: C.red }}
+                      title="Remove objective"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </Btn>
                   </div>
-                  <input
-                    style={{ ...inputStyle, borderBottom: 0, fontFamily: F.mono, textAlign: 'right' }}
-                    placeholder="0"
-                    inputMode="numeric"
-                    value={r.scuAmount || ''}
-                    onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
-                  />
-                  <div>
-                    <Typeahead
-                      value={r.destination}
-                      options={locationNames}
-                      onChange={(v) => update(r.key, { destination: v })}
-                      onSelect={(v) => update(r.key, { destination: v })}
-                      placeholder="HUR-L5 High Course Station"
-                    />
-                    {r.ocrDestination && <OcrHint hint={r.ocrDestination} />}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8, paddingLeft: 2 }}>
+                    <span style={{ fontFamily: F.display, fontSize: 9, letterSpacing: '0.18em', color: C.faint, flex: 'none' }}>PICKUP</span>
+                    {pickups.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 3, width: 188 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Typeahead
+                            value={p}
+                            options={locationNames}
+                            onChange={(v) => setRowPickup(r.key, i, v)}
+                            onSelect={(v) => setRowPickup(r.key, i, v)}
+                            placeholder="Pickup location"
+                          />
+                        </div>
+                        <Btn
+                          onClick={() => removeRowPickup(r.key, i)}
+                          title="Remove pickup"
+                          style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', padding: 1 }}
+                          hoverStyle={{ color: C.red }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </Btn>
+                      </div>
+                    ))}
+                    <Btn
+                      onClick={() => addRowPickup(r.key)}
+                      style={{ border: `1px dashed rgba(255,255,255,0.2)`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, letterSpacing: '0.12em', padding: '4px 9px', cursor: 'pointer' }}
+                      hoverStyle={{ border: `1px dashed ${C.acc}`, color: C.text }}
+                    >
+                      + PICKUP
+                    </Btn>
+                    {pickups.length === 0 && (
+                      <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint }}>uses contract pickup</span>
+                    )}
                   </div>
-                  <span style={{ fontFamily: F.mono, fontSize: 13, color: boxes ? C.body : C.faint, textAlign: 'right', paddingTop: 7 }}>{boxes} box</span>
-                  <Btn
-                    onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.key !== r.key) : rs))}
-                    style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', justifyContent: 'center', padding: 2, marginTop: 6 }}
-                    hoverStyle={{ color: C.red }}
-                    title="Remove objective"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </Btn>
                 </div>
               )
             })}

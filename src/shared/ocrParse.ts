@@ -22,6 +22,9 @@ export interface RawObjective {
   commodity: string
   scuAmount: number
   destination: string
+  /** Where this leg loads, from "Collect <item> from <location>" lines. A delivery
+   *  can have several. */
+  pickups?: string[]
 }
 
 export interface ParsedOcr {
@@ -48,6 +51,9 @@ const RE_GENERIC = /(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
 const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\b`, 'i')
 // A line we should never treat as a commodity name when scanning upward.
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
+// "Collect <item> from <location>" - the game's hauling_collect_objective. Gives
+// each leg its pickup(s); a delivery can have several (many-pickups-to-one-drop).
+const RE_COLLECT = /collect\s+(.+?)\s+from\s+([^.\n]+)/gi
 
 // Max-box-size wording, from the game's own ~mission(MaxBoxSize) / MissionMaxSCUSize
 // templates (Data.p4k + StarStrings contracts.ini), most specific first:
@@ -310,6 +316,26 @@ export function parseOcrText(rawText: string): ParsedOcr {
   collect(RE_DELIVERED_TO, 1, 2, 3)
   collect(RE_GENERIC, 1, 2, 3)
 
+  // Pickups: "Collect <item> from <location>" lines, grouped by commodity onto the
+  // matching delivery objective. inlineText has already broken a line before each
+  // "Collect", so the location capture stops at the next leg.
+  const pickupsByCommodity = new Map<string, string[]>()
+  RE_COLLECT.lastIndex = 0
+  let pm: RegExpExecArray | null
+  while ((pm = RE_COLLECT.exec(inlineText)) !== null) {
+    const commodity = cleanFragment(pm[1])
+    const pickup = normalizeDestination(trimDestinationTail(cleanFragment(pm[2])))
+    if (!commodity || !pickup) continue
+    const key = commodity.toLowerCase()
+    const arr = pickupsByCommodity.get(key) ?? []
+    if (!arr.some((p) => p.toLowerCase() === pickup.toLowerCase())) arr.push(pickup)
+    pickupsByCommodity.set(key, arr)
+  }
+  for (const o of found) {
+    const ps = pickupsByCommodity.get(o.commodity.toLowerCase())
+    if (ps && ps.length) o.pickups = ps
+  }
+
   let maxBoxSize: number | undefined
   for (const re of BOX_PATTERNS) {
     const m = re.exec(text)
@@ -333,6 +359,7 @@ export function matchObjectives(
   return raw.map((o) => ({
     commodity: bestMatch(o.commodity, commodityNames),
     scuAmount: o.scuAmount,
-    destination: bestMatch(o.destination, locationNames)
+    destination: bestMatch(o.destination, locationNames),
+    pickups: o.pickups?.map((p) => bestMatch(p, locationNames))
   }))
 }

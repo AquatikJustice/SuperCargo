@@ -172,11 +172,20 @@ export function buildRouteModel(
   for (const c of activeContracts(contracts)) {
     for (const o of c.objectives) {
       if (o.delivered) continue
-      const pickupNode = nodeFor(c.pickup || '(unknown pickup)', false)
       const destNode = nodeFor(o.destination, true)
-      if (pickupNode === destNode) continue
-      jobs.push({ pickup: pickupNode, dest: destNode, scu: o.scuAmount })
-      jobInfo.push({ pickupNode, destNode, scu: o.scuAmount, commodity: o.commodity })
+      // A delivery can load from several pickups (many-to-one hauls). Split its SCU
+      // across them so the solver routes through every pickup before the drop; the
+      // exact split is unknown, so spread it evenly.
+      const pickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
+      const base = Math.floor(o.scuAmount / pickups.length)
+      const rem = o.scuAmount - base * pickups.length
+      pickups.forEach((pu, i) => {
+        const pickupNode = nodeFor(pu || '(unknown pickup)', false)
+        if (pickupNode === destNode) return
+        const scu = base + (i < rem ? 1 : 0)
+        jobs.push({ pickup: pickupNode, dest: destNode, scu })
+        jobInfo.push({ pickupNode, destNode, scu, commodity: o.commodity })
+      })
     }
   }
   return { nodes, jobs, jobInfo }

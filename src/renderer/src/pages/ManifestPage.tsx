@@ -295,20 +295,23 @@ function ByDestination({
                 {item.scu}
                 <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
-                <span
-                  style={{
-                    fontFamily: F.body,
-                    fontSize: 15,
-                    color: C.textBody,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {item.commodity}
-                </span>
-                <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{item.ref}]</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontFamily: F.body,
+                      fontSize: 15,
+                      color: C.textBody,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {item.commodity}
+                  </span>
+                  <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{item.ref}]</span>
+                </div>
+                <PickupNote pickups={item.pickups} />
               </div>
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
@@ -401,6 +404,20 @@ function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): R
   )
 }
 
+/** "from A · B" note for an objective that loads somewhere other than the
+ *  contract's default pickup (multi-pickup / chain hauls). */
+function PickupNote({ pickups }: { pickups?: string[] }): React.ReactElement | null {
+  if (!pickups || !pickups.length) return null
+  return (
+    <span
+      title={`Pick up from ${pickups.join(', ')}`}
+      style={{ fontFamily: F.body, fontSize: 11.5, color: C.acc, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+    >
+      ↤ from {pickups.join(' · ')}
+    </span>
+  )
+}
+
 function ElevatorBadge({ external }: { external?: boolean }): React.ReactElement | null {
   if (external === undefined) return null
   const color = external ? C.green : C.amber
@@ -451,6 +468,7 @@ function ByContract({
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span style={{ fontFamily: F.body, fontSize: 15, color: C.textBody }}>{o.commodity}</span>
                 <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>{o.destination}</span>
+                <PickupNote pickups={o.pickups} />
               </div>
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>

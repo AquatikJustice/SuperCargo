@@ -38,6 +38,8 @@ export interface ManualObjectiveInput {
   commodity: string
   scuAmount: number
   destination: string
+  /** Pickup location(s) for this leg; empty = use the contract's pickup. */
+  pickups?: string[]
 }
 
 export interface ManualContractInput {
@@ -81,11 +83,13 @@ function uid(prefix: string): string {
 }
 
 function makeObjective(input: ManualObjectiveInput, maxBoxSize: number): DeliveryObjective {
+  const pickups = input.pickups?.map((p) => p.trim()).filter(Boolean)
   return {
     id: uid('obj'),
     commodity: input.commodity.trim(),
     scuAmount: input.scuAmount,
     destination: input.destination.trim(),
+    pickups: pickups && pickups.length ? pickups : undefined,
     boxes: calculateBoxes(input.scuAmount, maxBoxSize),
     delivered: false
   }

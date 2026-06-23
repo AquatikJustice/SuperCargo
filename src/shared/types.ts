@@ -27,6 +27,11 @@ export interface DeliveryObjective {
   commodity: string
   scuAmount: number
   destination: string
+  /** Where this leg's cargo is collected. Empty/undefined = use the contract's
+   *  pickup (the title origin). A delivery can source from several pickups (the
+   *  many-pickups-to-one-drop haul), so this is a list; chain/single hauls just
+   *  have one entry. */
+  pickups?: string[]
   /** Optional fuller description of the destination, when known. */
   destinationFull?: string
   /** Calculated from scuAmount + the contract's maxBoxSize. */
@@ -338,6 +343,9 @@ export interface OcrObjective {
   commodity: MatchResult
   scuAmount: number
   destination: MatchResult
+  /** Per-leg pickups, from the panel's "Collect ... from ..." lines (a delivery can
+   *  load from more than one place). */
+  pickups?: MatchResult[]
 }
 
 /** Full result of a capture -> recognize -> parse -> match pass. */
