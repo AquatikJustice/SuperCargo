@@ -15,12 +15,10 @@ export const IPC = {
   historyLoad: 'history:load',
   historySave: 'history:save',
 
-  // UEXcorp sync
+  // bundled roster cache (ships / freight locations / commodities)
   uexGetShips: 'uex:getShips',
   uexGetLocations: 'uex:getLocations',
   uexGetCommodities: 'uex:getCommodities',
-  uexSync: 'uex:sync',
-  routeDistances: 'uex:routeDistances', // distance matrix for a set of terminal ids
 
   // watcher
   watcherStatus: 'watcher:status',

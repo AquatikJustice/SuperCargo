@@ -16,7 +16,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gameChannel: 'LIVE',
   activeShip: DEFAULT_SHIP,
   installedModules: {},
-  uexApiKey: '',
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
   ocrEngine: 'tesseract',

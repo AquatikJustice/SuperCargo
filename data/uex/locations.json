@@ -1,40 +1,71 @@
 {
-  "source": "https://uexcorp.space/api/2.0/terminals",
+  "source": "https://uexcorp.space/api/2.0/terminals + scunpacked starmap_positions + trade_locations",
   "locations": [
+    {
+      "name": "\"The Orphanage\"",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 18703515181.48589,
+      "y": -22121557649.606583,
+      "z": 182182.046452,
+      "system": "stanton"
+    },
     {
       "name": "ARC-L1 Wide Forest Station",
       "code": "ARC-L1",
       "maxContainerSize": 32,
       "uexId": 1,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 16729220034.957521,
+      "y": -19942048185.734924,
+      "z": 2239765.2149551306,
+      "system": "stanton"
     },
     {
       "name": "ARC-L2 Lively Pathway Station",
       "code": "ARC-L2",
       "maxContainerSize": 32,
       "uexId": 2,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 20451005907.884228,
+      "y": -24368053520.67112,
+      "z": -293845.4529822935,
+      "system": "stanton"
     },
     {
       "name": "ARC-L3 Modern Express Station",
       "code": "ARC-L3",
       "maxContainerSize": 32,
       "uexId": 3,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -25045525486.8275,
+      "y": 14463255232.637161,
+      "z": -1892762.8174739594,
+      "system": "stanton"
     },
     {
       "name": "ARC-L4 Faint Glen Station",
       "code": "ARC-L4",
       "maxContainerSize": 32,
       "uexId": 4,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 28476140156.22003,
+      "y": 5018904178.643525,
+      "z": 959731.5056521406,
+      "system": "stanton"
     },
     {
       "name": "ARC-L5 Yellow Core Station",
       "code": "ARC-L5",
       "maxContainerSize": 32,
       "uexId": 5,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -9895751577.395786,
+      "y": -27175156672.48326,
+      "z": 882465.4164157388,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining 045",
@@ -83,119 +114,242 @@
       "code": "ArcCorp 045",
       "maxContainerSize": 24,
       "uexId": 6,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18379366511.42695,
+      "y": -22000452660.046917,
+      "z": 10620.368276,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining Area 048",
       "code": "ArcCorp 048",
       "maxContainerSize": 24,
       "uexId": 7,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18379471117.19944,
+      "y": -22000369011.556034,
+      "z": -196339.526963,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining Area 056",
       "code": "ArcCorp 056",
       "maxContainerSize": 24,
       "uexId": 8,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18379765855.56446,
+      "y": -22000516914.62886,
+      "z": 253154.550617,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining Area 061",
       "code": "ArcCorp 061",
       "maxContainerSize": 24,
       "uexId": 9,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18379628269.999943,
+      "y": -22000714315.963623,
+      "z": -132569.892484,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining Area 141",
       "code": "ArcCorp 141",
       "maxContainerSize": 32,
       "uexId": 10,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -18930557706.53434,
+      "y": -2609978403.3315363,
+      "z": -232759.931235,
+      "system": "stanton"
     },
     {
       "name": "ArcCorp Mining Area 157",
       "code": "ArcCorp 157",
       "maxContainerSize": 24,
       "uexId": 11,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -19022910775.949898,
+      "y": -2613773795.781988,
+      "z": 220312.841505,
+      "system": "stanton"
     },
     {
       "name": "Area 18",
       "code": "Casaba Area 18",
       "maxContainerSize": 0,
       "uexId": 94,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18586917330.719185,
+      "y": -22152033653.831776,
+      "z": -262094.438106,
+      "system": "stanton"
     },
     {
       "name": "Area18",
       "code": "TDD Area 18",
       "maxContainerSize": 32,
       "uexId": 12,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18586917330.719185,
+      "y": -22152033653.831776,
+      "z": -262094.438106,
+      "system": "stanton"
     },
     {
       "name": "Arid Reach",
       "code": "Shop Arid Reach",
       "maxContainerSize": 0,
       "uexId": 686,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 9198410877.015762,
+      "y": 5311267744.566891,
+      "z": -92750.374668,
+      "system": "pyro"
+    },
+    {
+      "name": "Ashburn Channel Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18987608095.40264,
+      "y": -2709267602.776548,
+      "z": -37129.182627,
+      "system": "stanton"
     },
     {
       "name": "Ashland",
       "code": "Ashland",
       "maxContainerSize": 24,
       "uexId": 507,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42296606681.00438,
+      "y": -7508659828.084339,
+      "z": 265629.541865,
+      "system": "pyro"
     },
     {
       "name": "Astor's Clearing",
       "code": "Bar Astors",
       "maxContainerSize": 0,
       "uexId": 264,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22461275033.46784,
+      "y": 37186322848.47139,
+      "z": -101430.451723,
+      "system": "stanton"
     },
     {
       "name": "Baijini Point",
       "code": "Baijini Point",
       "maxContainerSize": 32,
       "uexId": 13,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 18586892779.29352,
+      "y": -22152238267.53135,
+      "z": -359509.34375,
+      "system": "stanton"
+    },
+    {
+      "name": "Barton Flats Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12905811977.20074,
+      "y": 41172671.04558,
+      "z": -159881.078736,
+      "system": "stanton"
     },
     {
       "name": "Blackrock Exchange",
       "code": "Shop Blackrock Exchange",
       "maxContainerSize": 0,
       "uexId": 476,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -52336731329.147514,
+      "y": -43918036886.72484,
+      "z": -31481.893465,
+      "system": "pyro"
+    },
+    {
+      "name": "Bud's Growery",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22436110942.544876,
+      "y": 37290194105.7969,
+      "z": 115270.872745,
+      "system": "stanton"
     },
     {
       "name": "Bueno Ravine",
       "code": "Shop Bueno Ravine",
       "maxContainerSize": 0,
       "uexId": 550,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -8900641166.130352,
+      "y": -15417499203.701294,
+      "z": -57520.632084,
+      "system": "pyro"
+    },
+    {
+      "name": "Bullock's Reach",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -52336249629.29081,
+      "y": -43918218412.69672,
+      "z": -93112.5625,
+      "system": "pyro"
     },
     {
       "name": "Canard View",
       "code": "Canard View",
       "maxContainerSize": 16,
       "uexId": 591,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -52336719517.25613,
+      "y": -43918048691.44216,
+      "z": -102070.138758,
+      "system": "pyro"
+    },
+    {
+      "name": "Carver's Ridge",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8900616258.409298,
+      "y": -15417487752.232645,
+      "z": -48106.482573,
+      "system": "pyro"
     },
     {
       "name": "Chawla's Beach",
       "code": "Chawla's Beach",
       "maxContainerSize": 16,
       "uexId": 510,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42614206918.97057,
+      "y": -7273113044.330512,
+      "z": 189412.479765,
+      "system": "pyro"
     },
     {
       "name": "Checkmate",
       "code": "Checkmate",
       "maxContainerSize": 32,
       "uexId": 436,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 1833362390.019977,
+      "y": 10434543320.869617,
+      "z": 2570930.841284,
+      "system": "pyro"
     },
     {
       "name": "Checkmate Station",
@@ -209,630 +363,1529 @@
       "code": "S4DC05",
       "maxContainerSize": 0,
       "uexId": 725,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22461752747.464794,
+      "y": 37186642798.6401,
+      "z": -290234.08,
+      "system": "stanton"
     },
     {
       "name": "CRU-L1 Ambitious Dream Station",
       "code": "CRU-L1",
       "maxContainerSize": 32,
       "uexId": 19,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -17068753721.355608,
+      "y": -2399482272.9430733,
+      "z": -20044.224620763922,
+      "system": "stanton"
     },
     {
       "name": "CRU-L4 Shallow Fields Station",
       "code": "CRU-L4",
       "maxContainerSize": 32,
       "uexId": 20,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -7173768306.542123,
+      "y": -17750056492.47937,
+      "z": -2174784.168140132,
+      "system": "stanton"
     },
     {
       "name": "CRU-L5 Beautiful Glen Station",
       "code": "CRU-L5",
       "maxContainerSize": 32,
       "uexId": 22,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -11785012209.16769,
+      "y": 15091235755.635984,
+      "z": -2796440.785984267,
+      "system": "stanton"
+    },
+    {
+      "name": "Cry-Astro Processing Plant 19-02",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22462669391.708767,
+      "y": 37185744175.4434,
+      "z": 812169.190745,
+      "system": "stanton"
+    },
+    {
+      "name": "Cry-Astro Processing Plant 34-12",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22461768967.633644,
+      "y": 37184862924.49309,
+      "z": -350639.382315,
+      "system": "stanton"
+    },
+    {
+      "name": "Cutter's Rig",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850001974.162962,
+      "y": -200496.928163,
+      "z": 867564.004635,
+      "system": "stanton"
+    },
+    {
+      "name": "Devlin Scrap & Salvage",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22436075655.795883,
+      "y": 37290577556.55173,
+      "z": 25984.633517,
+      "system": "stanton"
     },
     {
       "name": "Dinger's Depot",
       "code": "Dinger's Depot",
       "maxContainerSize": 16,
       "uexId": 682,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42614546165.26548,
+      "y": -7273183014.717681,
+      "z": 267272.288696,
+      "system": "pyro"
     },
     {
       "name": "Dudley & Daughters",
       "code": "Dudley & Daughters",
       "maxContainerSize": 32,
       "uexId": 549,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 23342575877.755306,
+      "y": -64225960280.02989,
+      "z": -10765064.143322,
+      "system": "pyro"
     },
     {
       "name": "Dunboro",
       "code": "Shop Dunboro",
       "maxContainerSize": 0,
       "uexId": 266,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22461349363.2347,
+      "y": 37186423266.846275,
+      "z": 11154.501159,
+      "system": "stanton"
+    },
+    {
+      "name": "Dunlow Ridge Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930591389.157986,
+      "y": -2609877833.508542,
+      "z": 75331.286385,
+      "system": "stanton"
+    },
+    {
+      "name": "Dupree Industrial Manufacturing Facility",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850696518.79,
+      "y": -969806.5,
+      "z": 68635.15,
+      "system": "stanton"
+    },
+    {
+      "name": "Eager Flats Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930338994.471264,
+      "y": -2610263682.772551,
+      "z": 190096.59476,
+      "system": "stanton"
     },
     {
       "name": "Endgame",
       "code": "Endgame",
       "maxContainerSize": 32,
       "uexId": 482,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 48296754635.74633,
+      "y": 48291979195.72477,
+      "z": 2735552.171102,
+      "system": "pyro"
     },
     {
       "name": "Everus Harbor",
       "code": "Everus Harbor",
       "maxContainerSize": 32,
       "uexId": 25,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 12849949350.6875,
+      "y": -903464.4375,
+      "z": 496489.0625,
+      "system": "stanton"
     },
     {
       "name": "Fallow Field",
       "code": "Fallow Field",
       "maxContainerSize": 24,
       "uexId": 605,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42614520334.90412,
+      "y": -7273203700.560071,
+      "z": 262249.667636,
+      "system": "pyro"
     },
     {
       "name": "Feo Canyon Depot",
       "code": "Feo Canyon Depot",
       "maxContainerSize": 16,
       "uexId": 681,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42402818430.92581,
+      "y": -7498732254.450501,
+      "z": 81621.686807,
+      "system": "pyro"
+    },
+    {
+      "name": "Finn's Folly",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850260500.6821,
+      "y": -197870.934748,
+      "z": 961998.923773,
+      "system": "stanton"
+    },
+    {
+      "name": "Flanagan's Ravine Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18987805401.642612,
+      "y": -2708857938.687181,
+      "z": 84996.712245,
+      "system": "stanton"
+    },
+    {
+      "name": "Frigid Knot",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8900581800.985285,
+      "y": -15417101983.994484,
+      "z": -342910.010608,
+      "system": "pyro"
     },
     {
       "name": "Gaslight",
       "code": "Gaslight",
       "maxContainerSize": 32,
       "uexId": 511,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 46494448944.91938,
+      "y": -8190926212.562624,
+      "z": 17665446.105198,
+      "system": "pyro"
+    },
+    {
+      "name": "Goner's Deal",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 42614556792.61686,
+      "y": -7273179159.64573,
+      "z": 265305.414976,
+      "system": "pyro"
     },
     {
       "name": "Gray Gardens Depot",
       "code": "Gray Gardens Depot",
       "maxContainerSize": 0,
       "uexId": 683,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 1719646986.100393,
+      "y": -8091859973.2357435,
+      "z": -101323.01277,
+      "system": "pyro"
+    },
+    {
+      "name": "Greycat Stanton I Production Complex-B",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850049635.960781,
+      "y": -656296.424811,
+      "z": 636321.907941,
+      "system": "stanton"
+    },
+    {
+      "name": "Greycat Stanton IV Production Complex-A",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22461661905.144794,
+      "y": 37185603796.0801,
+      "z": -895144.87,
+      "system": "stanton"
     },
     {
       "name": "Grim HEX",
       "code": "GrimHEX",
       "maxContainerSize": 32,
       "uexId": 27,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -19023485457.614876,
+      "y": -2613612586.748472,
+      "z": -2042,
+      "system": "stanton"
     },
     {
       "name": "GrimHEX",
       "code": "KC Trending GrimHEX",
       "maxContainerSize": 0,
       "uexId": 341,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -19023485457.614876,
+      "y": -2613612586.748472,
+      "z": -2042,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Anderson",
       "code": "HDMS-Anderson",
       "maxContainerSize": 24,
       "uexId": 28,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12905730686.345882,
+      "y": 41135771.383034006,
+      "z": 206879.087475,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Bezdek",
       "code": "HDMS-Bezdek",
       "maxContainerSize": 32,
       "uexId": 29,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12892700044.249031,
+      "y": -31710826.492302,
+      "z": 251505.151902,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Edmond",
       "code": "HDMS-Edmond",
       "maxContainerSize": 32,
       "uexId": 30,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850172612.873583,
+      "y": -730502.066139,
+      "z": 620924.440594,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Hadley",
       "code": "HDMS-Hadley",
       "maxContainerSize": 24,
       "uexId": 31,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12851083259.617704,
+      "y": -583971.055696,
+      "z": -518485.462709,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Hahn",
       "code": "HDMS-Hahn",
       "maxContainerSize": 32,
       "uexId": 32,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12792538975.776962,
+      "y": -74756797.48343201,
+      "z": 95247.266076,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Lathan",
       "code": "HDMS-Lathan",
       "maxContainerSize": 32,
       "uexId": 33,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12893012501.567974,
+      "y": -31442443.044386003,
+      "z": 55843.181685,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Norgaard",
       "code": "HDMS-Norgaard",
       "maxContainerSize": 24,
       "uexId": 34,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12905616064.523312,
+      "y": 41150868.734238006,
+      "z": 132097.595094,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Oparei",
       "code": "HDMS-Oparei",
       "maxContainerSize": 32,
       "uexId": 35,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12849900967.009779,
+      "y": -72590.748724,
+      "z": -828070.672939,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Perlman",
       "code": "HDMS-Perlman",
       "maxContainerSize": 32,
       "uexId": 36,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12792545663.384417,
+      "y": -74176659.38293801,
+      "z": -116687.783422,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Pinewood",
       "code": "HDMS-Pinewood",
       "maxContainerSize": 24,
       "uexId": 37,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12851442656.995773,
+      "y": 90029.273051,
+      "z": 149896.296232,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Ryder",
       "code": "HDMS-Ryder",
       "maxContainerSize": 24,
       "uexId": 38,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12830018841.60614,
+      "y": 114650227.21985699,
+      "z": 73709.290517,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Stanhope",
       "code": "HDMS-Stanhope",
       "maxContainerSize": 24,
       "uexId": 39,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12849808484.922792,
+      "y": 198312.645122,
+      "z": 735120.829169,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Thedus",
       "code": "HDMS-Thedus",
       "maxContainerSize": 24,
       "uexId": 40,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850900414.550844,
+      "y": 891524.914059,
+      "z": 101509.036393,
+      "system": "stanton"
     },
     {
       "name": "HDMS-Woodruff",
       "code": "HDMS-Woodruff",
       "maxContainerSize": 24,
       "uexId": 41,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12830309507.80775,
+      "y": 115133269.68359,
+      "z": 210466.567686,
+      "system": "stanton"
+    },
+    {
+      "name": "HDPC-Cassillo",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12849667377.059887,
+      "y": 615354.400685,
+      "z": -2353.089599,
+      "system": "stanton"
+    },
+    {
+      "name": "HDPC-Farnesway",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850586316.337423,
+      "y": 63887.560398,
+      "z": 989574.572256,
+      "system": "stanton"
     },
     {
       "name": "Hickes Research Outpost",
       "code": "Hickes Research",
       "maxContainerSize": 24,
       "uexId": 42,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -18987607849.176247,
+      "y": -2708996569.998123,
+      "z": -260315.952851,
+      "system": "stanton"
     },
     {
       "name": "Humboldt Mines",
       "code": "Humboldt Mines",
       "maxContainerSize": 0,
       "uexId": 43,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18703612482.271862,
+      "y": -22121843952.38168,
+      "z": -112544.821399,
+      "system": "stanton"
     },
     {
       "name": "HUR-L1 Green Glade Station",
       "code": "HUR-L1",
       "maxContainerSize": 32,
       "uexId": 44,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 11561412555.753656,
+      "y": -262923.20307,
+      "z": -484614.27223299997,
+      "system": "stanton"
     },
     {
       "name": "HUR-L2 Faithful Dream Station",
       "code": "HUR-L2",
       "maxContainerSize": 32,
       "uexId": 45,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 14139635583.044806,
+      "y": -1967277.639212439,
+      "z": -527794.260616351,
+      "system": "stanton"
     },
     {
       "name": "HUR-L3 Thundering Express Station",
       "code": "HUR-L3",
       "maxContainerSize": 32,
       "uexId": 46,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -12844743551.306984,
+      "y": -1554386.717189435,
+      "z": 1335043.0217556537,
+      "system": "stanton"
     },
     {
       "name": "HUR-L4 Melodic Fields Station",
       "code": "HUR-L4",
       "maxContainerSize": 32,
       "uexId": 47,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 6427627577.116347,
+      "y": 11124766832.216436,
+      "z": 666283.6312175051,
+      "system": "stanton"
     },
     {
       "name": "HUR-L5 High Course Station",
       "code": "HUR-L5",
       "maxContainerSize": 32,
       "uexId": 48,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 6425723013.355791,
+      "y": -11128362130.50447,
+      "z": -842034.7959288693,
+      "system": "stanton"
     },
     {
       "name": "Jackson's Swap",
       "code": "Jackson's Swap",
       "maxContainerSize": 16,
       "uexId": 504,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 9198800311.717115,
+      "y": 5310500634.709372,
+      "z": -272467.223889,
+      "system": "pyro"
+    },
+    {
+      "name": "Julep Ravine Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18987722646.958466,
+      "y": -2709065957.364554,
+      "z": -228949.606357,
+      "system": "stanton"
+    },
+    {
+      "name": "Jumptown",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930459100.42009,
+      "y": -2609916049.8639584,
+      "z": -147633.537765,
+      "system": "stanton"
+    },
+    {
+      "name": "Kabir's Post",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 42296743348.6167,
+      "y": -7508286316.898287,
+      "z": 108786.853475,
+      "system": "pyro"
+    },
+    {
+      "name": "Kinder Plots",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -52336776286.47191,
+      "y": -43918175963.15171,
+      "z": -115526.495668,
+      "system": "pyro"
+    },
+    {
+      "name": "Kudre Ore",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930392922.380646,
+      "y": -2610335858.792934,
+      "z": -184862.263018,
+      "system": "stanton"
+    },
+    {
+      "name": "Last Ditch",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 9198273955.948278,
+      "y": 5310711524.725226,
+      "z": 508874.429613,
+      "system": "pyro"
     },
     {
       "name": "Last Landings",
       "code": "Last Landings",
       "maxContainerSize": 16,
       "uexId": 565,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -52336804142.38755,
+      "y": -43918240543.90625,
+      "z": -7854.439822,
+      "system": "pyro"
     },
     {
       "name": "Levski",
       "code": "Cargo Levski",
       "maxContainerSize": 0,
       "uexId": 793,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -9641669472.432566,
+      "y": -11490738598.66563,
+      "z": -93642.5508,
+      "system": "nyx"
     },
     {
       "name": "Lorville",
       "code": "CBD Lorville",
       "maxContainerSize": 32,
       "uexId": 18,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850128103.83473,
+      "y": -752434.615701,
+      "z": 572120.273853,
+      "system": "stanton"
+    },
+    {
+      "name": "Loveridge Mineral Reserve",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 18703788971.06759,
+      "y": -22121521967.374832,
+      "z": 24939.872495,
+      "system": "stanton"
+    },
+    {
+      "name": "Ludlow",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12849578424.873047,
+      "y": -467858.016386,
+      "z": 111090.62672,
+      "system": "stanton"
+    },
+    {
+      "name": "Maker's Point",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850303085.782219,
+      "y": 128324.546171,
+      "z": 979766.026532,
+      "system": "stanton"
     },
     {
       "name": "Megumi Refueling",
       "code": "Megumi",
       "maxContainerSize": 32,
       "uexId": 479,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -59145570654.22604,
+      "y": 34145522707.318462,
+      "z": 12705743.427003,
+      "system": "pyro"
     },
     {
       "name": "MIC-L1 Shallow Frontier Station",
       "code": "MIC-L1",
       "maxContainerSize": 32,
       "uexId": 54,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 20215827268.888092,
+      "y": 33467069517.837925,
+      "z": -943.2008828393882,
+      "system": "stanton"
     },
     {
       "name": "MIC-L2 Long Forest Station",
       "code": "MIC-L2",
       "maxContainerSize": 32,
       "uexId": 55,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 24713774897.740803,
+      "y": 40912934444.47705,
+      "z": -10634826.699255988,
+      "system": "stanton"
     },
     {
       "name": "MIC-L3 Endless Odyssey Station",
       "code": "MIC-L3",
       "maxContainerSize": 32,
       "uexId": 56,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -22452218251.9082,
+      "y": -37179923023.00019,
+      "z": -10590410.52450916,
+      "system": "stanton"
     },
     {
       "name": "MIC-L4 Red Crossroads Station",
       "code": "MIC-L4",
       "maxContainerSize": 32,
       "uexId": 57,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -20968720663.277767,
+      "y": 38056058357.456764,
+      "z": -11799274.780178793,
+      "system": "stanton"
     },
     {
       "name": "MIC-L5 Modern Icarus Station",
       "code": "MIC-L5",
       "maxContainerSize": 32,
       "uexId": 58,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 43448559856.67166,
+      "y": -857708037.0784544,
+      "z": -7824371.169867326,
+      "system": "stanton"
+    },
+    {
+      "name": "microTech Logistics Depot S4LD01",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22462969867.484795,
+      "y": 37186212832.6501,
+      "z": -19152.54,
+      "system": "stanton"
+    },
+    {
+      "name": "microTech Logistics Depot S4LD13",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22462929090.434795,
+      "y": 37185565430.0001,
+      "z": 505834.1,
+      "system": "stanton"
+    },
+    {
+      "name": "Mogote Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18987809783.623302,
+      "y": -2708958870.967037,
+      "z": 160874.780687,
+      "system": "stanton"
+    },
+    {
+      "name": "Narena's Rest",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8901207950.05631,
+      "y": -15417002896.2801,
+      "z": -11780.327947,
+      "system": "pyro"
     },
     {
       "name": "New Babbage",
       "code": "MTP New Babbage",
       "maxContainerSize": 32,
       "uexId": 59,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22462605975.476906,
+      "y": 37186164329.143265,
+      "z": 743654.685314,
+      "system": "stanton"
+    },
+    {
+      "name": "Nyx - Castra Jump Point",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -13499935650.449425,
+      "y": -23382715137.804523,
+      "z": 0,
+      "system": "nyx"
+    },
+    {
+      "name": "Nyx - Pyro Jump Point",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -12000043844.931711,
+      "y": 20784584131.46289,
+      "z": 0,
+      "system": "nyx"
     },
     {
       "name": "Nyx Gateway",
       "code": "Nyx Gateway (Stanton)",
       "maxContainerSize": 32,
       "uexId": 253,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 32993982418.742573,
+      "y": -38151730072.59026,
+      "z": 6727.802807,
+      "system": "pyro"
     },
     {
       "name": "Orbituary",
       "code": "Orbituary",
       "maxContainerSize": 32,
       "uexId": 443,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -8900432615.040003,
+      "y": -15417844552.575254,
+      "z": 226043.640625,
+      "system": "pyro"
     },
     {
       "name": "Orison",
       "code": "Orison Providence",
       "maxContainerSize": 32,
       "uexId": 62,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -18956880483.059193,
+      "y": -2665823193.5330234,
+      "z": 5282237.225567,
+      "system": "stanton"
+    },
+    {
+      "name": "Ostler's Claim",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 9198926641.479586,
+      "y": 5310692057.529628,
+      "z": -136103.973164,
+      "system": "pyro"
+    },
+    {
+      "name": "Paradise Cove",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 18379729285.277042,
+      "y": -22000684679.223866,
+      "z": 162334.817229,
+      "system": "stanton"
     },
     {
       "name": "Patch City",
       "code": "Patch City",
       "maxContainerSize": 32,
       "uexId": 453,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 11445282814.891651,
+      "y": 13622341259.20288,
+      "z": 2752554.224023,
+      "system": "pyro"
+    },
+    {
+      "name": "People's Service Station Alpha",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -45804312834.019424,
+      "y": -14351346423.869164,
+      "z": 29570.487233,
+      "system": "nyx"
+    },
+    {
+      "name": "People's Service Station Delta",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -6432467676.28978,
+      "y": -47567033533.165306,
+      "z": 13905.36802,
+      "system": "nyx"
+    },
+    {
+      "name": "People's Service Station Lambda",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 43327758023.56412,
+      "y": 20656812086.281746,
+      "z": 25671.460589000002,
+      "system": "nyx"
+    },
+    {
+      "name": "People's Service Station Theta",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 40472690248.72818,
+      "y": -25806259375.74863,
+      "z": 40589.752193,
+      "system": "nyx"
     },
     {
       "name": "Picker's Field",
       "code": "Pickers Field",
       "maxContainerSize": 32,
       "uexId": 276,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12849777326.785019,
+      "y": 262265.674173,
+      "z": -686080.061535,
+      "system": "stanton"
     },
     {
       "name": "Port Tressler",
       "code": "Port Tressler",
       "maxContainerSize": 32,
       "uexId": 66,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 22462646723.530945,
+      "y": 37186290817.84713,
+      "z": 808831.762531,
+      "system": "stanton"
+    },
+    {
+      "name": "Prophet's Peak",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 42263566231.23191,
+      "y": -7355986773.051652,
+      "z": 154695.129033,
+      "system": "pyro"
     },
     {
       "name": "Pyro Gateway",
       "code": "Pyro Gateway (Stanton)",
       "maxContainerSize": 32,
       "uexId": 252,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -12000044529.892805,
+      "y": 20784580528.598274,
+      "z": -38674.228082999995,
+      "system": "nyx"
     },
     {
       "name": "Rappel",
       "code": "Rappel",
       "maxContainerSize": 32,
       "uexId": 274,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850810045.127275,
+      "y": -661889.742397,
+      "z": 663889.093977,
+      "system": "stanton"
     },
     {
       "name": "Rat's Nest",
       "code": "Rat's Nest",
       "maxContainerSize": 32,
       "uexId": 523,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 3732645628.287643,
+      "y": -42766913617.569916,
+      "z": 18513515.236622,
+      "system": "pyro"
+    },
+    {
+      "name": "Raven's Roost",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22462441156.079376,
+      "y": 37185669370.99062,
+      "z": 932645.25482,
+      "system": "stanton"
     },
     {
       "name": "Rayari Anvik Research Outpost",
       "code": "Rayari Anvik",
       "maxContainerSize": 24,
       "uexId": 69,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22525616564.388622,
+      "y": 37202521456.3169,
+      "z": 84723.877576,
+      "system": "stanton"
     },
     {
       "name": "Rayari Cantwell Research Outpost",
       "code": "Rayari Cantwell",
       "maxContainerSize": 24,
       "uexId": 70,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22447225109.615246,
+      "y": 37280685133.7071,
+      "z": 142842.297229,
+      "system": "stanton"
     },
     {
       "name": "Rayari Deltana Research Outpost",
       "code": "Rayari Deltana",
       "maxContainerSize": 32,
       "uexId": 71,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22461391342.503784,
+      "y": 37185096666.03534,
+      "z": 316681.366334,
+      "system": "stanton"
     },
     {
       "name": "Rayari Kaltag Research Outpost",
       "code": "Rayari Kaltag",
       "maxContainerSize": 24,
       "uexId": 72,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22526006463.734886,
+      "y": 37202655511.399796,
+      "z": -124485.412183,
+      "system": "stanton"
     },
     {
       "name": "Rayari McGrath Research Outpost",
       "code": "Rayari McGrath",
       "maxContainerSize": 24,
       "uexId": 73,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22447116380.302612,
+      "y": 37280384141.92514,
+      "z": -18785.980507,
+      "system": "stanton"
     },
     {
       "name": "Reclamation & Disposal Orinth",
       "code": "Reclamation Orinth",
       "maxContainerSize": 32,
       "uexId": 74,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850458295.763449,
+      "y": -794237.216741,
+      "z": 607701.139709,
+      "system": "stanton"
     },
     {
       "name": "Rod's Fuel 'N Supplies",
       "code": "Rod's Fuel",
       "maxContainerSize": 32,
       "uexId": 486,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 14664316072.490164,
+      "y": 40338624603.51494,
+      "z": -9518769.19755,
+      "system": "pyro"
     },
     {
       "name": "Rough Landing",
       "code": "Shop Rough Landing",
       "maxContainerSize": 0,
       "uexId": 497,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -52336718331.45731,
+      "y": -43918416628.460434,
+      "z": 77972.606658,
+      "system": "pyro"
     },
     {
       "name": "Ruin Station",
       "code": "Ruin Station",
       "maxContainerSize": 32,
       "uexId": 466,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -52336834868.99303,
+      "y": -43917925431.95215,
+      "z": -100477.857041,
+      "system": "pyro"
     },
     {
       "name": "Rustville",
       "code": "Rustville",
       "maxContainerSize": 16,
       "uexId": 590,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 1719831469.741281,
+      "y": -8092299589.5607,
+      "z": 170820.204183,
+      "system": "pyro"
     },
     {
       "name": "Sacren's Plot",
       "code": "Sacren's Plot",
       "maxContainerSize": 16,
       "uexId": 688,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42614215579.06247,
+      "y": -7273124923.757171,
+      "z": 194621.1888,
+      "system": "pyro"
+    },
+    {
+      "name": "Sakura Sun Goldenrod Workcenter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22461911830.052658,
+      "y": 37184821334.37438,
+      "z": -343264.571052,
+      "system": "stanton"
+    },
+    {
+      "name": "Sakura Sun Magnolia Workcenter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850227719.89123,
+      "y": -864792.873355,
+      "z": -446960.041887,
+      "system": "stanton"
     },
     {
       "name": "Samson & Son's Salvage Center",
       "code": "Samson & Son's",
       "maxContainerSize": 24,
       "uexId": 75,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18379606709.831802,
+      "y": -22000187712.82889,
+      "z": 19230.105734,
+      "system": "stanton"
     },
     {
       "name": "Seer's Canyon",
       "code": "Shop Seer's Canyon",
       "maxContainerSize": 0,
       "uexId": 517,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 42216831419.65104,
+      "y": -7425848127.167816,
+      "z": -119605.389702,
+      "system": "pyro"
     },
     {
       "name": "Seraphim Station",
       "code": "Seraphim",
       "maxContainerSize": 32,
       "uexId": 259,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -18956299901.798214,
+      "y": -2666344206.7232704,
+      "z": 5565883.231907,
+      "system": "stanton"
+    },
+    {
+      "name": "Shadowfall",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8900904159.310019,
+      "y": -15416726243.740683,
+      "z": -57006.207933,
+      "system": "pyro"
+    },
+    {
+      "name": "Shady Glen Farms",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 18379628687.41272,
+      "y": -22000197782.73065,
+      "z": 87534.217163,
+      "system": "stanton"
     },
     {
       "name": "Shepherd's Rest",
       "code": "Shepherd's Rest",
       "maxContainerSize": 32,
       "uexId": 555,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -8900783030.11479,
+      "y": -15416765829.285278,
+      "z": -202126.326212,
+      "system": "pyro"
     },
     {
       "name": "Shubin Mining Facility SAL-2",
       "code": "Shubin SAL-2",
       "maxContainerSize": 24,
       "uexId": 77,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18703757807.38505,
+      "y": -22121703753.134045,
+      "z": 156667.8916,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SAL-5",
       "code": "Shubin SAL-5",
       "maxContainerSize": 24,
       "uexId": 78,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 18703705241.5723,
+      "y": -22121571772.88707,
+      "z": 185820.579425,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SCD-1",
       "code": "Shubin SCD-1",
       "maxContainerSize": 32,
       "uexId": 79,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -18930413514.36279,
+      "y": -2610308346.967502,
+      "z": 221253.34404,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SM0-10",
       "code": "Shubin SM0-10",
       "maxContainerSize": 24,
       "uexId": 80,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22462170728.61854,
+      "y": 37184794108.94471,
+      "z": 298799.440766,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SM0-13",
       "code": "Shubin SM0-13",
       "maxContainerSize": 24,
       "uexId": 81,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22461912433.839996,
+      "y": 37184763656.493904,
+      "z": 97767.182049,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SM0-18",
       "code": "Shubin SM0-18",
       "maxContainerSize": 24,
       "uexId": 82,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22463005462.59668,
+      "y": 37185355423.148155,
+      "z": 43836.862656,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SM0-22",
       "code": "Shubin SM0-22",
       "maxContainerSize": 24,
       "uexId": 83,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22462109551.033733,
+      "y": 37184922374.138824,
+      "z": 568174.190108,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SMCa-6",
       "code": "Shubin SMCa-6",
       "maxContainerSize": 24,
       "uexId": 84,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22525851263.081974,
+      "y": 37202882687.90001,
+      "z": 24935.519649,
+      "system": "stanton"
     },
     {
       "name": "Shubin Mining Facility SMCa-8",
       "code": "Shubin SMCa-8",
       "maxContainerSize": 24,
       "uexId": 85,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 22525961362.5329,
+      "y": 37202818237.25622,
+      "z": -58400.32741,
+      "system": "stanton"
     },
     {
       "name": "Slowburn Depot",
       "code": "Slowburn Depot",
       "maxContainerSize": 16,
       "uexId": 684,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 9198278114.326471,
+      "y": 5310708072.533131,
+      "z": 509790.117938,
+      "system": "pyro"
+    },
+    {
+      "name": "Stag's Rut",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 1719643854.9842849,
+      "y": -8091873750.286217,
+      "z": -103639.219527,
+      "system": "pyro"
     },
     {
       "name": "Stanton Gateway",
       "code": "Stanton Gateway (Pyro)",
       "maxContainerSize": 32,
       "uexId": 520,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -13499931610.233513,
+      "y": -23382701964.218426,
+      "z": -36662.089647999994,
+      "system": "nyx"
     },
     {
       "name": "Starlight Service Station",
       "code": "Starlight Service",
       "maxContainerSize": 32,
       "uexId": 450,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -7756636101.2095585,
+      "y": -14008864142.502598,
+      "z": 1357701.060931,
+      "system": "pyro"
+    },
+    {
+      "name": "Stonetree",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -52336778620.95711,
+      "y": -43918189705.63683,
+      "z": -115813.336855,
+      "system": "pyro"
     },
     {
       "name": "Sunset Mesa",
       "code": "Sunset Mesa",
       "maxContainerSize": 16,
       "uexId": 599,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 9198790736.149548,
+      "y": 5310483748.38485,
+      "z": -269591.417313,
+      "system": "pyro"
+    },
+    {
+      "name": "Tamdon Plains Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930677653.408043,
+      "y": -2610183228.3478494,
+      "z": -259848.699769,
+      "system": "stanton"
     },
     {
       "name": "Terra Gateway",
       "code": "Terra Gateway (Stanton)",
       "maxContainerSize": 32,
       "uexId": 251,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 51118210044.76286,
+      "y": -5270029473.660545,
+      "z": -4339552358.888522,
+      "system": "stanton"
     },
     {
       "name": "The Golden Riviera",
       "code": "The Golden Riviera",
       "maxContainerSize": 24,
       "uexId": 665,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -8901196933.41506,
+      "y": -15416972500.373259,
+      "z": 5799.239484,
+      "system": "pyro"
+    },
+    {
+      "name": "The Yard",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8900468610.927538,
+      "y": -15416937006.30173,
+      "z": 132065.861482,
+      "system": "pyro"
+    },
+    {
+      "name": "Tram & Myers Mining",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18987852283.277554,
+      "y": -2709007264.336514,
+      "z": -98700.233272,
+      "system": "stanton"
     },
     {
       "name": "Watcher's Depot",
       "code": "Watcher's Depot",
       "maxContainerSize": 16,
       "uexId": 685,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -52336697565.60086,
+      "y": -43918426839.13794,
+      "z": 103144.250861,
+      "system": "pyro"
     },
     {
       "name": "Weeping Cove",
       "code": "Bar Weeping Cove",
       "maxContainerSize": 0,
       "uexId": 269,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850001690.220549,
+      "y": -202816.335427,
+      "z": 866880.872573,
+      "system": "stanton"
     },
     {
       "name": "Windfall",
       "code": "Windfall",
       "maxContainerSize": 0,
       "uexId": 666,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": -8900682674.05306,
+      "y": -15417519398.476786,
+      "z": -12215.341634,
+      "system": "pyro"
+    },
+    {
+      "name": "Wolf Point Aid Shelter",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18930543959.317673,
+      "y": -2609879698.8653684,
+      "z": 95732.659059,
+      "system": "stanton"
+    },
+    {
+      "name": "Yang's Place",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 9198878681.370693,
+      "y": 5310621841.445952,
+      "z": -229886.1434,
+      "system": "pyro"
     },
     {
       "name": "Zephyr",
       "code": "Bar Zephyr",
       "maxContainerSize": 0,
       "uexId": 336,
-      "hasElevator": false
+      "hasElevator": false,
+      "x": 12850565252.996412,
+      "y": -133661.614184,
+      "z": 986694.257507,
+      "system": "stanton"
     }
   ]
 }

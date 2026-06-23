@@ -95,9 +95,6 @@ export interface AppSettings {
   /** Per-ship installed cargo modules (by module id). Absent = all modules fitted. */
   installedModules: Record<string, string[]>
 
-  // UEXcorp API (commodities/locations/ships sync - spec 4.2)
-  uexApiKey: string
-
   // OCR (Phase 2)
   /** Seconds to wait after a contract is accepted before auto-capturing. */
   ocrCaptureDelay: number
@@ -251,6 +248,13 @@ export interface Location {
   /** Has an EXTERNAL freight elevator / "loading dock" (UEX has_loading_dock) -
    *  top/side loading without taxiing the ship inside. Undefined = unknown. */
   hasElevator?: boolean
+  /** Game-file starmap position (meters, origin = the system's star), for local
+   *  distance math. Same `system` => a real Euclidean distance. Undefined when the
+   *  location didn't match a starmap entity (falls back to grouping cost). */
+  x?: number
+  y?: number
+  z?: number
+  system?: string
 }
 
 export interface LocationRoster {

@@ -6,7 +6,7 @@ import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, sa
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
 import { initUpdater, checkForUpdates, quitAndInstall } from './updater'
-import { syncAll, loadCachedRoster, loadCachedLocations, loadCachedCommodities, getRouteDistances } from './uex'
+import { loadCachedRoster, loadCachedLocations, loadCachedCommodities } from './uex'
 import { seedCacheIfNeeded, refreshFromRepo } from './dataSync'
 import { scanActiveContracts } from './scanLog'
 import { randomUUID } from 'node:crypto'
@@ -419,14 +419,6 @@ function registerIpc(): void {
   ipcMain.handle(IPC.uexGetShips, () => loadCachedRoster())
   ipcMain.handle(IPC.uexGetLocations, () => loadCachedLocations())
   ipcMain.handle(IPC.uexGetCommodities, () => loadCachedCommodities())
-  ipcMain.handle(IPC.uexSync, async () => {
-    const result = await syncAll(settings.uexApiKey)
-    if (result.ok) pushRosters()
-    return result
-  })
-  ipcMain.handle(IPC.routeDistances, (_e, ids: number[]) =>
-    getRouteDistances(Array.isArray(ids) ? ids : [], settings.uexApiKey)
-  )
 
   ipcMain.handle(IPC.scanSession, () => {
     if (!settings.gameLogPath) return []
@@ -535,22 +527,14 @@ if (!gotLock) {
       console.warn('[contractData] index build failed:', e)
     }
 
-    // Keep ships, freight locations and commodities current. Token users get a
-    // live UEXcorp sync (freshest, and it drives route distances). Everyone else
-    // rides the lists we bundle and host in the repo: seed the cache so matching
-    // works at once, then pull any list whose hash changed, in the background.
-    if (settings.uexApiKey) {
-      void syncAll(settings.uexApiKey).then((result) => {
-        if (result.ok) pushRosters()
-        else console.warn('[uex] launch sync failed:', result.error)
-      })
-    } else {
-      seedCacheIfNeeded()
-      pushRosters()
-      void refreshFromRepo().then((changed) => {
-        if (changed) pushRosters()
-      })
-    }
+    // Ships, freight locations and commodities ship bundled with the app. Seed the
+    // cache so matching works at once, then pull any list whose hash changed from
+    // the repo in the background. No account or token involved.
+    seedCacheIfNeeded()
+    pushRosters()
+    void refreshFromRepo().then((changed) => {
+      if (changed) pushRosters()
+    })
 
     initUpdater(() => mainWindow)
     if (app.isPackaged) {

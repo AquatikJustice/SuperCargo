@@ -15,6 +15,11 @@ export interface RouteNode {
   code: string
   region: string
   uexId?: number
+  /** Game-file position + system, for local distance math. Undefined => unmatched. */
+  x?: number
+  y?: number
+  z?: number
+  system?: string
   /** raw destination strings (as stored on objectives) that resolve to this node. */
   destStrings: string[]
 }
@@ -93,12 +98,39 @@ export function matchLocation(raw: string, locations: Location[]): Location | nu
   return byContains ?? null
 }
 
-const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`)
-
 /** System code prefix, e.g. "CRU-L1" / "Crusader" -> "CRU"/"". */
 function systemOf(code: string): string {
   const m = /^([A-Za-z]{3})\b/.exec(code)
   return m ? m[1].toUpperCase() : ''
+}
+
+interface Pos {
+  x: number
+  y: number
+  z: number
+  system: string
+}
+function hasPos(n: { x?: number; system?: string }): n is Pos & typeof n {
+  return typeof n.x === 'number' && typeof n.system === 'string'
+}
+/** Straight-line distance in gigameters (game-file coords are meters). Star
+ *  Citizen bodies don't orbit the star, so within a system this is accurate. */
+function dist3(a: Pos, b: Pos): number {
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  const dz = a.z - b.z
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) / 1e9
+}
+/** Jump-gate stations per system, for pricing cross-system legs. */
+function gatewaysBySystem(locations: Location[]): Map<string, Pos[]> {
+  const m = new Map<string, Pos[]>()
+  for (const l of locations) {
+    if (!hasPos(l) || !/gateway/i.test(l.name)) continue
+    const arr = m.get(l.system) ?? []
+    arr.push(l)
+    m.set(l.system, arr)
+  }
+  return m
 }
 
 export function buildRouteModel(
@@ -111,7 +143,9 @@ export function buildRouteModel(
   const nodeFor = (raw: string, isDest: boolean): number => {
     const loc = matchLocation(raw, locations)
     const split = splitDestination(raw)
-    const key = loc ? `uex:${loc.uexId}` : `raw:${norm(raw)}`
+    // Key by UEX terminal id when there is one; game-file locations (DCs, outposts)
+    // share uexId 0, so key those by name or they'd all collide into one node.
+    const key = loc ? (loc.uexId ? `uex:${loc.uexId}` : `loc:${norm(loc.name)}`) : `raw:${norm(raw)}`
     let idx = byKey.get(key)
     if (idx === undefined) {
       idx = nodes.length
@@ -122,6 +156,10 @@ export function buildRouteModel(
         code: loc?.code || split.code,
         region: split.region,
         uexId: loc?.uexId,
+        x: loc?.x,
+        y: loc?.y,
+        z: loc?.z,
+        system: loc?.system,
         destStrings: []
       })
     }
@@ -144,59 +182,74 @@ export function buildRouteModel(
   return { nodes, jobs, jobInfo }
 }
 
-/** nxn cost matrix: real UEX distances if every pair is covered, else a
- *  system/body grouping cost (mixing the two scales would distort the order). */
+// Jump transit + a fallback for a cross-system leg we can't gate-route. Both in
+// gigameters, larger than any within-system hop so the solver batches a system
+// before crossing.
+const GATE_HOP_GM = 50
+const CROSS_SYSTEM_GM = 200
+
+/** nxn travel-cost matrix (gigameters). Same-system pairs are exact Cartesian
+ *  distance; cross-system routes through each system's nearest jump gate; nodes
+ *  without coordinates fall back to a body/system grouping estimate, kept on the
+ *  same gigameter scale so it mixes cleanly. */
 function buildDistMatrix(
   nodes: RouteNode[],
-  matrix: Record<string, number>
+  locations: Location[]
 ): { dist: number[][]; usedReal: boolean } {
   const n = nodes.length
-  // check if we have a real distance for every pair
-  let allReal = true
-  for (let i = 0; i < n && allReal; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const a = nodes[i].uexId
-      const b = nodes[j].uexId
-      if (a == null || b == null || matrix[pairKey(a, b)] == null) {
-        allReal = false
-        break
-      }
-    }
+  const gates = gatewaysBySystem(locations)
+  const nearestGate = (node: Pos): number | null => {
+    const gs = gates.get(node.system)
+    if (!gs || !gs.length) return null
+    return Math.min(...gs.map((g) => dist3(node, g)))
   }
+  // grouping estimate for a pair we can't place, on the gigameter scale.
+  const groupCost = (a: RouteNode, b: RouteNode): number => {
+    if (a.region && a.region === b.region) return 5
+    const sa = systemOf(a.code)
+    const sb = systemOf(b.code)
+    if (sa && sa === sb) return 25
+    if (sa && sb) return CROSS_SYSTEM_GM
+    return 25
+  }
+
+  let usedReal = false
   const dist: number[][] = Array.from({ length: n }, () => new Array(n).fill(0))
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
+      const a = nodes[i]
+      const b = nodes[j]
       let cost: number
-      if (allReal) {
-        cost = matrix[pairKey(nodes[i].uexId as number, nodes[j].uexId as number)]
-      } else {
-        // grouping cost: same body cheap, same system medium, cross-system expensive
-        const ri = nodes[i].region
-        const rj = nodes[j].region
-        const si = systemOf(nodes[i].code)
-        const sj = systemOf(nodes[j].code)
-        if (ri && rj && ri === rj) cost = 1
-        else if (si && sj && si === sj) cost = 2
-        else if (si && sj) cost = 8
-        else cost = 5
-      }
+      if (hasPos(a) && hasPos(b)) {
+        if (a.system === b.system) {
+          cost = dist3(a, b)
+          usedReal = true
+        } else {
+          const ga = nearestGate(a)
+          const gb = nearestGate(b)
+          if (ga != null && gb != null) {
+            cost = ga + GATE_HOP_GM + gb
+            usedReal = true
+          } else cost = CROSS_SYSTEM_GM
+        }
+      } else cost = groupCost(a, b)
       dist[i][j] = cost
       dist[j][i] = cost
     }
   }
-  return { dist, usedReal: allReal && n >= 2 }
+  return { dist, usedReal }
 }
 
-/** Solve and shape into a RoutePlan. `distances` is the UEX pair matrix (may be {}). */
+/** Solve and shape into a RoutePlan. Distances are computed locally from the
+ *  bundled game-file coordinates, so no network/token is involved. */
 export function computeRoutePlan(
   contracts: HaulingContract[],
   locations: Location[],
-  capacity: number,
-  distances: Record<string, number>
+  capacity: number
 ): RoutePlan | null {
   const model = buildRouteModel(contracts, locations)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
-  const { dist, usedReal } = buildDistMatrix(model.nodes, distances)
+  const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
   const result = planRoute({ n: model.nodes.length, jobs: model.jobs, dist, capacity })
 
   const steps: RouteStep[] = result.order.map((nodeIdx, k) => {
@@ -236,10 +289,4 @@ export function computeRoutePlan(
     reason: result.reason,
     usedRealDistance: usedReal
   }
-}
-
-/** Terminal ids needed to price a manifest's route (for the distance prefetch). */
-export function routeTerminalIds(contracts: HaulingContract[], locations: Location[]): number[] {
-  const { nodes } = buildRouteModel(contracts, locations)
-  return nodes.map((n) => n.uexId).filter((x): x is number => typeof x === 'number')
 }

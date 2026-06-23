@@ -10,7 +10,6 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   UpdateState,
-  UexSyncSummary,
   ShipRoster,
   LocationRoster,
   CommodityRoster,
@@ -48,13 +47,10 @@ const api = {
   saveHistory: (doc: HistoryDoc): Promise<boolean> =>
     ipcRenderer.invoke(IPC.historySave, doc),
 
-  // UEXcorp sync
+  // bundled roster cache (ships / freight locations / commodities)
   getUexShips: (): Promise<ShipRoster | null> => ipcRenderer.invoke(IPC.uexGetShips),
   getUexLocations: (): Promise<LocationRoster | null> => ipcRenderer.invoke(IPC.uexGetLocations),
   getUexCommodities: (): Promise<CommodityRoster | null> => ipcRenderer.invoke(IPC.uexGetCommodities),
-  syncUex: (): Promise<UexSyncSummary> => ipcRenderer.invoke(IPC.uexSync),
-  routeDistances: (ids: number[]): Promise<{ matrix: Record<string, number> }> =>
-    ipcRenderer.invoke(IPC.routeDistances, ids),
 
   // watcher
   getWatcherStatus: (): Promise<WatcherStatus> => ipcRenderer.invoke(IPC.watcherStatus),

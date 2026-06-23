@@ -23,7 +23,7 @@ import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules, shipCapacity } from '@shared/shipModules'
 import { destinationsInOrder, toHistoryEntry } from './manifest'
-import { computeRoutePlan, routeTerminalIds, type RoutePlan } from './route'
+import { computeRoutePlan, type RoutePlan } from './route'
 
 // The bundled snapshot still lists edition variants, the mining Golem, and raw
 // cargo-module rows. Filter and fold modules so the fallback roster (shown
@@ -53,7 +53,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   gameChannel: 'LIVE',
   activeShip: DEFAULT_SHIP,
   installedModules: {},
-  uexApiKey: '',
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
   ocrEngine: 'tesseract',
@@ -148,8 +147,6 @@ interface StoreState {
   locationsSyncedAt: string
   // commodities (UEXcorp) - manual-entry autocomplete + OCR fuzzy matching
   commodities: Commodity[]
-  uexSyncing: boolean
-  uexError: string | null
 
   // OCR (Phase 2)
   ocrStatus: 'idle' | 'capturing' | 'recognizing'
@@ -217,8 +214,7 @@ interface StoreState {
   // update action
   checkForUpdates: () => Promise<void>
 
-  // UEXcorp sync + log scan
-  syncUex: () => Promise<void>
+  // log scan
   scanSession: () => Promise<number>
 
   // OCR actions
@@ -250,30 +246,17 @@ export const useStore = create<StoreState>((set, get) => {
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
-  let rerouteSeq = 0
   const doReroute = async (): Promise<void> => {
-    const seq = ++rerouteSeq
     const { contracts, locations, settings, ships } = get()
     const ship = ships.find((s) => s.name === settings.activeShip)
     const capacity = shipCapacity(ship, settings.installedModules[settings.activeShip])
     // Skip contracts still held pending OCR. They aren't shown yet, so they
-    // shouldn't affect the sorted order until they surface.
-    const routable = contracts.filter((c) => !c.pendingOcr)
-    const ids = routeTerminalIds(routable, locations)
-    let matrix: Record<string, number> = {}
-    if (ids.length >= 2) {
-      try {
-        matrix = (await window.supercargo.routeDistances(ids)).matrix
-      } catch {
-        /* fall back to grouping cost */
-      }
-    }
-    if (seq !== rerouteSeq) return // a newer reroute replaced this one
+    // shouldn't affect the sorted order until they surface. Distances are computed
+    // locally from the bundled game-file coordinates, so no fetch is needed.
     const plan = computeRoutePlan(
-      get().contracts.filter((c) => !c.pendingOcr),
-      get().locations,
-      capacity,
-      matrix
+      contracts.filter((c) => !c.pendingOcr),
+      locations,
+      capacity
     )
     set({ route: plan })
     // Apply the sorted stop order automatically (unless the user dragged manually).
@@ -386,8 +369,6 @@ export const useStore = create<StoreState>((set, get) => {
     locations: [],
     locationsSyncedAt: '',
     commodities: [],
-    uexSyncing: false,
-    uexError: null,
     ocrStatus: 'idle',
     ocrResult: null,
     ocrEngine: null,
@@ -449,11 +430,11 @@ export const useStore = create<StoreState>((set, get) => {
       scheduleReroute() // compute the initial order from the loaded manifest
 
       window.supercargo.onShips((r) => {
-        if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt, uexError: null })
+        if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt })
       })
       window.supercargo.onLocations((r) => {
         set({ locations: r.locations, locationsSyncedAt: r.syncedAt })
-        scheduleReroute() // new location data may resolve terminal ids / distances
+        scheduleReroute() // new location data (incl. coords) can change the route
       })
       window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
@@ -796,28 +777,6 @@ export const useStore = create<StoreState>((set, get) => {
     checkForUpdates: async () => {
       set({ update: { kind: 'checking' } })
       await window.supercargo.checkForUpdates()
-    },
-
-    syncUex: async () => {
-      set({ uexSyncing: true, uexError: null })
-      const result = await window.supercargo.syncUex()
-      if (result.ok) {
-        const [roster, locRoster, comRoster] = await Promise.all([
-          window.supercargo.getUexShips(),
-          window.supercargo.getUexLocations(),
-          window.supercargo.getUexCommodities()
-        ])
-        set({
-          uexSyncing: false,
-          ships: roster && roster.ships.length ? roster.ships : get().ships,
-          shipsSyncedAt: roster?.syncedAt ?? get().shipsSyncedAt,
-          locations: locRoster?.locations ?? get().locations,
-          locationsSyncedAt: locRoster?.syncedAt ?? get().locationsSyncedAt,
-          commodities: comRoster?.commodities ?? get().commodities
-        })
-      } else {
-        set({ uexSyncing: false, uexError: result.error ?? 'Sync failed' })
-      }
     },
 
     scanSession: async () => {
