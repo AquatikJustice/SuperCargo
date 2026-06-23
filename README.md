@@ -53,48 +53,6 @@ earnings) in a holographic-terminal UI.
 - A free [UEXcorp](https://uexcorp.space/api/apps) app token (optional, but enables live
   ship / location / commodity data and real route distances)
 
-## Develop
-
-```bash
-npm install
-npm run dev          # launch the app with HMR
-npm run typecheck    # type-check main + renderer
-```
-
-The watcher reads the `Game.log` path from Settings. On first launch SuperCargo scans local
-fixed drives for Star Citizen installs; you can also browse to a `Game.log` manually
-(e.g. `B:\StarCitizen\LIVE\Game.log`).
-
-## Build & release - **no GitHub Actions**
-
-Releases are built and published **locally** so they consume **zero GitHub Actions minutes**.
-
-```bash
-npm run dist         # build the NSIS installer into release/ (no upload)
-```
-
-To publish a release to GitHub directly from your machine:
-
-1. Create a personal access token with `repo` scope and export it, then:
-   ```powershell
-   $env:GH_TOKEN = "ghp_..."
-   npm run publish    # builds + uploads installer + latest.yml as a DRAFT release
-   ```
-2. Publish the draft release on GitHub. Installed apps then auto-update from `latest.yml`.
-
-> No `.github/workflows` are included on purpose.
-
-## Project layout
-
-```
-src/
-  shared/      types, box + payout math, route solver, contract parsing, ship roster, IPC channels
-  main/        Electron main: window, log watcher + parser, OCR, install detect, store, updater, IPC
-  preload/     contextBridge API (window.supercargo)
-  renderer/    React UI (theme, zustand store, pages, components)
-assets/        brand assets - SuperCargo logo source + the Fankit "Made by the Community" badge
-```
-
 ## Credits
 
 Community data sources: [UEXcorp](https://uexcorp.space) (ships, commodities, locations,
