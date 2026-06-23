@@ -14,6 +14,10 @@ export interface TypeaheadProps {
   maxResults?: number
   mono?: boolean
   autoFocus?: boolean
+  /** Empty the field on focus so it reads as a search box, not a filled-in value. */
+  clearOnFocus?: boolean
+  /** Show a magnifier icon to signal it's a search field. */
+  search?: boolean
 }
 
 /**
@@ -29,7 +33,9 @@ export default function Typeahead({
   freeText = true,
   maxResults = 8,
   mono = false,
-  autoFocus = false
+  autoFocus = false,
+  clearOnFocus = false,
+  search = false
 }: TypeaheadProps): React.ReactElement {
   const [query, setQuery] = useState(value)
   const [open, setOpen] = useState(false)
@@ -100,12 +106,26 @@ export default function Typeahead({
     color: C.text,
     fontFamily: mono ? F.mono : F.body,
     fontSize: 14,
-    padding: '7px 0',
+    padding: search ? '7px 0 7px 24px' : '7px 0',
     outline: 'none'
   }
 
   return (
     <div style={{ position: 'relative' }}>
+      {search && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={C.dim}
+          strokeWidth="2"
+          style={{ position: 'absolute', left: 2, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+      )}
       <input
         value={query}
         placeholder={placeholder}
@@ -113,6 +133,10 @@ export default function Typeahead({
         onChange={(e) => onInput(e.target.value)}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current)
+          if (clearOnFocus) {
+            setQuery('')
+            setHighlight(0)
+          }
           setOpen(true)
         }}
         onBlur={onBlur}

@@ -256,15 +256,16 @@ function ShipPicker(): React.ReactElement {
             zIndex: 70
           }}
         >
-          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 8 }}>ACTIVE SHIP</div>
           <Typeahead
             value={shipName}
             options={shipNames}
             freeText={false}
             maxResults={12}
             autoFocus
+            clearOnFocus
+            search
             onSelect={(name) => void updateSettings({ activeShip: name })}
-            placeholder="Type to find a ship..."
+            placeholder="Search ships..."
           />
 
           {modules.length > 0 && (
