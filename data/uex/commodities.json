@@ -1,0 +1,1193 @@
+{
+  "source": "https://uexcorp.space/api/2.0/commodities",
+  "commodities": [
+    {
+      "name": "AcryliPlex Composite",
+      "code": "ACCO",
+      "kind": "Man-made",
+      "uexId": 82
+    },
+    {
+      "name": "Agricium",
+      "code": "AGRI",
+      "kind": "Metal",
+      "uexId": 1
+    },
+    {
+      "name": "Agricium (Ore)",
+      "code": "AGRI",
+      "kind": "Metal",
+      "uexId": 2
+    },
+    {
+      "name": "Agricultural Supplies",
+      "code": "AGRS",
+      "kind": "Agricultural",
+      "uexId": 3
+    },
+    {
+      "name": "Altruciatoxin",
+      "code": "AUTR",
+      "kind": "Drug",
+      "uexId": 4
+    },
+    {
+      "name": "Aluminum",
+      "code": "ALUM",
+      "kind": "Metal",
+      "uexId": 5
+    },
+    {
+      "name": "Aluminum (Ore)",
+      "code": "ALUM",
+      "kind": "Metal",
+      "uexId": 6
+    },
+    {
+      "name": "Amioshi Plague",
+      "code": "AMIP",
+      "kind": "Natural",
+      "uexId": 7
+    },
+    {
+      "name": "Ammonia",
+      "code": "AMMO",
+      "kind": "Raw Materials",
+      "uexId": 85
+    },
+    {
+      "name": "Anti-Hydrogen",
+      "code": "AHYD",
+      "kind": "Gas",
+      "uexId": 141
+    },
+    {
+      "name": "Aphorite",
+      "code": "APHO",
+      "kind": "Mineral",
+      "uexId": 8
+    },
+    {
+      "name": "Apoxygenite",
+      "code": "APOX",
+      "kind": "Chemical",
+      "uexId": 108
+    },
+    {
+      "name": "Argon",
+      "code": "ARGO",
+      "kind": "Gas",
+      "uexId": 111
+    },
+    {
+      "name": "Arsenic",
+      "code": "ARSE",
+      "kind": "Non-Metal",
+      "uexId": 146
+    },
+    {
+      "name": "Aslarite",
+      "code": "ASLA",
+      "kind": "Mineral",
+      "uexId": 193
+    },
+    {
+      "name": "Aslarite (Raw)",
+      "code": "ASLW",
+      "kind": "Mineral",
+      "uexId": 199
+    },
+    {
+      "name": "Astatine",
+      "code": "ASTA",
+      "kind": "Halogen",
+      "uexId": 9
+    },
+    {
+      "name": "Atacamite",
+      "code": "ATAC",
+      "kind": "Mineral",
+      "uexId": 179
+    },
+    {
+      "name": "Atlasium",
+      "code": "ATLA",
+      "kind": "Metal",
+      "uexId": 130
+    },
+    {
+      "name": "Audio-Visual Equipment",
+      "code": "AUDI",
+      "kind": "Temporary",
+      "uexId": 10
+    },
+    {
+      "name": "Beradom",
+      "code": "BERA",
+      "kind": "Mineral",
+      "uexId": 167
+    },
+    {
+      "name": "Beryl",
+      "code": "BERY",
+      "kind": "Mineral",
+      "uexId": 11
+    },
+    {
+      "name": "Beryl (Raw)",
+      "code": "BERY",
+      "kind": "Mineral",
+      "uexId": 12
+    },
+    {
+      "name": "Bexalite",
+      "code": "BEXA",
+      "kind": "Mineral",
+      "uexId": 13
+    },
+    {
+      "name": "Bexalite (Raw)",
+      "code": "BEXA",
+      "kind": "Mineral",
+      "uexId": 14
+    },
+    {
+      "name": "Bioplastic",
+      "code": "BIOPL",
+      "kind": "Man-made",
+      "uexId": 112
+    },
+    {
+      "name": "Blue Bilva",
+      "code": "BLUE",
+      "kind": "Food",
+      "uexId": 215
+    },
+    {
+      "name": "Borase",
+      "code": "BORA",
+      "kind": "Metal",
+      "uexId": 15
+    },
+    {
+      "name": "Borase (Ore)",
+      "code": "BORA",
+      "kind": "Metal",
+      "uexId": 16
+    },
+    {
+      "name": "Boron",
+      "code": "BORO",
+      "kind": "Non-Metal",
+      "uexId": 147
+    },
+    {
+      "name": "Cadmium Allinide",
+      "code": "CAAL",
+      "kind": "Man-made",
+      "uexId": 139
+    },
+    {
+      "name": "Caranite",
+      "code": "CARA",
+      "kind": "Mineral",
+      "uexId": 214
+    },
+    {
+      "name": "Caranite (Raw)",
+      "code": "CARW",
+      "kind": "Mineral",
+      "uexId": 213
+    },
+    {
+      "name": "Carbon",
+      "code": "CARB",
+      "kind": "Raw Materials",
+      "uexId": 102
+    },
+    {
+      "name": "Carbon-Silk",
+      "code": "CSIL",
+      "kind": "Natural",
+      "uexId": 113
+    },
+    {
+      "name": "Carinite",
+      "code": "CARI",
+      "kind": "Mineral",
+      "uexId": 170
+    },
+    {
+      "name": "Carinite (Pure)",
+      "code": "CARP",
+      "kind": "Mineral",
+      "uexId": 178
+    },
+    {
+      "name": "Cave Kopion Horn",
+      "code": "CAVEK",
+      "kind": "Medical",
+      "uexId": 174
+    },
+    {
+      "name": "Chlorine",
+      "code": "CHLO",
+      "kind": "Halogen",
+      "uexId": 17
+    },
+    {
+      "name": "CK13-GID Seed Blend",
+      "code": "CK13",
+      "kind": "Seed",
+      "uexId": 126
+    },
+    {
+      "name": "Coal",
+      "code": "COAL",
+      "kind": "Non-Metal",
+      "uexId": 148
+    },
+    {
+      "name": "Cobalt",
+      "code": "COBA",
+      "kind": "Mineral",
+      "uexId": 110
+    },
+    {
+      "name": "Cobalt (Raw)",
+      "code": "COBA",
+      "kind": "Mineral",
+      "uexId": 165
+    },
+    {
+      "name": "Compboard",
+      "code": "COMP",
+      "kind": "Scrap",
+      "uexId": 18
+    },
+    {
+      "name": "Construction Material Pebbles",
+      "code": "CMATP",
+      "kind": "Scrap",
+      "uexId": 182
+    },
+    {
+      "name": "Construction Material Rubble",
+      "code": "CMATR",
+      "kind": "Scrap",
+      "uexId": 181
+    },
+    {
+      "name": "Construction Material Salvage",
+      "code": "CMATS",
+      "kind": "Scrap",
+      "uexId": 183
+    },
+    {
+      "name": "Construction Materials",
+      "code": "CMAT",
+      "kind": "Scrap",
+      "uexId": 19
+    },
+    {
+      "name": "Copper",
+      "code": "COPP",
+      "kind": "Metal",
+      "uexId": 20
+    },
+    {
+      "name": "Copper (Ore)",
+      "code": "COPP",
+      "kind": "Metal",
+      "uexId": 21
+    },
+    {
+      "name": "Corundum",
+      "code": "CORU",
+      "kind": "Mineral",
+      "uexId": 22
+    },
+    {
+      "name": "Corundum (Raw)",
+      "code": "CORU",
+      "kind": "Mineral",
+      "uexId": 23
+    },
+    {
+      "name": "Crude Oil",
+      "code": "COIL",
+      "kind": "Non-Metal",
+      "uexId": 149
+    },
+    {
+      "name": "CryoPod",
+      "code": "CRYP",
+      "kind": "Medical",
+      "uexId": 191
+    },
+    {
+      "name": "DCSR2",
+      "code": "DCSR",
+      "kind": "Agricultural",
+      "uexId": 98
+    },
+    {
+      "name": "Decari Pod",
+      "code": "DECA",
+      "kind": "Natural",
+      "uexId": 105
+    },
+    {
+      "name": "Degnous Root",
+      "code": "DEGR",
+      "kind": "Natural",
+      "uexId": 24
+    },
+    {
+      "name": "Detatrine",
+      "code": "DETA",
+      "kind": "Explosive",
+      "uexId": 166
+    },
+    {
+      "name": "Diamond",
+      "code": "DIAM",
+      "kind": "Metal",
+      "uexId": 25
+    },
+    {
+      "name": "Diamond (Raw)",
+      "code": "DIAM",
+      "kind": "Metal",
+      "uexId": 26
+    },
+    {
+      "name": "Diamond Laminate",
+      "code": "DIAL",
+      "kind": "Man-made",
+      "uexId": 119
+    },
+    {
+      "name": "Diluthermex",
+      "code": "DILU",
+      "kind": "Man-made",
+      "uexId": 83
+    },
+    {
+      "name": "Distilled Spirits",
+      "code": "DIST",
+      "kind": "Vice",
+      "uexId": 27
+    },
+    {
+      "name": "Dolivine",
+      "code": "DOLI",
+      "kind": "Mineral",
+      "uexId": 28
+    },
+    {
+      "name": "Dopple",
+      "code": "DOPP",
+      "kind": "Vice",
+      "uexId": 155
+    },
+    {
+      "name": "Dymantium",
+      "code": "DYMA",
+      "kind": "Explosive",
+      "uexId": 127
+    },
+    {
+      "name": "DynaFlex",
+      "code": "DYNF",
+      "kind": "Man-Made",
+      "uexId": 93
+    },
+    {
+      "name": "E'tam",
+      "code": "ETAM",
+      "kind": "Drug",
+      "uexId": 29
+    },
+    {
+      "name": "Elespo",
+      "code": "ELES",
+      "kind": "Man-made",
+      "uexId": 138
+    },
+    {
+      "name": "Feynmaline",
+      "code": "FEYN",
+      "kind": "Mineral",
+      "uexId": 169
+    },
+    {
+      "name": "Fireworks",
+      "code": "FIRE",
+      "kind": "Temporary",
+      "uexId": 30
+    },
+    {
+      "name": "Fluorine",
+      "code": "FLUO",
+      "kind": "Halogen",
+      "uexId": 31
+    },
+    {
+      "name": "Freeze",
+      "code": "FREE",
+      "kind": "Vice",
+      "uexId": 156
+    },
+    {
+      "name": "Fresh Food",
+      "code": "FFOO",
+      "kind": "Food",
+      "uexId": 120
+    },
+    {
+      "name": "Gasping Weevil Eggs",
+      "code": "GAWE",
+      "kind": "Natural",
+      "uexId": 32
+    },
+    {
+      "name": "Glacosite",
+      "code": "GLAC",
+      "kind": "Mineral",
+      "uexId": 168
+    },
+    {
+      "name": "Glow",
+      "code": "GLOW",
+      "kind": "Vice",
+      "uexId": 157
+    },
+    {
+      "name": "Gold",
+      "code": "GOLD",
+      "kind": "Metal",
+      "uexId": 33
+    },
+    {
+      "name": "Gold (Ore)",
+      "code": "GOLD",
+      "kind": "Metal",
+      "uexId": 34
+    },
+    {
+      "name": "Golden Medmon",
+      "code": "GOLM",
+      "kind": "Natural",
+      "uexId": 35
+    },
+    {
+      "name": "Hadanite",
+      "code": "HADA",
+      "kind": "Mineral",
+      "uexId": 36
+    },
+    {
+      "name": "Heart of the Woods",
+      "code": "HOTW",
+      "kind": "Natural",
+      "uexId": 37
+    },
+    {
+      "name": "Helium",
+      "code": "HELI",
+      "kind": "Gas",
+      "uexId": 38
+    },
+    {
+      "name": "Hephaestanite",
+      "code": "HEPH",
+      "kind": "Mineral",
+      "uexId": 39
+    },
+    {
+      "name": "Hephaestanite (Raw)",
+      "code": "HEPH",
+      "kind": "Mineral",
+      "uexId": 40
+    },
+    {
+      "name": "HexaPolyMesh Coating",
+      "code": "HPMC",
+      "kind": "Crafting",
+      "uexId": 129
+    },
+    {
+      "name": "Human Food Bars",
+      "code": "HFBA",
+      "kind": "Commodity",
+      "uexId": 97
+    },
+    {
+      "name": "Hydrogen",
+      "code": "HYDR",
+      "kind": "Gas",
+      "uexId": 41
+    },
+    {
+      "name": "Hydrogen Fuel",
+      "code": "HYDF",
+      "kind": "Fuel",
+      "uexId": 104
+    },
+    {
+      "name": "Ice (Raw)",
+      "code": "ICEW",
+      "kind": "Liquid",
+      "uexId": 125
+    },
+    {
+      "name": "Inert Materials",
+      "code": "INER",
+      "kind": "Other",
+      "uexId": 42
+    },
+    {
+      "name": "Iodine",
+      "code": "IODI",
+      "kind": "Halogen",
+      "uexId": 43
+    },
+    {
+      "name": "Iron",
+      "code": "IRON",
+      "kind": "Metal",
+      "uexId": 44
+    },
+    {
+      "name": "Iron (Ore)",
+      "code": "IRONO",
+      "kind": "Metal",
+      "uexId": 45
+    },
+    {
+      "name": "Irradiated Kopion Horn",
+      "code": "IKOP",
+      "kind": "Natural",
+      "uexId": 180
+    },
+    {
+      "name": "Jaclium",
+      "code": "JACL",
+      "kind": "Mineral",
+      "uexId": 171
+    },
+    {
+      "name": "Jaclium (Ore)",
+      "code": "JACO",
+      "kind": "Mineral",
+      "uexId": 173
+    },
+    {
+      "name": "Jahlium",
+      "code": "JAHL",
+      "kind": "Metal",
+      "uexId": 142
+    },
+    {
+      "name": "Janalite",
+      "code": "JANA",
+      "kind": "Mineral",
+      "uexId": 46
+    },
+    {
+      "name": "Jumping Limes",
+      "code": "JUMP",
+      "kind": "Food",
+      "uexId": 144
+    },
+    {
+      "name": "Kopion Horn",
+      "code": "KOPH",
+      "kind": "Medical",
+      "uexId": 92
+    },
+    {
+      "name": "Krypton",
+      "code": "KRYP",
+      "kind": "Gas",
+      "uexId": 140
+    },
+    {
+      "name": "Laranite",
+      "code": "LARA",
+      "kind": "Metal",
+      "uexId": 47
+    },
+    {
+      "name": "Laranite (Raw)",
+      "code": "LARA",
+      "kind": "Metal",
+      "uexId": 48
+    },
+    {
+      "name": "Lastaphrene",
+      "code": "LAST",
+      "kind": "Man-made",
+      "uexId": 137
+    },
+    {
+      "name": "LifeCure Medsticks",
+      "code": "LMED",
+      "kind": "Medical",
+      "uexId": 96
+    },
+    {
+      "name": "Lindinium",
+      "code": "LIND",
+      "kind": "Metal",
+      "uexId": 184
+    },
+    {
+      "name": "Lindinium (Ore)",
+      "code": "LINW",
+      "kind": "Metal",
+      "uexId": 185
+    },
+    {
+      "name": "Luminalia Gift",
+      "code": "LUMG",
+      "kind": "Temporary",
+      "uexId": 49
+    },
+    {
+      "name": "Lunes",
+      "code": "LUNE",
+      "kind": "Food",
+      "uexId": 145
+    },
+    {
+      "name": "Lycara",
+      "code": "LYCA",
+      "kind": "Man-made",
+      "uexId": 136
+    },
+    {
+      "name": "Magnesium",
+      "code": "MAGN",
+      "kind": "Metal",
+      "uexId": 143
+    },
+    {
+      "name": "Mala",
+      "code": "MALA",
+      "kind": "Vice",
+      "uexId": 158
+    },
+    {
+      "name": "Marok Gem",
+      "code": "MARG",
+      "kind": "Animal",
+      "uexId": 91
+    },
+    {
+      "name": "Maze",
+      "code": "MAZE",
+      "kind": "Drug",
+      "uexId": 50
+    },
+    {
+      "name": "Medical Supplies",
+      "code": "MEDS",
+      "kind": "Medical",
+      "uexId": 51
+    },
+    {
+      "name": "Mercury",
+      "code": "MERC",
+      "kind": "Metal",
+      "uexId": 123
+    },
+    {
+      "name": "Methane",
+      "code": "METH",
+      "kind": "Gas",
+      "uexId": 114
+    },
+    {
+      "name": "Molina Mold Samples",
+      "code": "MOLMS",
+      "kind": "Medicine",
+      "uexId": 197
+    },
+    {
+      "name": "Molina Mold Treatment",
+      "code": "MOLMT",
+      "kind": "Medicine",
+      "uexId": 195
+    },
+    {
+      "name": "Molina Ventilation Filters",
+      "code": "MOLVF",
+      "kind": "Medicine",
+      "uexId": 196
+    },
+    {
+      "name": "Neograph",
+      "code": "NEOG",
+      "kind": "Man-made",
+      "uexId": 133
+    },
+    {
+      "name": "Neon",
+      "code": "NEON",
+      "kind": "Drug",
+      "uexId": 52
+    },
+    {
+      "name": "Nitrogen",
+      "code": "NITR",
+      "kind": "Gas",
+      "uexId": 106
+    },
+    {
+      "name": "Omnapoxy",
+      "code": "OMPO",
+      "kind": "Man-made",
+      "uexId": 115
+    },
+    {
+      "name": "Organics",
+      "code": "ORGN",
+      "kind": "Organics",
+      "uexId": 186
+    },
+    {
+      "name": "Osoian Hides",
+      "code": "OSOH",
+      "kind": "Vice",
+      "uexId": 53
+    },
+    {
+      "name": "Ouratite",
+      "code": "OURA",
+      "kind": "mineral",
+      "uexId": 194
+    },
+    {
+      "name": "Ouratite (Raw)",
+      "code": "OURW",
+      "kind": "Minteral",
+      "uexId": 210
+    },
+    {
+      "name": "Partillium",
+      "code": "PRTL",
+      "kind": "Gas",
+      "uexId": 121
+    },
+    {
+      "name": "Party Favors",
+      "code": "PART",
+      "kind": "Temporary",
+      "uexId": 54
+    },
+    {
+      "name": "Phosphorus",
+      "code": "PHOS",
+      "kind": "Non-Metal",
+      "uexId": 150
+    },
+    {
+      "name": "Pitambu",
+      "code": "PITA",
+      "kind": "Food",
+      "uexId": 55
+    },
+    {
+      "name": "Potassium",
+      "code": "POTA",
+      "kind": "Mineral",
+      "uexId": 116
+    },
+    {
+      "name": "Pressurized Ice",
+      "code": "PICE",
+      "kind": "Raw Materials",
+      "uexId": 101
+    },
+    {
+      "name": "Processed Food",
+      "code": "PFOO",
+      "kind": "Food",
+      "uexId": 56
+    },
+    {
+      "name": "Prota",
+      "code": "PROT",
+      "kind": "Natural",
+      "uexId": 57
+    },
+    {
+      "name": "Quantainium",
+      "code": "QUAN",
+      "kind": "Mineral",
+      "uexId": 58
+    },
+    {
+      "name": "Quantainium (Raw)",
+      "code": "QUAN",
+      "kind": "Mineral",
+      "uexId": 59
+    },
+    {
+      "name": "Quantum Fuel",
+      "code": "QFUE",
+      "kind": "Fuel",
+      "uexId": 87
+    },
+    {
+      "name": "Quartz",
+      "code": "QUAR",
+      "kind": "Metal",
+      "uexId": 60
+    },
+    {
+      "name": "Quartz (Raw)",
+      "code": "QUAR",
+      "kind": "Metal",
+      "uexId": 61
+    },
+    {
+      "name": "Ranta Dung",
+      "code": "RAND",
+      "kind": "Agricultural",
+      "uexId": 62
+    },
+    {
+      "name": "Recycled Material Composite",
+      "code": "RMC",
+      "kind": "Scrap",
+      "uexId": 63
+    },
+    {
+      "name": "Redfin Energy Modulators",
+      "code": "REMO",
+      "kind": "Electronics",
+      "uexId": 95
+    },
+    {
+      "name": "Revenant Pod",
+      "code": "REVP",
+      "kind": "Natural",
+      "uexId": 65
+    },
+    {
+      "name": "Revenant Tree Pollen",
+      "code": "REVE",
+      "kind": "Vice",
+      "uexId": 66
+    },
+    {
+      "name": "Riccite",
+      "code": "RICC",
+      "kind": "Metal",
+      "uexId": 124
+    },
+    {
+      "name": "Riccite (Ore)",
+      "code": "RICO",
+      "kind": "Metal",
+      "uexId": 163
+    },
+    {
+      "name": "Sadaryx",
+      "code": "SADA",
+      "kind": "Mineral",
+      "uexId": 200
+    },
+    {
+      "name": "Sadaryx (Raw)",
+      "code": "SADA",
+      "kind": "Mineral",
+      "uexId": 212
+    },
+    {
+      "name": "Saldynium (Ore)",
+      "code": "SALD",
+      "kind": "Mineral",
+      "uexId": 172
+    },
+    {
+      "name": "Sarilus",
+      "code": "SARI",
+      "kind": "Man-made",
+      "uexId": 134
+    },
+    {
+      "name": "Savrilium",
+      "code": "SAVR",
+      "kind": "Metal",
+      "uexId": 188
+    },
+    {
+      "name": "Savrilium (Ore)",
+      "code": "SAVW",
+      "kind": "Metal",
+      "uexId": 187
+    },
+    {
+      "name": "Scrap",
+      "code": "SCRA",
+      "kind": "Scrap",
+      "uexId": 67
+    },
+    {
+      "name": "Selenium",
+      "code": "SELE",
+      "kind": "Non-Metal",
+      "uexId": 151
+    },
+    {
+      "name": "Ship Ammunition",
+      "code": "SHPA",
+      "kind": "Ammunition",
+      "uexId": 128
+    },
+    {
+      "name": "Ship Decoy Countermeasures",
+      "code": "SHPDC",
+      "kind": "Ammunition",
+      "uexId": 208
+    },
+    {
+      "name": "Ship Noise Countermeasures",
+      "code": "SHPNC",
+      "kind": "Ammunition",
+      "uexId": 209
+    },
+    {
+      "name": "Silicon",
+      "code": "SILI",
+      "kind": "Raw Materials",
+      "uexId": 100
+    },
+    {
+      "name": "Silicon (Raw)",
+      "code": "SILI",
+      "kind": "Raw Materials",
+      "uexId": 161
+    },
+    {
+      "name": "Silnex",
+      "code": "SILN",
+      "kind": "Man-made",
+      "uexId": 135
+    },
+    {
+      "name": "SLAM",
+      "code": "SLAM",
+      "kind": "Drug",
+      "uexId": 68
+    },
+    {
+      "name": "Souvenirs",
+      "code": "SOUV",
+      "kind": "Temporary",
+      "uexId": 69
+    },
+    {
+      "name": "Steel",
+      "code": "STEE",
+      "kind": "Alloy",
+      "uexId": 109
+    },
+    {
+      "name": "Stileron",
+      "code": "STIL",
+      "kind": "Mineral",
+      "uexId": 122
+    },
+    {
+      "name": "Stileron (Raw)",
+      "code": "STIL",
+      "kind": "Man-made",
+      "uexId": 162
+    },
+    {
+      "name": "Stims",
+      "code": "STIM",
+      "kind": "Vice",
+      "uexId": 70
+    },
+    {
+      "name": "Stone Bug Shell",
+      "code": "STBS",
+      "kind": "Natural",
+      "uexId": 71
+    },
+    {
+      "name": "Sunset Berries",
+      "code": "SUNB",
+      "kind": "Natural",
+      "uexId": 72
+    },
+    {
+      "name": "Taranite",
+      "code": "TARA",
+      "kind": "Mineral",
+      "uexId": 73
+    },
+    {
+      "name": "Taranite (Raw)",
+      "code": "TARA",
+      "kind": "Mineral",
+      "uexId": 74
+    },
+    {
+      "name": "Tellurium",
+      "code": "TELL",
+      "kind": "Non-Metal",
+      "uexId": 152
+    },
+    {
+      "name": "Thermalfoam",
+      "code": "FOAM",
+      "kind": "Man-made",
+      "uexId": 132
+    },
+    {
+      "name": "Thrust",
+      "code": "THRU",
+      "kind": "Vice",
+      "uexId": 159
+    },
+    {
+      "name": "Tin",
+      "code": "TIN",
+      "kind": "Metal",
+      "uexId": 103
+    },
+    {
+      "name": "Tin (Ore)",
+      "code": "TINO",
+      "kind": "Metal",
+      "uexId": 176
+    },
+    {
+      "name": "Titanium",
+      "code": "TITA",
+      "kind": "Metal",
+      "uexId": 75
+    },
+    {
+      "name": "Titanium (Ore)",
+      "code": "TITA",
+      "kind": "Metal",
+      "uexId": 76
+    },
+    {
+      "name": "Torite",
+      "code": "TORI",
+      "kind": "Metal",
+      "uexId": 190
+    },
+    {
+      "name": "Torite (Ore)",
+      "code": "TORIO",
+      "kind": "Metal",
+      "uexId": 189
+    },
+    {
+      "name": "Tritium",
+      "code": "TRIT",
+      "kind": "Gas",
+      "uexId": 153
+    },
+    {
+      "name": "Tundra Kopion Horn",
+      "code": "KOPT",
+      "kind": "Medical",
+      "uexId": 175
+    },
+    {
+      "name": "Tungsten",
+      "code": "TUNG",
+      "kind": "Metal",
+      "uexId": 77
+    },
+    {
+      "name": "Tungsten (Ore)",
+      "code": "TUNG",
+      "kind": "Metal",
+      "uexId": 78
+    },
+    {
+      "name": "Waste",
+      "code": "WAST",
+      "kind": "Waste",
+      "uexId": 79
+    },
+    {
+      "name": "WiDoW",
+      "code": "WIDO",
+      "kind": "Drug",
+      "uexId": 80
+    },
+    {
+      "name": "Wuotan Seed",
+      "code": "WUOT",
+      "kind": "Organic",
+      "uexId": 198
+    },
+    {
+      "name": "Xa'Pyen",
+      "code": "XAPY",
+      "kind": "Alloy",
+      "uexId": 118
+    },
+    {
+      "name": "Xenon",
+      "code": "XENO",
+      "kind": "Gas",
+      "uexId": 154
+    },
+    {
+      "name": "Year of the Dog Envelope",
+      "code": "YTDO",
+      "kind": "Temporary",
+      "uexId": 88
+    },
+    {
+      "name": "Year of the Monkey Envelope",
+      "code": "YTMO",
+      "kind": "Temporary",
+      "uexId": 64
+    },
+    {
+      "name": "Year of the Pig Envelope",
+      "code": "YTPO",
+      "kind": "Temporary",
+      "uexId": 164
+    },
+    {
+      "name": "Year of the Rat Envelope",
+      "code": "YTRO",
+      "kind": "Temporary",
+      "uexId": 192
+    },
+    {
+      "name": "Year of the Rooster Envelope",
+      "code": "YTRO",
+      "kind": "Temporary",
+      "uexId": 81
+    },
+    {
+      "name": "Zeta-Prolanide",
+      "code": "ZEPR",
+      "kind": "Man-made",
+      "uexId": 84
+    },
+    {
+      "name": "Zip",
+      "code": "ZIP",
+      "kind": "Vice",
+      "uexId": 160
+    }
+  ]
+}
