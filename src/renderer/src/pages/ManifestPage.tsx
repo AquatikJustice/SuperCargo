@@ -18,6 +18,9 @@ export default function ManifestPage(): React.ReactElement {
   const installedModules = useStore((s) => s.settings.installedModules)
   const ships = useStore((s) => s.ships)
   const openCapture = useStore((s) => s.openCapture)
+  const turnInDestination = useStore((s) => s.turnInDestination)
+
+  const [turnInStop, setTurnInStop] = useState<Stop | null>(null)
 
   const stops = useMemo(() => deriveStops(contracts, order), [contracts, order])
   const totals = useMemo(() => deriveTotals(stops, contracts), [stops, contracts])
@@ -82,9 +85,20 @@ export default function ManifestPage(): React.ReactElement {
       />
 
       {groupBy === 'destination' ? (
-        <ByDestination stops={stops} showBoxMath={showBoxMath} />
+        <ByDestination stops={stops} showBoxMath={showBoxMath} onTurnIn={setTurnInStop} />
       ) : (
         <ByContract contracts={derivedContracts} showBoxMath={showBoxMath} />
+      )}
+
+      {turnInStop && (
+        <TurnInModal
+          stop={turnInStop}
+          onClose={() => setTurnInStop(null)}
+          onSubmit={(entries) => {
+            turnInDestination(entries)
+            setTurnInStop(null)
+          }}
+        />
       )}
     </div>
   )
@@ -198,7 +212,15 @@ function GroupToggle({
   )
 }
 
-function ByDestination({ stops, showBoxMath }: { stops: Stop[]; showBoxMath: boolean }): React.ReactElement {
+function ByDestination({
+  stops,
+  showBoxMath,
+  onTurnIn
+}: {
+  stops: Stop[]
+  showBoxMath: boolean
+  onTurnIn: (stop: Stop) => void
+}): React.ReactElement {
   const reorderStops = useStore((s) => s.reorderStops)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
@@ -246,7 +268,7 @@ function ByDestination({ stops, showBoxMath }: { stops: Stop[]; showBoxMath: boo
             outlineOffset: 6
           }}
         >
-          <StopHeader stop={stop} />
+          <StopHeader stop={stop} onTurnIn={() => onTurnIn(stop)} />
           {stop.items.map((item) => (
             <div
               key={item.objectiveId}
@@ -316,12 +338,13 @@ function ByDestination({ stops, showBoxMath }: { stops: Stop[]; showBoxMath: boo
   )
 }
 
-function StopHeader({ stop }: { stop: Stop }): React.ReactElement {
+function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): React.ReactElement {
   const locations = useStore((s) => s.locations)
   // External-elevator flag: a manual override wins (stop.hasElevator), otherwise use
   // the UEX loading-dock flag on the matched location.
   const loc = useMemo(() => locations.find((l) => l.name === stop.destination), [locations, stop.destination])
   const external = stop.hasElevator ?? loc?.hasElevator
+  const anyLeft = stop.items.some((i) => !i.delivered)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 12, borderBottom: `1px solid ${C.lineStrong}` }}>
       <div style={{ cursor: 'grab', color: '#a3adb1', display: 'flex', flex: 'none' }} title="Drag to reorder">
@@ -353,6 +376,27 @@ function StopHeader({ stop }: { stop: Stop }): React.ReactElement {
         {stop.region && <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>{stop.region}</div>}
       </div>
       <ElevatorBadge external={external} />
+      {anyLeft && (
+        <Btn
+          onClick={onTurnIn}
+          title="Record what you turned in here"
+          style={{
+            border: `1px solid ${C.green}`,
+            background: 'rgba(95,208,137,0.10)',
+            color: C.text,
+            fontFamily: F.display,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.14em',
+            padding: '7px 13px',
+            cursor: 'pointer',
+            flex: 'none'
+          }}
+          hoverStyle={{ background: 'rgba(95,208,137,0.2)', textShadow: GLOW }}
+        >
+          TURN IN HERE
+        </Btn>
+      )}
     </div>
   )
 }
@@ -422,6 +466,126 @@ function ByContract({
         </div>
       ))}
     </div>
+  )
+}
+
+type TurnInMode = 'full' | 'part' | 'none'
+
+/** Per-destination turn-in: record FULL / PARTIAL / NONE for each objective at this
+ *  stop. Any turn-in clears the stop from the cargo grid (a partial only happens when
+ *  you never had the missing boxes, so nothing's left aboard); the SCU just feeds the
+ *  payout. Submitting marks them delivered and locks the layout if it wasn't. */
+function TurnInModal({
+  stop,
+  onClose,
+  onSubmit
+}: {
+  stop: Stop
+  onClose: () => void
+  onSubmit: (entries: Array<{ contractId: string; objectiveId: string; deliveredScu: number }>) => void
+}): React.ReactElement {
+  const items = useMemo(() => stop.items.filter((i) => !i.delivered), [stop])
+  const [rows, setRows] = useState<Record<string, { mode: TurnInMode; amount: number }>>(() =>
+    Object.fromEntries(items.map((i) => [i.objectiveId, { mode: 'full' as TurnInMode, amount: i.scu }]))
+  )
+  const set = (id: string, patch: Partial<{ mode: TurnInMode; amount: number }>): void =>
+    setRows((r) => ({ ...r, [id]: { ...r[id], ...patch } }))
+
+  const submit = (): void => {
+    onSubmit(
+      items.map((i) => {
+        const st = rows[i.objectiveId] ?? { mode: 'full' as TurnInMode, amount: i.scu }
+        const deliveredScu =
+          st.mode === 'full'
+            ? i.scu
+            : st.mode === 'none'
+              ? 0
+              : Math.max(0, Math.min(i.scu, Math.round(st.amount || 0)))
+        return { contractId: i.contractId, objectiveId: i.objectiveId, deliveredScu }
+      })
+    )
+  }
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, zIndex: 50 }}>
+      <div style={{ width: 620, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto', background: C.black, border: `1px solid rgba(255,255,255,0.22)`, fontFamily: F.body }}>
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.lineStrong}` }}>
+          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, letterSpacing: '0.08em', color: C.text, textShadow: GLOW }}>
+            TURN IN · {stop.code || stop.name}
+          </div>
+          <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
+            Mark what you handed over here. This clears the stop from your cargo grid.
+          </div>
+        </div>
+
+        <div style={{ padding: '8px 20px 16px' }}>
+          {items.map((i) => {
+            const st = rows[i.objectiveId] ?? { mode: 'full' as TurnInMode, amount: i.scu }
+            return (
+              <div key={i.objectiveId} style={{ display: 'grid', gridTemplateColumns: '1fr 186px 96px', gap: 14, alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                <div style={{ minWidth: 0 }}>
+                  <span style={{ fontFamily: F.body, fontSize: 14, color: C.textBody }}>{i.commodity}</span>{' '}
+                  <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>[{i.ref}]</span>
+                  <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{i.scu} SCU required</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <Seg label="FULL" color={C.green} active={st.mode === 'full'} onClick={() => set(i.objectiveId, { mode: 'full', amount: i.scu })} />
+                  <Seg
+                    label="PARTIAL"
+                    color={C.amber}
+                    active={st.mode === 'part'}
+                    onClick={() =>
+                      set(i.objectiveId, {
+                        mode: 'part',
+                        amount: st.amount > 0 && st.amount < i.scu ? st.amount : Math.max(1, Math.min(i.scu - 1, Math.round(i.scu / 2)))
+                      })
+                    }
+                  />
+                  <Seg label="NONE" color={C.red} active={st.mode === 'none'} onClick={() => set(i.objectiveId, { mode: 'none', amount: 0 })} />
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {st.mode === 'part' ? (
+                    <input
+                      value={st.amount || ''}
+                      onChange={(e) =>
+                        set(i.objectiveId, {
+                          amount: Math.max(0, Math.min(i.scu, parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) || 0))
+                        })
+                      }
+                      inputMode="numeric"
+                      style={{ width: 70, background: 'transparent', border: 0, borderBottom: `1px solid rgba(255,255,255,0.25)`, color: C.text, fontFamily: F.mono, fontSize: 14, textAlign: 'right', padding: '4px 0', outline: 'none' }}
+                    />
+                  ) : (
+                    <span style={{ fontFamily: F.mono, fontSize: 13, color: C.dim }}>{st.mode === 'full' ? i.scu : 0} SCU</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 20px', borderTop: `1px solid ${C.lineStrong}` }}>
+          <Btn onClick={onClose} style={{ border: `1px solid rgba(255,255,255,0.18)`, background: 'transparent', color: C.body, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: '9px 18px', cursor: 'pointer' }} hoverStyle={{ border: `1px solid #fff`, color: C.text }}>
+            CANCEL
+          </Btn>
+          <Btn onClick={submit} style={{ border: `1px solid ${C.green}`, background: 'rgba(95,208,137,0.14)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: '9px 18px', cursor: 'pointer' }} hoverStyle={{ background: 'rgba(95,208,137,0.24)', textShadow: GLOW }}>
+            TURN IN
+          </Btn>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Seg({ label, color, active, onClick }: { label: string; color: string; active: boolean; onClick: () => void }): React.ReactElement {
+  return (
+    <Btn
+      onClick={onClick}
+      style={{ border: `1px solid ${active ? color : 'rgba(255,255,255,0.16)'}`, background: active ? 'rgba(255,255,255,0.04)' : 'transparent', color: active ? color : C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', padding: '5px 9px', cursor: 'pointer' }}
+      hoverStyle={{ border: `1px solid ${color}`, color }}
+    >
+      {label}
+    </Btn>
   )
 }
 

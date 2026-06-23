@@ -209,11 +209,9 @@ export default function CaptureModal(): React.ReactElement | null {
 
   return (
     <div
-      onClick={onClose}
       style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, zIndex: 50 }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{ width: hasOcr || calibrating ? 940 : 600, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto', background: C.black, border: `1px solid rgba(255,255,255,0.22)`, fontFamily: F.body }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.lineStrong}` }}>

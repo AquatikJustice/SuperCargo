@@ -135,12 +135,41 @@ export interface AppSettings {
   onboarded: boolean
 }
 
+/** One box at a fixed spot in the frozen cargo layout. A superset of the packer's
+ *  PackBox (so it feeds packCargo directly) plus what it takes to keep the layout
+ *  in step with the contracts: which objective it belongs to, and whether it's been
+ *  turned in (delivered boxes stay in the pack so nothing slides into their cells,
+ *  but they're hidden from the view). */
+export interface FrozenBox {
+  id: string
+  size: number
+  color: string
+  dest: string
+  commodity: string
+  stopIdx: number
+  contractId: string
+  objectiveId: string
+  destination: string
+  delivered: boolean
+}
+
+/** The cargo layout, frozen once the run is underway. While unlocked the grid is a
+ *  live plan that re-flows with the route; once locked the box positions never move
+ *  - turn-ins just hide a destination's section and new cargo is appended at the
+ *  back. */
+export interface CargoLayout {
+  locked: boolean
+  boxes: FrozenBox[]
+}
+
 /** Persisted manifest document (active contracts + the user's stop order). */
 export interface ManifestDoc {
   runId: string
   contracts: HaulingContract[]
   /** Ordered list of destination names defining delivery sequence. */
   order: string[]
+  /** Frozen 3D cargo layout, present once the run's load is locked. */
+  layout?: CargoLayout
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'

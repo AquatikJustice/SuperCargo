@@ -13,7 +13,8 @@ import type {
   OcrResult,
   OcrEngineInfo,
   HistoryEntry,
-  HistoryStatus
+  HistoryStatus,
+  CargoLayout
 } from '@shared/types'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
@@ -22,8 +23,9 @@ import { payoutFactor, snapPayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules, shipCapacity } from '@shared/shipModules'
-import { destinationsInOrder, toHistoryEntry } from './manifest'
+import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
+import { snapshotLayout, reconcileLayout } from './layout'
 
 // The bundled snapshot still lists edition variants, the mining Golem, and raw
 // cargo-module rows. Filter and fold modules so the fallback roster (shown
@@ -131,6 +133,8 @@ interface StoreState {
   runId: string
   contracts: HaulingContract[]
   order: string[]
+  /** Frozen 3D cargo layout, set once the run's load is locked (null = live plan). */
+  layout: CargoLayout | null
   /** Latest computed pickup->delivery route (null when there's nothing to route). */
   route: RoutePlan | null
   /** When true the stop order is sorted automatically; a manual drag sets it false. */
@@ -190,6 +194,16 @@ interface StoreState {
   /** Turn route ordering back to automatic (after a manual drag) and recompute. */
   resetRouteToAuto: () => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
+  /** Freeze the cargo layout so positions stop moving as you deliver. */
+  lockLayout: () => void
+  /** Drop the frozen layout and go back to a live, re-flowing plan. */
+  unlockLayout: () => void
+  /** Record a turn-in at one destination: set delivered SCU per objective, mark them
+   *  delivered (clearing the grid section), lock the layout if it wasn't, and archive
+   *  any contract that's now fully turned in. */
+  turnInDestination: (
+    entries: Array<{ contractId: string; objectiveId: string; deliveredScu: number }>
+  ) => void
   /** Correct an objective's SCU (e.g. an OCR misread) and re-box it. */
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
   /** Record how many SCU of an objective were turned in (drives partial payout).
@@ -230,13 +244,19 @@ function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] 
 export const useStore = create<StoreState>((set, get) => {
   // Save the manifest part to disk whenever it changes.
   const persist = (): void => {
-    const { runId, contracts, order } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order })
+    const { runId, contracts, order, layout } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, layout: layout ?? undefined })
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
     const nextOrd = nextOrder(contracts, order ?? get().order)
-    set({ contracts, order: nextOrd })
+    // Keep a locked layout in step with the contracts (delivered boxes drop out,
+    // new cargo appends) without ever re-flowing. An empty manifest ends the run,
+    // so the layout resets to a live plan.
+    let layout = get().layout
+    if (!contracts.length) layout = null
+    else if (layout?.locked) layout = reconcileLayout(contracts, layout)
+    set({ contracts, order: nextOrd, layout })
     persist()
   }
 
@@ -359,6 +379,7 @@ export const useStore = create<StoreState>((set, get) => {
     runId: '',
     contracts: [],
     order: [],
+    layout: null,
     route: null,
     isRouteAuto: true,
     history: [],
@@ -412,11 +433,15 @@ export const useStore = create<StoreState>((set, get) => {
         })
       }
 
+      const layout =
+        active.length && manifest.layout ? reconcileLayout(active, manifest.layout) : null
+
       set({
         settings,
         runId: manifest.runId,
         contracts: active,
         order: nextOrder(active, manifest.order),
+        layout,
         history,
         watcher,
         appVersion,
@@ -531,7 +556,7 @@ export const useStore = create<StoreState>((set, get) => {
       // Cross-window manifest sync (main <-> compact overlay window). Apply the
       // incoming doc without re-persisting so the two windows don't ping-pong.
       window.supercargo.onManifestChanged((doc) => {
-        set({ runId: doc.runId, contracts: doc.contracts, order: doc.order })
+        set({ runId: doc.runId, contracts: doc.contracts, order: doc.order, layout: doc.layout ?? null })
         scheduleReroute()
       })
       window.supercargo.onCompactState((s) => set({ compactOpen: s.open }))
@@ -687,7 +712,7 @@ export const useStore = create<StoreState>((set, get) => {
 
     startNewRun: () => {
       const { runId, history } = get()
-      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]) })
+      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), layout: null })
       persist()
     },
 
@@ -702,6 +727,57 @@ export const useStore = create<StoreState>((set, get) => {
         }
       })
       commit(contracts)
+      scheduleReroute()
+    },
+
+    lockLayout: () => {
+      const { contracts, order, layout } = get()
+      if (layout?.locked || !activeContracts(contracts).length) return
+      set({ layout: snapshotLayout(contracts, order) })
+      persist()
+    },
+
+    unlockLayout: () => {
+      if (!get().layout) return
+      set({ layout: null })
+      persist()
+    },
+
+    turnInDestination: (entries) => {
+      if (!entries.length) return
+      // Auto-lock from the CURRENT load first, so the just-loaded positions are
+      // captured before this stop's boxes drop out of the view.
+      if (!get().layout?.locked) {
+        const { contracts, order } = get()
+        if (activeContracts(contracts).length) set({ layout: snapshotLayout(contracts, order) })
+      }
+      const byContract = new Map<string, Map<string, number>>()
+      for (const e of entries) {
+        const m = byContract.get(e.contractId) ?? new Map<string, number>()
+        m.set(e.objectiveId, e.deliveredScu)
+        byContract.set(e.contractId, m)
+      }
+      const updated = get().contracts.map((c) => {
+        const m = byContract.get(c.id)
+        if (!m) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) =>
+            m.has(o.id)
+              ? {
+                  ...o,
+                  delivered: true,
+                  deliveredScu: Math.max(0, Math.min(o.scuAmount, Math.round(m.get(o.id) as number)))
+                }
+              : o
+          )
+        }
+      })
+      // A contract with every objective now delivered is a finished run: archive it.
+      const finished = updated.filter((c) => byContract.has(c.id) && c.objectives.every((o) => o.delivered))
+      for (const c of finished) archive(c, 'completed')
+      const finishedIds = new Set(finished.map((c) => c.id))
+      commit(updated.filter((c) => !finishedIds.has(c.id)))
       scheduleReroute()
     },
 
