@@ -84,6 +84,20 @@ export function toPng(img: NativeImage): Buffer {
 }
 
 /**
+ * Upscale before recognition. Tesseract estimates the contract panel at ~150 DPI
+ * and wants ~300, so doubling with a high-quality filter lifts the read on the
+ * thin in-game text. Color is left alone: Tesseract grayscales and binarizes
+ * internally, so pre-graying or inverting changes nothing.
+ */
+export function toUpscaledPng(img: NativeImage, factor = 2): Buffer {
+  const { width, height } = img.getSize()
+  if (factor <= 1 || width < 4 || height < 4) return img.toPNG()
+  return img
+    .resize({ width: Math.round(width * factor), height: Math.round(height * factor), quality: 'best' })
+    .toPNG()
+}
+
+/**
  * Grayscale PNG of an image. This roughly halves the size of stored/uploaded
  * training crops, and the OCR pipeline works on grayscale anyway so nothing is
  * lost. Uses nativeImage's BGRA bitmap so we need no extra image dependency at

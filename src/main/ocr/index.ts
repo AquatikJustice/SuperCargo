@@ -6,7 +6,7 @@
 
 import type { AppSettings, OcrEngineInfo, OcrResult } from '@shared/types'
 import { parseOcrText, matchObjectives } from '@shared/ocrParse'
-import { captureDisplay, cropImage, toPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
+import { captureDisplay, cropImage, toUpscaledPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
 import { loadCachedCommodities, loadCachedLocations } from '../uex'
 import * as telemetry from '../telemetry'
 import type { OcrEngine } from './engine'
@@ -57,18 +57,19 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   if (!full) return { ...base, error: 'screen capture failed (no source available)' }
 
   const cropped = cropImage(full, settings.ocrCrop)
-  const png = toPng(cropped)
+  // Recognition runs on a 2x upscale: the panel comes in around 150 DPI and
+  // Tesseract reads it better near 300.
+  const ocrImage = toUpscaledPng(cropped, 2)
   // Keep the preview near native size (up to 1280px). It is shown large in the
   // contribute view where the user must read the panel to correct it.
   const imageDataUrl = toPreviewDataUrl(cropped, 1280)
-  // Keep a grayscale crop for samples/upload (about half the size, and OCR is
-  // grayscale anyway). Recognition still uses the full-color `png` above.
+  // Store a grayscale crop at native size for samples/upload (about half the size).
   const grayPng = toGrayscalePng(cropped)
 
   const started = Date.now()
   let recognition
   try {
-    recognition = await engine.recognize(png)
+    recognition = await engine.recognize(ocrImage)
   } catch (e) {
     return { ...base, imageDataUrl, error: e instanceof Error ? e.message : String(e) }
   }

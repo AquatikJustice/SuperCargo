@@ -189,7 +189,7 @@ function cleanFragment(s: string): string {
 // freight location never contains these, so cut the destination at the first one.
 // Otherwise fuzzy matching sees a whole sentence and can't place it.
 const DEST_TAIL =
-  /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|contract\w*|mission\w*|location)\b/i
+  /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|contract\w*|mission\w*|location|for\s+you)\b/i
 
 // Two body suffixes the panel tacks onto a destination that aren't part of the
 // location name and block the match:
@@ -202,10 +202,30 @@ const DEST_TAIL =
 const DEST_BODY_SUFFIX =
   /\s+(?:on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)|above)\b.*$/i
 
+// Real freight names end in one of these. When a destination soft-wraps without a
+// period, OCR runs the next line's letter prose straight onto it ("Green Glade
+// Station The folks at Everus Harbor..."). Cut at the first suffix so fuzzy matching
+// sees the name, not a sentence. A trailing pad code (e.g. "Depot S4LD01") is kept.
+const STATION_SUFFIX =
+  /\b(?:station|outpost|depot|harbou?r|hub|gateway|complex|platform|plant|refinery|processing|workcenter|cent(?:er|re))\b/i
+const PAD_CODE = /^\s+[A-Z0-9][A-Z0-9-]{1,7}\b/
+
+function anchorToStation(s: string): string {
+  const m = STATION_SUFFIX.exec(s)
+  if (!m) return s
+  const end = m.index + m[0].length
+  const after = s.slice(end)
+  // Leave the Lagrange address form intact ("... Station at Hurston's L1 ...") so
+  // normalizeDestination can rebuild the code from it.
+  if (/^\s+at\s/i.test(after)) return s
+  const pad = PAD_CODE.exec(after)
+  return s.slice(0, end + (pad ? pad[0].length : 0))
+}
+
 function trimDestinationTail(s: string): string {
-  return s
-    .split(DEST_TAIL)[0]
-    .replace(DEST_BODY_SUFFIX, '')
+  return anchorToStation(
+    s.split(DEST_TAIL)[0].replace(DEST_BODY_SUFFIX, '')
+  )
     // a trailing amount (reward) with no keyword: only comma-grouped / 4+ digits,
     // so a real "L1"/"Area18"-style number isn't stripped.
     .replace(/\s+\d{1,3}(?:[.,]\d{3})+\s*$/g, '')
