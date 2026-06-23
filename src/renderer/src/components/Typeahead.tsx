@@ -40,9 +40,14 @@ export default function Typeahead({
   const [query, setQuery] = useState(value)
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
+  const [focused, setFocused] = useState(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => setQuery(value), [value])
+  // Don't overwrite what the user is doing while the field is focused (e.g. a
+  // clearOnFocus reset). Re-sync to the selected value once focus leaves.
+  useEffect(() => {
+    if (!focused) setQuery(value)
+  }, [value, focused])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -93,6 +98,7 @@ export default function Typeahead({
 
   const onBlur = (): void => {
     blurTimer.current = setTimeout(() => {
+      setFocused(false)
       setOpen(false)
       if (!freeText && query !== value) setQuery(value) // not in the list, so revert it
     }, 120)
@@ -133,6 +139,7 @@ export default function Typeahead({
         onChange={(e) => onInput(e.target.value)}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current)
+          setFocused(true)
           if (clearOnFocus) {
             setQuery('')
             setHighlight(0)

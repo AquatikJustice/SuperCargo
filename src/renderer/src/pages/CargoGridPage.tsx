@@ -17,6 +17,10 @@ import Placeholder from '../components/Placeholder'
 // boxes apart so you can see each one.
 const GAP = 0.08
 
+// Fixed height for the Loading Mode panel so it never grows/shrinks per step and
+// shoves the 3D grid around. Longer load/drop lists scroll inside it.
+const LOADING_PANEL_H = 268
+
 interface HoverInfo {
   x: number
   y: number
@@ -53,8 +57,12 @@ function Box({
   const wx = (grid.x || 0) + pl.x
   const wy = (grid.y || 0) + pl.y
   const wz = (grid.z || 0) + pl.z
-  const emissive = mode === 'current' ? 0.55 : mode === 'future' ? 0 : 0.18
-  const opacity = mode === 'future' ? 0.12 : mode === 'loaded' ? 0.5 : 1
+  // Already-loaded cargo goes flat gray so only THIS stop's new boxes carry colour -
+  // you can see at a glance exactly what got added this step.
+  const loaded = mode === 'loaded'
+  const color = loaded ? '#6a7176' : pl.box.color
+  const emissive = mode === 'current' ? 0.55 : loaded ? 0 : 0.18
+  const opacity = mode === 'future' ? 0.12 : loaded ? 0.82 : 1
   return (
     <mesh
       position={[
@@ -73,8 +81,8 @@ function Box({
     >
       <boxGeometry args={[pl.w - GAP, pl.h - GAP, pl.l - GAP]} />
       <meshStandardMaterial
-        color={pl.box.color}
-        emissive={pl.box.color}
+        color={color}
+        emissive={loaded ? '#000000' : pl.box.color}
         emissiveIntensity={emissive}
         roughness={0.55}
         metalness={0.1}
@@ -128,7 +136,6 @@ export default function CargoGridPage(): React.ReactElement {
   const route = useStore((s) => s.route)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
-  const setObjectivesDelivered = useStore((s) => s.setObjectivesDelivered)
   const lockLayout = useStore((s) => s.lockLayout)
   const unlockLayout = useStore((s) => s.unlockLayout)
 
@@ -182,15 +189,6 @@ export default function CargoGridPage(): React.ReactElement {
       next.has(idx) ? next.delete(idx) : next.add(idx)
       return next
     })
-  // Quick "I dropped this whole stop" = a full turn-in. Locks the layout first
-  // (no-op if already locked) so the rest stays put instead of re-flowing.
-  const markDone = (stopIdx: number): void => {
-    const sec = sections.find((s) => s.idx === stopIdx)
-    if (!sec) return
-    lockLayout()
-    setObjectivesDelivered(sec.refs, true)
-  }
-
   // scene bounds across ALL grids (so reference-only bays are framed too)
   const { origin, span } = useMemo(() => {
     if (!grids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10 }
@@ -261,8 +259,15 @@ export default function CargoGridPage(): React.ReactElement {
         <Stat label="LOADED" value={`${fmt(shownScu)} / ${fmt(result.capacity)} SCU`} />
         <Stat label="BOXES" value={`${fmt(visiblePlacements.length)}${over ? ` (+${result.unplaced.length} won't fit)` : ''}`} color={over ? C.red : undefined} />
         <Stat label="BAYS" value={String(grids.filter((g) => g.autoLoad !== false).length)} />
-        <span style={{ fontFamily: F.body, fontSize: 13, color: over ? C.red : C.green, textShadow: GLOW }}>
-          {over ? '▲ OVER CAPACITY (overflow not shown)' : '✓ EVERYTHING FITS'}
+        <span
+          style={{ fontFamily: F.body, fontSize: 13, color: over ? C.red : C.green, textShadow: GLOW }}
+          title={result.squeezed ? 'Everything fits, but the roomy per-stop spacing ran out, so the boxes are packed tight.' : undefined}
+        >
+          {over
+            ? '▲ OVER CAPACITY (overflow not shown)'
+            : result.squeezed
+              ? '✓ FITS · PACKED TIGHT'
+              : '✓ EVERYTHING FITS'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           {!loading && (
@@ -317,21 +322,23 @@ export default function CargoGridPage(): React.ReactElement {
       </div>
 
       {loading ? (
-        <LoadingPanel
-          stop={currentLoad}
-          done={done}
-          idx={loadIdx}
-          total={loadPlan.length}
-          onLoaded={() => setLoadIdx((i) => i + 1)}
-          onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
-          onExit={() => setLoading(false)}
-          onFinish={() => {
-            lockLayout()
-            setLoading(false)
-          }}
-        />
+        <div style={{ height: LOADING_PANEL_H, marginBottom: 8, flex: 'none' }}>
+          <LoadingPanel
+            stop={currentLoad}
+            done={done}
+            idx={loadIdx}
+            total={loadPlan.length}
+            onLoaded={() => setLoadIdx((i) => i + 1)}
+            onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
+            onExit={() => setLoading(false)}
+            onFinish={() => {
+              lockLayout()
+              setLoading(false)
+            }}
+          />
+        </div>
       ) : (
-        /* legend: click a swatch to show or hide that stop's boxes, click the check to mark it delivered */
+        /* legend: click a swatch to show or hide that stop's boxes (turn-ins happen on the Manifest) */
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
         {sections.map((s) => {
           const off = hidden.has(s.idx)
@@ -359,19 +366,9 @@ export default function CargoGridPage(): React.ReactElement {
                 {s.idx + 1}. {s.code || s.name}
                 {off && <span style={{ color: C.ghost, fontSize: 11 }}>(hidden)</span>}
               </button>
-              <button
-                onClick={() => markDone(s.idx)}
-                title="Mark this destination delivered (removes its boxes)"
-                style={{ background: 'transparent', border: 0, cursor: 'pointer', color: C.green, padding: '0 2px', fontSize: 13, lineHeight: 1 }}
-              >
-                ✓
-              </button>
             </span>
           )
         })}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: F.body, fontSize: 12, color: C.amber }}>
-          <span style={{ width: 11, height: 11, border: `1px solid ${C.amber}`, borderRadius: 2 }} /> reference only
-        </span>
         </div>
       )}
 
@@ -390,13 +387,17 @@ export default function CargoGridPage(): React.ReactElement {
             const g = gridById.get(pl.gridId)
             if (!g) return null
             if (!loading && hidden.has(pl.box.stopIdx)) return null
+            const mode = boxMode(pl.box.objectiveId)
+            // In Loading Mode, only show cargo already aboard (this step + earlier).
+            // Future cargo is hidden so a full grid stays readable instead of buried.
+            if (loading && mode === 'future') return null
             return (
               <Box
                 key={pl.box.id}
                 pl={pl}
                 grid={g}
                 origin={origin}
-                mode={boxMode(pl.box.objectiveId)}
+                mode={mode}
                 onHover={onHover}
                 onLeave={() => setHover(null)}
               />
@@ -469,7 +470,7 @@ function LoadingPanel({
 
   if (done || !stop) {
     return (
-      <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: C.green, textShadow: GLOW }}>
           ✓ ROUTE WALKED · {total} STOPS
         </span>
@@ -487,8 +488,8 @@ function LoadingPanel({
   const hasLoads = stop.loads.length > 0
   const hasDrops = stop.drops.length > 0
   return (
-    <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, background: C.accFill }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+    <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, background: C.accFill, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 16px 10px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
           STOP {idx + 1} / {total}
         </span>
@@ -501,22 +502,24 @@ function LoadingPanel({
         </span>
       </div>
 
-      {hasLoads && (
-        <LoadSection title="LOAD HERE" color={C.green}>
-          {stop.loads.map((l) => (
-            <LoadLineRow key={`l-${l.objectiveId}`} line={l} verb="load" showDest />
-          ))}
-        </LoadSection>
-      )}
-      {hasDrops && (
-        <LoadSection title="DROP HERE" color={C.acc}>
-          {stop.drops.map((l) => (
-            <LoadLineRow key={`d-${l.objectiveId}`} line={l} verb="drop" />
-          ))}
-        </LoadSection>
-      )}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 16px' }}>
+        {hasLoads && (
+          <LoadSection title="LOAD HERE" color={C.green}>
+            {stop.loads.map((l) => (
+              <LoadLineRow key={`l-${l.objectiveId}`} line={l} verb="load" showDest />
+            ))}
+          </LoadSection>
+        )}
+        {hasDrops && (
+          <LoadSection title="DROP HERE" color={C.acc}>
+            {stop.drops.map((l) => (
+              <LoadLineRow key={`d-${l.objectiveId}`} line={l} verb="drop" />
+            ))}
+          </LoadSection>
+        )}
+      </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {navBtn('‹ BACK', onBack, idx === 0)}
         <Btn
           onClick={onLoaded}
@@ -568,7 +571,7 @@ function LoadLineRow({
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.acc }}>→ {line.destination}</span>
         )}
         {showDest && line.multiPickup && (
-          <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup — load what&apos;s here)</span>
+          <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup: load what&apos;s here)</span>
         )}
       </div>
     </div>

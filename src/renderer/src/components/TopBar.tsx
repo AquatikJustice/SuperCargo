@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
+import { useNarrow } from '../state/useViewport'
 import { C, F, GLOW } from '../theme'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
@@ -16,6 +17,7 @@ export default function TopBar(): React.ReactElement {
   const openCapture = useStore((s) => s.openCapture)
   const openCompact = useStore((s) => s.openCompact)
   const appVersion = useStore((s) => s.appVersion)
+  const narrow = useNarrow()
 
   return (
     <div
@@ -27,11 +29,12 @@ export default function TopBar(): React.ReactElement {
         height: 54,
         padding: '0 18px 0 22px',
         borderBottom: `1px solid ${C.line}`,
-        flex: 'none'
+        flex: 'none',
+        gap: 12
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 'none' }}>
           <Logo />
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div
@@ -47,20 +50,20 @@ export default function TopBar(): React.ReactElement {
             >
               SUPER<span style={{ color: C.acc }}>CARGO</span>
             </div>
-            {appVersion && (
+            {appVersion && !narrow && (
               <div style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: '0.1em', color: C.faint, marginTop: 3 }}>
                 v{appVersion}
               </div>
             )}
           </div>
         </div>
-        <RunChip />
-        <ShipPicker />
+        {!narrow && <RunChip />}
+        <ShipPicker narrow={narrow} />
       </div>
 
-      <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" />
-        <ChromeButton onClick={openCompact} icon={<CompactIcon />} label="COMPACT" />
+      <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+        <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
+        <ChromeButton onClick={openCompact} icon={<CompactIcon />} label="COMPACT" compact={narrow} />
         <WindowControls />
       </div>
     </div>
@@ -173,7 +176,7 @@ function RunChip(): React.ReactElement {
   )
 }
 
-function ShipPicker(): React.ReactElement {
+function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const shipName = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const ships = useStore((s) => s.ships)
@@ -206,9 +209,9 @@ function ShipPicker(): React.ReactElement {
     <div
       ref={ref}
       className="no-drag"
-      style={{ display: 'flex', alignItems: 'center', gap: 9, marginLeft: 26, position: 'relative' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, marginLeft: narrow ? 14 : 26, position: 'relative', minWidth: 0 }}
     >
-      <span style={labelStyle}>SHIP</span>
+      {!narrow && <span style={labelStyle}>SHIP</span>}
       <Btn
         onClick={() => setOpen((o) => !o)}
         title="Change active ship / cargo modules"
@@ -330,15 +333,18 @@ function Switch({ on }: { on: boolean }): React.ReactElement {
 function ChromeButton({
   onClick,
   icon,
-  label
+  label,
+  compact
 }: {
   onClick: () => void
   icon: React.ReactNode
   label: string
+  compact?: boolean
 }): React.ReactElement {
   return (
     <Btn
       onClick={onClick}
+      title={compact ? label : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -350,13 +356,13 @@ function ChromeButton({
         fontSize: 12,
         fontWeight: 600,
         letterSpacing: '0.14em',
-        padding: '8px 14px',
+        padding: compact ? '8px 10px' : '8px 14px',
         cursor: 'pointer'
       }}
       hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text, textShadow: GLOW }}
     >
       {icon}
-      {label}
+      {!compact && label}
     </Btn>
   )
 }

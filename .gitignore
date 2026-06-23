@@ -7,6 +7,9 @@ dist/
 release/
 *.tsbuildinfo
 
+# scratch / working files
+tmp/
+
 # logs
 logs/
 *.log

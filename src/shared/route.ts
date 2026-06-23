@@ -30,6 +30,9 @@ export interface RouteInput {
   dist: number[][]
   /** ship capacity in SCU. <= 0 disables the capacity constraint. */
   capacity: number
+  /** force the route to begin at this node (a depot / where the run starts). When
+   *  unset, the solver is free to choose the cheapest starting node. */
+  start?: number
 }
 
 export interface RouteResult {
@@ -48,7 +51,7 @@ export interface RouteResult {
   reason?: string
 }
 
-const HK_MAX = 14 // 2^14 * 14 states - instant; above this we go heuristic
+const HK_MAX = 15 // 2^15 * 15 states - still instant; above this we go heuristic
 
 /** Drop trivial same-location jobs (load + unload at one stop never ride along). */
 function realJobs(jobs: RouteJob[]): RouteJob[] {
@@ -112,6 +115,7 @@ function solveExact(input: RouteInput): number[] | null {
   const par = Array.from({ length: 1 << n }, () => new Int8Array(n).fill(-1))
 
   for (let v = 0; v < n; v++) {
+    if (input.start !== undefined && v !== input.start) continue
     if (canVisit(0, v, jobs) && loadForMask(1 << v, jobs) <= cap) dp[1 << v][v] = 0
   }
   for (let mask = 1; mask <= full; mask++) {
@@ -162,6 +166,7 @@ function solveGreedy(input: RouteInput, enforceCap: boolean): number[] | null {
   let bestOrder: number[] | null = null
   let bestCost = Infinity
   for (let start = 0; start < n; start++) {
+    if (input.start !== undefined && start !== input.start) continue
     if (!canVisit(0, start, jobs) || loadForMask(1 << start, jobs) > cap) continue
     const order = [start]
     let mask = 1 << start

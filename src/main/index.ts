@@ -29,6 +29,13 @@ let settings: AppSettings = loadSettings()
 // Window
 // ---------------------------------------------------------------------------
 
+/** An http(s) link that isn't the dev server's own page = open it in the browser. */
+function isExternalUrl(url: string): boolean {
+  const dev = process.env['ELECTRON_RENDERER_URL']
+  if (dev && url.startsWith(dev)) return false
+  return /^https?:\/\//i.test(url)
+}
+
 /** Pin the window above other apps and games. */
 function applyAlwaysOnTop(value: boolean): void {
   if (!mainWindow) return
@@ -42,15 +49,14 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 520,
+    minHeight: 560,
     show: false,
     frame: false,
-    // Transparent so the inset around the rounded tablet bezel shows only the
-    // accent glow (against the desktop), not an opaque black band that gets
-    // clipped at the window edge. The app content itself paints solid black.
-    transparent: true,
-    backgroundColor: '#00000000',
+    // Opaque, not transparent: transparent frameless windows resize terribly on
+    // Windows (laggy, the wrong edge jumps). Win11 rounds the frameless corners
+    // natively, so we still get the rounded tablet look with smooth resizing.
+    backgroundColor: '#000000',
     icon: appIcon,
     alwaysOnTop: settings.alwaysOnTop,
     title: 'SuperCargo',
@@ -99,6 +105,14 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+  // Plain <a href> clicks navigate the window itself, which would replace the app
+  // with the page. Catch external URLs here and hand them to the OS browser.
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (isExternalUrl(url)) {
+      e.preventDefault()
+      void shell.openExternal(url)
+    }
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -160,6 +174,12 @@ function createCompactWindow(): void {
   compactWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+  compactWindow.webContents.on('will-navigate', (e, url) => {
+    if (isExternalUrl(url)) {
+      e.preventDefault()
+      void shell.openExternal(url)
+    }
   })
   compactWindow.on('closed', () => {
     compactWindow = null

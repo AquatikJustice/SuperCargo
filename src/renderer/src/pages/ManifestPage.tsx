@@ -1,16 +1,19 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
-import { deriveStops, deriveContracts, deriveTotals, activeContracts, type Stop } from '../state/manifest'
+import { deriveStopsWithPickups, deriveContracts, deriveTotals, activeContracts, type Stop, type PickupItem } from '../state/manifest'
 import { shipCapacity } from '@shared/shipModules'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
+import Typeahead from '../components/Typeahead'
+import { splitDestination } from '../data/stations'
 
 const ITEM_GRID = '118px 1fr minmax(160px, 1fr) 70px'
 
 export default function ManifestPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
+  const startLocation = useStore((s) => s.startLocation)
   const groupBy = useStore((s) => s.groupBy)
   const setGroupBy = useStore((s) => s.setGroupBy)
   const showBoxMath = useStore((s) => s.showBoxMath)
@@ -22,8 +25,14 @@ export default function ManifestPage(): React.ReactElement {
 
   const [turnInStop, setTurnInStop] = useState<Stop | null>(null)
 
-  const stops = useMemo(() => deriveStops(contracts, order), [contracts, order])
-  const totals = useMemo(() => deriveTotals(stops, contracts), [stops, contracts])
+  const stops = useMemo(
+    () => deriveStopsWithPickups(contracts, order, startLocation),
+    [contracts, order, startLocation]
+  )
+  const totals = useMemo(
+    () => deriveTotals(stops.filter((s) => !s.pickupOnly), contracts),
+    [stops, contracts]
+  )
   // activeContracts already drops finished and held-pending-OCR contracts, so a
   // contract being captured stays out of the list until its capture resolves.
   const derivedContracts = useMemo(() => deriveContracts(activeContracts(contracts)), [contracts])
@@ -54,6 +63,7 @@ export default function ManifestPage(): React.ReactElement {
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'stretch',
           borderTop: `1px solid ${C.lineStrong}`,
           borderBottom: `1px solid ${C.lineStrong}`,
@@ -63,7 +73,7 @@ export default function ManifestPage(): React.ReactElement {
         <SummaryStat label="TOTAL SCU" value={fmt(totals.scu)} first />
         <SummaryStat label="BOXES" value={fmt(totals.boxes)} />
         <SummaryStat label="DESTINATIONS" value={String(totals.dests)} />
-        <div style={{ flex: 1, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim }}>
               HOLD CAPACITY · {activeShip}
@@ -78,6 +88,8 @@ export default function ManifestPage(): React.ReactElement {
           </div>
         </div>
       </div>
+
+      <StartLocationPicker />
 
       <MissingObjectivesBanner
         contracts={derivedContracts.filter((c) => c.objCount === 0)}
@@ -149,6 +161,65 @@ function MissingObjectivesBanner({
       >
         ADD OBJECTIVES · {first.ref}
       </Btn>
+    </div>
+  )
+}
+
+/** Sets the run's starting location. Cargo picked up there loads first and the
+ *  route is solved from it, so a stop you deliver to but haven't loaded for yet
+ *  no longer lands at the front. Optional - blank lets the solver pick the start. */
+function StartLocationPicker(): React.ReactElement {
+  const startLocation = useStore((s) => s.startLocation)
+  const setStartLocation = useStore((s) => s.setStartLocation)
+  const locations = useStore((s) => s.locations)
+  const route = useStore((s) => s.route)
+  const names = useMemo(() => locations.map((l) => l.name), [locations])
+  const loadHere = route?.steps.find((s) => s.nodeKey === 'depot')?.loadAfter ?? 0
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
+      <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim, flex: 'none' }}>
+        STARTING AT
+      </span>
+      <div style={{ flex: '1 1 240px', minWidth: 220, maxWidth: 380 }}>
+        <Typeahead
+          value={startLocation}
+          options={names}
+          freeText={false}
+          search
+          maxResults={12}
+          onSelect={setStartLocation}
+          placeholder="Where you're starting (optional)"
+        />
+      </div>
+      {startLocation && (
+        <>
+          {loadHere > 0 && (
+            <span style={{ fontFamily: F.body, fontSize: 12.5, color: C.acc, flex: 'none' }}>
+              ↥ load {fmt(loadHere)} SCU here
+            </span>
+          )}
+          <Btn
+            onClick={() => setStartLocation('')}
+            title="Clear the starting location"
+            style={{
+              border: `1px solid ${C.lineStrong}`,
+              background: 'transparent',
+              color: C.dim,
+              fontFamily: F.display,
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              flex: 'none'
+            }}
+            hoverStyle={{ borderColor: C.acc, color: C.text }}
+          >
+            CLEAR
+          </Btn>
+        </>
+      )}
     </div>
   )
 }
@@ -236,9 +307,10 @@ function ByDestination({
 
       {stops.map((stop) => (
         <div
-          key={stop.destination}
-          draggable
+          key={stop.pickupOnly ? `pk-${stop.destination}` : stop.destination}
+          draggable={!stop.pickupOnly}
           onDragStart={(e) => {
+            if (stop.pickupOnly) return
             setDragIdx(stop.idx)
             try {
               e.dataTransfer.effectAllowed = 'move'
@@ -247,11 +319,13 @@ function ByDestination({
             }
           }}
           onDragOver={(e) => {
+            if (stop.pickupOnly) return
             e.preventDefault()
             if (overIdx !== stop.idx) setOverIdx(stop.idx)
           }}
           onDragLeave={() => setOverIdx((v) => (v === stop.idx ? null : v))}
           onDrop={(e) => {
+            if (stop.pickupOnly) return
             e.preventDefault()
             if (dragIdx !== null && dragIdx !== stop.idx) reorderStops(dragIdx, stop.idx)
             setDragIdx(null)
@@ -269,7 +343,7 @@ function ByDestination({
           }}
         >
           <StopHeader stop={stop} onTurnIn={() => onTurnIn(stop)} />
-          {stop.items.map((item) => (
+          {!stop.pickupOnly && stop.items.map((item) => (
             <div
               key={item.objectiveId}
               style={{
@@ -326,17 +400,76 @@ function ByDestination({
               </div>
             </div>
           ))}
-          <div style={{ display: 'grid', gridTemplateColumns: ITEM_GRID, alignItems: 'center', gap: 18, padding: '11px 0 0 39px' }}>
-            <div style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textAlign: 'right' }}>
-              {stop.totSCU}
-              <span style={{ fontSize: 11, color: C.accDeep }}> SCU</span>
+          {!stop.pickupOnly && (
+            <div style={{ display: 'grid', gridTemplateColumns: ITEM_GRID, alignItems: 'center', gap: 18, padding: '11px 0 0 39px' }}>
+              <div style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textAlign: 'right' }}>
+                {stop.totSCU}
+                <span style={{ fontSize: 11, color: C.accDeep }}> SCU</span>
+              </div>
+              <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.faint }}>STOP TOTAL</div>
+              <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{stop.totContracts} contracts</div>
+              <div style={{ fontFamily: F.mono, fontSize: 12, color: C.body, textAlign: 'right' }}>{stop.totBoxes} box</div>
             </div>
-            <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.faint }}>STOP TOTAL</div>
-            <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{stop.totContracts} contracts</div>
-            <div style={{ fontFamily: F.mono, fontSize: 12, color: C.body, textAlign: 'right' }}>{stop.totBoxes} box</div>
-          </div>
+          )}
+          {stop.pickups && stop.pickups.length > 0 && (
+            <PickupSection items={stop.pickups} showBoxMath={showBoxMath} />
+          )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/** "PICK UP HERE" block under a stop's drop-offs: cargo loaded at this location and
+ *  where each piece is headed. Green to set it apart from the drop-off rows. */
+function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMath: boolean }): React.ReactElement {
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ padding: '12px 0 2px 39px', fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.green }}>
+        ↑ PICK UP HERE
+      </div>
+      {items.map((it) => {
+        const dest = splitDestination(it.destination)
+        return (
+          <div
+            key={`${it.objectiveId}-${it.destination}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: ITEM_GRID,
+              alignItems: 'center',
+              gap: 18,
+              padding: '11px 0 11px 39px',
+              borderBottom: `1px solid ${C.lineSoft}`
+            }}
+          >
+            <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right' }}>
+              {it.scu}
+              <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
+                <span style={{ fontFamily: F.body, fontSize: 15, color: C.textBody, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {it.commodity}
+                </span>
+                <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{it.ref}]</span>
+              </div>
+              <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.green, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                → {dest.code || dest.name || it.destination}
+                {it.split ? ' · split pickup' : ''}
+              </span>
+            </div>
+            {showBoxMath ? (
+              <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
+                <span style={{ color: C.faint }}>· </span>
+                {it.boxStr || '-'}
+              </div>
+            ) : (
+              <div />
+            )}
+            <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{it.boxCount} box</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -350,13 +483,24 @@ function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): R
   const anyLeft = stop.items.some((i) => !i.delivered)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 12, borderBottom: `1px solid ${C.lineStrong}` }}>
-      <div style={{ cursor: 'grab', color: '#a3adb1', display: 'flex', flex: 'none' }} title="Drag to reorder">
-        <GripIcon />
-      </div>
+      {stop.pickupOnly ? (
+        <div
+          style={{ color: stop.start ? C.acc : C.green, display: 'flex', flex: 'none', fontSize: 19, lineHeight: 1 }}
+          title={stop.start ? 'Starting location' : 'Pick-up stop'}
+        >
+          {stop.start ? '▸' : '↑'}
+        </div>
+      ) : (
+        <div style={{ cursor: 'grab', color: '#a3adb1', display: 'flex', flex: 'none' }} title="Drag to reorder">
+          <GripIcon />
+        </div>
+      )}
       <div style={{ width: 11, height: 11, flex: 'none', background: stop.color }} />
-      <div style={{ fontFamily: F.mono, fontSize: 24, fontWeight: 600, color: C.text, textShadow: GLOW, flex: 'none', lineHeight: 1 }}>
-        {stop.n}
-      </div>
+      {!stop.pickupOnly && (
+        <div style={{ fontFamily: F.mono, fontSize: 24, fontWeight: 600, color: C.text, textShadow: GLOW, flex: 'none', lineHeight: 1 }}>
+          {stop.n}
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           {stop.code && <span style={{ fontFamily: F.mono, fontSize: 13, color: C.acc, letterSpacing: '0.02em' }}>{stop.code}</span>}
@@ -378,6 +522,22 @@ function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): R
         </div>
         {stop.region && <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>{stop.region}</div>}
       </div>
+      {stop.pickupOnly && (
+        <span
+          style={{
+            fontFamily: F.display,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.14em',
+            color: stop.start ? C.acc : C.green,
+            border: `1px solid ${stop.start ? C.acc : C.green}`,
+            padding: '4px 10px',
+            flex: 'none'
+          }}
+        >
+          {stop.start ? 'START' : 'PICK UP'}
+        </span>
+      )}
       <ElevatorBadge external={external} />
       {anyLeft && (
         <Btn
@@ -407,13 +567,14 @@ function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): R
 /** "from A · B" note for an objective that loads somewhere other than the
  *  contract's default pickup (multi-pickup / chain hauls). */
 function PickupNote({ pickups }: { pickups?: string[] }): React.ReactElement | null {
-  if (!pickups || !pickups.length) return null
+  const uniq = pickups ? [...new Set(pickups)] : []
+  if (!uniq.length) return null
   return (
     <span
-      title={`Pick up from ${pickups.join(', ')}`}
+      title={`Pick up from ${uniq.join(', ')}`}
       style={{ fontFamily: F.body, fontSize: 11.5, color: C.acc, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
     >
-      ↤ from {pickups.join(' · ')}
+      ↤ from {uniq.join(' · ')}
     </span>
   )
 }

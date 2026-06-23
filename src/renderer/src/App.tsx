@@ -61,21 +61,19 @@ function MainApp(): React.ReactElement {
   return (
     <div
       style={{
-        // Floating in-game tablet bezel (from the design comp): a thick rounded
-        // accent outline with a soft glow. The window is transparent, so the
-        // inset margin shows the glow over the desktop. Keep the glow blur smaller
-        // than the inset so it fully fades before the window edge (no hard clip).
+        // In-game tablet bezel: accent outline flush to the window edge so the OS
+        // resize cursor lands right on it. Rounded like a tablet. No outer glow (it
+        // pushed the apparent edge inward); a faint inner wash keeps the holo feel.
         position: 'fixed',
-        inset: 18,
+        inset: 0,
         display: 'flex',
         flexDirection: 'column',
         background: C.black,
         color: C.textBody,
         overflow: 'hidden',
-        border: '4px solid rgba(255,210,30,0.65)',
-        borderRadius: 20,
-        boxShadow:
-          '0 0 14px rgba(255,210,30,0.55), 0 0 6px rgba(255,210,30,0.65), inset 0 0 48px rgba(255,210,30,0.06)'
+        border: '2px solid rgba(255,210,30,0.6)',
+        borderRadius: 18,
+        boxShadow: 'inset 0 0 48px rgba(255,210,30,0.05)'
       }}
     >
       <TopBar />

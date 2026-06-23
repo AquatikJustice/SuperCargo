@@ -6,6 +6,10 @@ import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
+// SCU never runs past 4 digits in practice; keep the column ~5 chars so it doesn't
+// hog space. Commodity and destination get their own columns; minmax(0,…) lets a
+// long name ellipsize instead of blowing the track wide.
+const OBJ_COLS = '58px minmax(0,1fr) minmax(0,1.4fr) 220px 70px'
 
 const statusColor: Record<string, string> = {
   active: C.green,
@@ -19,6 +23,8 @@ export default function ContractsPage(): React.ReactElement {
   const abandonContract = useStore((s) => s.abandonContract)
   const openCapture = useStore((s) => s.openCapture)
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
+  const editContract = useStore((s) => s.editContract)
+  const editObjective = useStore((s) => s.editObjective)
   // Hide contracts waiting on their first OCR capture, so a contract shows up
   // here only once that capture finishes (same as the manifest).
   const derived = useMemo(() => deriveContracts(contracts.filter((c) => !c.pendingOcr)), [contracts])
@@ -129,9 +135,23 @@ export default function ContractsPage(): React.ReactElement {
 
                 {isOpen && (
                   <div style={{ padding: '4px 0 22px 27px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 220px 70px', gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
-                      {['SCU', 'COMMODITY · DESTINATION', 'BOX BREAKDOWN', 'COUNT'].map((h, i) => (
-                        <span key={h} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: i === 0 || i === 3 ? 'right' : 'left' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px 22px', marginBottom: 20 }}>
+                      <DetailField label="PICKUP">
+                        <EditableText value={c.pickup} onCommit={(v) => editContract(c.id, { pickup: v })} placeholder="set pickup" />
+                      </DetailField>
+                      <DetailField label="REWARD">
+                        <EditableNum value={c.reward} suffix=" aUEC" onCommit={(n) => editContract(c.id, { reward: n })} />
+                      </DetailField>
+                      <DetailField label="RANK">
+                        <EditableText value={c.rank} onCommit={(v) => editContract(c.id, { rank: v })} placeholder="set rank" />
+                      </DetailField>
+                      <DetailField label="MAX BOX">
+                        <EditableNum value={c.maxBox} suffix=" SCU" onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
+                      </DetailField>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
+                      {['SCU', 'COMMODITY', 'DESTINATION', 'BOX BREAKDOWN', 'COUNT'].map((h, i) => (
+                        <span key={h} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: i === 0 || i === 4 ? 'right' : 'left' }}>
                           {h}
                         </span>
                       ))}
@@ -143,12 +163,20 @@ export default function ContractsPage(): React.ReactElement {
                       </div>
                     )}
                     {c.objectives.map((o) => (
-                      <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 220px 70px', gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                      <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
                         <EditableScu value={o.scu} onCommit={(n) => setObjectiveScu(c.id, o.objectiveId, n)} />
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-                          <span style={{ fontFamily: F.body, fontSize: 14, color: C.textBody }}>{o.commodity}</span>
-                          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>{o.destination}</span>
-                        </div>
+                        <EditableText
+                          value={o.commodity}
+                          onCommit={(v) => editObjective(c.id, o.objectiveId, { commodity: v })}
+                          placeholder="commodity"
+                          textStyle={{ fontSize: 14, color: C.textBody }}
+                        />
+                        <EditableText
+                          value={o.destination}
+                          onCommit={(v) => editObjective(c.id, o.objectiveId, { destination: v })}
+                          placeholder="destination"
+                          textStyle={{ fontSize: 13, color: C.dim }}
+                        />
                         <span style={{ fontFamily: F.mono, fontSize: 12, color: '#b6bec0' }}>{o.boxStr || '-'}</span>
                         <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
                       </div>
@@ -272,10 +300,154 @@ function EditableScu({ value, onCommit }: { value: number; onCommit: (n: number)
         color: C.text,
         textShadow: GLOW,
         textAlign: 'right',
-        cursor: 'pointer'
+        cursor: 'text',
+        borderBottom: `1px dashed rgba(255,255,255,0.22)`
       }}
     >
       {value}
+    </span>
+  )
+}
+
+const editInputStyle: React.CSSProperties = {
+  width: '100%',
+  fontFamily: F.body,
+  fontSize: 14,
+  background: 'transparent',
+  color: C.text,
+  border: `1px solid ${C.accBorder}`,
+  padding: '3px 6px',
+  outline: 'none'
+}
+
+function DetailField({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <span style={{ fontFamily: F.display, fontSize: 9.5, letterSpacing: '0.16em', color: C.faint }}>{label}</span>
+      {children}
+    </div>
+  )
+}
+
+/** Click-to-edit text. Enter/blur commits, Escape cancels. */
+function EditableText({
+  value,
+  onCommit,
+  placeholder,
+  textStyle
+}: {
+  value: string
+  onCommit: (v: string) => void
+  placeholder?: string
+  textStyle?: React.CSSProperties
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  const commit = (): void => {
+    setEditing(false)
+    if (draft.trim() !== value.trim()) onCommit(draft)
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          else if (e.key === 'Escape') {
+            setDraft(value)
+            setEditing(false)
+          }
+        }}
+        style={{ ...editInputStyle, ...textStyle }}
+      />
+    )
+  }
+
+  return (
+    <span
+      onClick={(e) => {
+        e.stopPropagation()
+        setEditing(true)
+      }}
+      title="Click to edit"
+      style={{
+        fontFamily: F.body,
+        fontSize: 14,
+        color: C.text,
+        cursor: 'text',
+        borderBottom: `1px dashed rgba(255,255,255,0.22)`,
+        paddingBottom: 1,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        ...textStyle
+      }}
+    >
+      {value || <span style={{ color: C.faint }}>{placeholder ?? 'set -'}</span>}
+    </span>
+  )
+}
+
+/** Click-to-edit non-negative integer (reward, max box). */
+function EditableNum({
+  value,
+  onCommit,
+  suffix
+}: {
+  value: number
+  onCommit: (n: number) => void
+  suffix?: string
+}): React.ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => setDraft(String(value)), [value])
+
+  const commit = (): void => {
+    setEditing(false)
+    const n = parseInt(draft, 10)
+    if (Number.isFinite(n) && n >= 0 && n !== value) onCommit(n)
+    else setDraft(String(value))
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
+        onBlur={commit}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          else if (e.key === 'Escape') {
+            setDraft(String(value))
+            setEditing(false)
+          }
+        }}
+        style={{ ...editInputStyle, fontFamily: F.mono }}
+      />
+    )
+  }
+
+  return (
+    <span
+      onClick={(e) => {
+        e.stopPropagation()
+        setEditing(true)
+      }}
+      title="Click to edit"
+      style={{ fontFamily: F.mono, fontSize: 14, color: C.text, cursor: 'text', borderBottom: `1px dashed rgba(255,255,255,0.22)`, paddingBottom: 1 }}
+    >
+      {value ? fmt(value) : <span style={{ color: C.faint }}>set -</span>}
+      {value && suffix ? <span style={{ color: C.dim, fontSize: 11 }}>{suffix}</span> : null}
     </span>
   )
 }

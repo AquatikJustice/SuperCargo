@@ -45,15 +45,24 @@ function sha256(buf: Buffer | string): string {
   return crypto.createHash('sha256').update(buf).digest('hex')
 }
 
-/** Copy the bundled lists into the cache for any file that isn't there yet. */
+/** Seed the cache from the bundled lists, and reconcile a stale cache left by an
+ *  older version. A missing file is copied. An existing file is refreshed only when
+ *  the bundled seed is BOTH newer (mtime) and different (hash) - the mtime guard
+ *  keeps us from clobbering a cache the user updated themselves (e.g. token sync),
+ *  which is always newer than a freshly-installed bundle. */
 export function seedCacheIfNeeded(): void {
   const dir = seedDir()
   for (const s of SPECS) {
     const dst = cachePath(s.cache)
-    if (fs.existsSync(dst)) continue
     const src = path.join(dir, s.repo)
     try {
-      fs.mkdirSync(path.dirname(dst), { recursive: true })
+      if (!fs.existsSync(dst)) {
+        fs.mkdirSync(path.dirname(dst), { recursive: true })
+        fs.copyFileSync(src, dst)
+        continue
+      }
+      if (fs.statSync(src).mtimeMs <= fs.statSync(dst).mtimeMs) continue
+      if (sha256(fs.readFileSync(src)) === sha256(fs.readFileSync(dst))) continue
       fs.copyFileSync(src, dst)
     } catch (e) {
       console.warn(`[data] seed ${s.repo} failed:`, (e as Error).message)

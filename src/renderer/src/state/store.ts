@@ -82,6 +82,13 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${uidCounter}`
 }
 
+const BOX_SIZES = [1, 2, 4, 8, 16, 24, 32]
+// Snap an edited max box size to a real SCU container size (largest that fits).
+function snapMaxBox(n: number): number {
+  const fit = BOX_SIZES.filter((s) => s <= n)
+  return fit.length ? fit[fit.length - 1] : 1
+}
+
 function makeObjective(input: ManualObjectiveInput, maxBoxSize: number): DeliveryObjective {
   const pickups = input.pickups?.map((p) => p.trim()).filter(Boolean)
   return {
@@ -137,6 +144,9 @@ interface StoreState {
   runId: string
   contracts: HaulingContract[]
   order: string[]
+  /** Where the run starts (cargo loaded here rides along; route begins from it).
+   *  Empty = no start set, solver picks the cheapest start. */
+  startLocation: string
   /** Frozen 3D cargo layout, set once the run's load is locked (null = live plan). */
   layout: CargoLayout | null
   /** Latest computed pickup->delivery route (null when there's nothing to route). */
@@ -210,6 +220,17 @@ interface StoreState {
   ) => void
   /** Correct an objective's SCU (e.g. an OCR misread) and re-box it. */
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
+  /** Edit top-level contract fields. Changing the max box size re-boxes every objective. */
+  editContract: (
+    id: string,
+    patch: { title?: string; pickup?: string; rank?: string; reward?: number; maxBoxSize?: number }
+  ) => void
+  /** Edit an objective's commodity or destination. */
+  editObjective: (
+    contractId: string,
+    objectiveId: string,
+    patch: { commodity?: string; destination?: string }
+  ) => void
   /** Record how many SCU of an objective were turned in (drives partial payout).
    *  Clamped to 0..required. */
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
@@ -221,6 +242,8 @@ interface StoreState {
     delivered: boolean
   ) => void
   reorderStops: (from: number, to: number) => void
+  /** Set the run's starting location (re-sorts the route from there). */
+  setStartLocation: (loc: string) => void
   /** Start a fresh run (generates a new run id). Also happens automatically when
    *  the manifest empties and a new contract is accepted. */
   startNewRun: () => void
@@ -248,8 +271,8 @@ function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] 
 export const useStore = create<StoreState>((set, get) => {
   // Save the manifest part to disk whenever it changes.
   const persist = (): void => {
-    const { runId, contracts, order, layout } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, layout: layout ?? undefined })
+    const { runId, contracts, order, layout, startLocation } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, layout: layout ?? undefined, startLocation })
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
@@ -271,7 +294,7 @@ export const useStore = create<StoreState>((set, get) => {
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
   const doReroute = async (): Promise<void> => {
-    const { contracts, locations, settings, ships } = get()
+    const { contracts, locations, settings, ships, startLocation } = get()
     const ship = ships.find((s) => s.name === settings.activeShip)
     const capacity = shipCapacity(ship, settings.installedModules[settings.activeShip])
     // Skip contracts still held pending OCR. They aren't shown yet, so they
@@ -280,7 +303,8 @@ export const useStore = create<StoreState>((set, get) => {
     const plan = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
       locations,
-      capacity
+      capacity,
+      startLocation
     )
     set({ route: plan })
     // Apply the sorted stop order automatically (unless the user dragged manually).
@@ -383,6 +407,7 @@ export const useStore = create<StoreState>((set, get) => {
     runId: '',
     contracts: [],
     order: [],
+    startLocation: '',
     layout: null,
     route: null,
     isRouteAuto: true,
@@ -445,6 +470,7 @@ export const useStore = create<StoreState>((set, get) => {
         runId: manifest.runId,
         contracts: active,
         order: nextOrder(active, manifest.order),
+        startLocation: manifest.startLocation ?? '',
         layout,
         history,
         watcher,
@@ -560,7 +586,13 @@ export const useStore = create<StoreState>((set, get) => {
       // Cross-window manifest sync (main <-> compact overlay window). Apply the
       // incoming doc without re-persisting so the two windows don't ping-pong.
       window.supercargo.onManifestChanged((doc) => {
-        set({ runId: doc.runId, contracts: doc.contracts, order: doc.order, layout: doc.layout ?? null })
+        set({
+          runId: doc.runId,
+          contracts: doc.contracts,
+          order: doc.order,
+          startLocation: doc.startLocation ?? '',
+          layout: doc.layout ?? null
+        })
         scheduleReroute()
       })
       window.supercargo.onCompactState((s) => set({ compactOpen: s.open }))
@@ -716,7 +748,7 @@ export const useStore = create<StoreState>((set, get) => {
 
     startNewRun: () => {
       const { runId, history } = get()
-      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), layout: null })
+      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), layout: null, startLocation: '' })
       persist()
     },
 
@@ -782,6 +814,44 @@ export const useStore = create<StoreState>((set, get) => {
       for (const c of finished) archive(c, 'completed')
       const finishedIds = new Set(finished.map((c) => c.id))
       commit(updated.filter((c) => !finishedIds.has(c.id)))
+      scheduleReroute()
+    },
+
+    editContract: (id, patch) => {
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== id) return c
+        const next = { ...c }
+        if (patch.title !== undefined) next.title = patch.title.trim()
+        if (patch.pickup !== undefined) next.pickup = patch.pickup.trim()
+        if (patch.rank !== undefined) next.rank = patch.rank.trim()
+        if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
+        if (patch.maxBoxSize !== undefined) {
+          const mbs = snapMaxBox(patch.maxBoxSize)
+          next.maxBoxSize = mbs
+          next.boxSizeConfirmed = true
+          next.objectives = next.objectives.map((o) => ({ ...o, boxes: calculateBoxes(o.scuAmount, mbs) }))
+        }
+        return next
+      })
+      commit(contracts)
+      scheduleReroute()
+    },
+
+    editObjective: (contractId, objectiveId, patch) => {
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== contractId) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) => {
+            if (o.id !== objectiveId) return o
+            const next = { ...o }
+            if (patch.commodity !== undefined) next.commodity = patch.commodity.trim()
+            if (patch.destination !== undefined) next.destination = patch.destination.trim()
+            return next
+          })
+        }
+      })
+      commit(contracts)
       scheduleReroute()
     },
 
@@ -852,6 +922,14 @@ export const useStore = create<StoreState>((set, get) => {
       // Manual drag wins: stop auto-sorting until a contract is added or removed.
       set({ order, isRouteAuto: false })
       persist()
+    },
+
+    setStartLocation: (loc) => {
+      if (loc === get().startLocation) return
+      // A new start changes the optimal order, so resume auto-sorting from it.
+      set({ startLocation: loc, isRouteAuto: true })
+      persist()
+      scheduleReroute()
     },
 
     checkForUpdates: async () => {

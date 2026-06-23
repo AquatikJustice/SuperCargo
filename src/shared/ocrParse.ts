@@ -15,8 +15,8 @@
 // Commodity / destination strings come out raw here; fuzzy matching against the
 // UEX lists (see fuzzy.ts) happens as a separate step so this stays list-free.
 
-import { bestMatch } from './fuzzy'
-import type { Commodity, Location, OcrObjective } from './types'
+import { bestMatch, similarity } from './fuzzy'
+import type { Commodity, Location, MatchResult, OcrObjective } from './types'
 
 export interface RawObjective {
   commodity: string
@@ -53,7 +53,10 @@ const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
 // "Collect <item> from <location>" - the game's hauling_collect_objective. Gives
 // each leg its pickup(s); a delivery can have several (many-pickups-to-one-drop).
-const RE_COLLECT = /collect\s+(.+?)\s+from\s+([^.\n]+)/gi
+// Capture the full "from <location>" phrase to the end of the (re-broken) line,
+// keeping a trailing "outpost on <body>" qualifier. The "Inc." abbreviation no
+// longer truncates it; cutSentence() drops any description sentence that follows.
+const RE_COLLECT = /collect\s+(.+?)\s+from\s+(.+)/gi
 
 // Max-box-size wording, from the game's own ~mission(MaxBoxSize) / MissionMaxSCUSize
 // templates (Data.p4k + StarStrings contracts.ini), most specific first:
@@ -181,6 +184,13 @@ function lagDigit(ch: string): string | null {
   }
 }
 
+// Drop a description sentence the game appends after a location ("... on Cellin.
+// The folks need it."). A real sentence opens ". " + capital; an abbreviation like
+// "Inc." (". " + lowercase) is kept.
+function cutSentence(s: string): string {
+  return s.replace(/\.\s+[A-Z].*$/s, '')
+}
+
 function cleanFragment(s: string): string {
   return s
     .replace(/<\/?EM[^>]*>/gi, '')
@@ -191,11 +201,14 @@ function cleanFragment(s: string): string {
 }
 
 // Trailing junk OCR sweeps onto the destination: the Reward/Accept UI, the
-// currency, the next objective's verb, status words, or a stray amount. A real
-// freight location never contains these, so cut the destination at the first one.
-// Otherwise fuzzy matching sees a whole sentence and can't place it.
+// currency, the next objective's verb, status words, the contract description, or
+// a stray amount. A real freight location never contains these, so cut the
+// destination at the first one. Otherwise fuzzy matching sees a whole sentence and
+// can't place it. The description usually opens "Contractor ..." and OCR loves to
+// drop that leading C, so match it with or without ("c?ontract"); "for a/the" and
+// "is a/the" catch the rest of the flavour prose.
 const DEST_TAIL =
-  /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|contract\w*|mission\w*|location|for\s+you)\b/i
+  /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|c?ontract\w*|mission\w*|location|for\s+(?:you|a|an|the)|is\s+(?:a|an|the))\b/i
 
 // Two body suffixes the panel tacks onto a destination that aren't part of the
 // location name and block the match:
@@ -224,6 +237,8 @@ function anchorToStation(s: string): string {
   // Leave the Lagrange address form intact ("... Station at Hurston's L1 ...") so
   // normalizeDestination can rebuild the code from it.
   if (/^\s+at\s/i.test(after)) return s
+  // Keep a body qualifier ("outpost on Cellin") - it's the disambiguator, not prose.
+  if (/^\s+on\s+\S/i.test(after)) return s
   const pad = PAD_CODE.exec(after)
   return s.slice(0, end + (pad ? pad[0].length : 0))
 }
@@ -324,7 +339,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
   let pm: RegExpExecArray | null
   while ((pm = RE_COLLECT.exec(inlineText)) !== null) {
     const commodity = cleanFragment(pm[1])
-    const pickup = normalizeDestination(trimDestinationTail(cleanFragment(pm[2])))
+    const pickup = normalizeDestination(trimDestinationTail(cleanFragment(cutSentence(pm[2]))))
     if (!commodity || !pickup) continue
     const key = commodity.toLowerCase()
     const arr = pickupsByCommodity.get(key) ?? []
@@ -348,6 +363,82 @@ export function parseOcrText(rawText: string): ParsedOcr {
   return { objectives: found, maxBoxSize, reward: parseReward(text) }
 }
 
+// Collapse pickups that resolve to the same place. OCR can read one "Collect ...
+// from <X>" line slightly differently across legs, so two raw variants survive the
+// parse-time (raw-string) dedup yet both fuzzy-match the same station - which would
+// otherwise show as two identical pickup fields and split the leg's SCU in two.
+function dedupePickups(ps?: MatchResult[]): MatchResult[] | undefined {
+  if (!ps || !ps.length) return ps
+  const seen = new Set<string>()
+  const out: MatchResult[] = []
+  for (const p of ps) {
+    const key = (p.match ?? p.input).trim().toLowerCase()
+    if (key && !seen.has(key)) {
+      seen.add(key)
+      out.push(p)
+    }
+  }
+  return out
+}
+
+// Trailing "on <Body>" qualifier the game appends to disambiguate a facility
+// ("... outpost on Cellin"). Captured so operator+body can pick the right one.
+const ON_BODY = /\bon\s+(?:the\s+)?([A-Za-z][A-Za-z0-9 ]*?)\s*$/i
+// Operator brand at the head of a "the <Company>, Inc. outpost ..." phrase.
+const OP_HEAD = /^(?:the\s+)?(.+?)(?:[,.]?\s*(?:inc|corp|ltd|co)\b|\s+outpost\b|[,.]|$)/i
+
+/**
+ * Resolve a pickup/destination string to a known location. A direct name match
+ * wins first; when that fails and the text carries an "on <body>" qualifier, fall
+ * back to operator + body - so "the Rayari, Inc. outpost on Cellin" lands on Hickes
+ * (the only Rayari outpost on Cellin) even though "Hickes" never appears in the
+ * text. An operator phrase we can't place returns NO match (the user picks) rather
+ * than a confident wrong guess.
+ */
+export function resolveLocation(raw: string, locations: Location[]): MatchResult {
+  const names = locations.map((l) => l.name)
+  const input = raw.trim()
+  const bm = ON_BODY.exec(input)
+  const bodyHint = bm ? bm[1].trim() : ''
+  const core = bm ? input.slice(0, bm.index).trim() : input
+
+  // With a body qualifier, prefer the precise operator+body signal over a loose name
+  // match (which can latch onto a facility literally named after the operator, e.g.
+  // a location whose display name is just "Rayari").
+  if (bodyHint) {
+    const onBody = locations.filter((l) => l.body && similarity(l.body, bodyHint) >= 0.8)
+    if (onBody.length) {
+      const opm = OP_HEAD.exec(core)
+      const opHint = opm ? opm[1].trim() : ''
+      if (opHint) {
+        const ranked = onBody
+          .map((l) => ({ l, s: l.operator ? similarity(l.operator, opHint) : 0 }))
+          .sort((a, b) => b.s - a.s)
+        if (ranked[0] && ranked[0].s >= 0.6)
+          return {
+            input,
+            match: ranked[0].l.name,
+            score: Math.max(0.85, ranked[0].s),
+            suggestions: onBody.slice(0, 5).map((l) => l.name)
+          }
+      }
+      // No operator to choose by: try a name match limited to that body.
+      const inBody = bestMatch(core, onBody.map((l) => l.name))
+      if (inBody.match) return { ...inBody, input }
+      if (onBody.length === 1)
+        return { input, match: onBody[0].name, score: 0.85, suggestions: onBody.slice(0, 5).map((l) => l.name) }
+      // Several on that body, nothing to choose between them: let the user pick.
+      return { input, match: null, score: 0, suggestions: onBody.slice(0, 5).map((l) => l.name) }
+    }
+    // Body not in our data: try a plain name match on the core, else don't guess.
+    const direct = bestMatch(core, names)
+    if (direct.match) return { ...direct, input }
+    return { input, match: null, score: 0, suggestions: bestMatch(input, names).suggestions }
+  }
+
+  return bestMatch(input, names)
+}
+
 /** Fuzzy-match parsed objectives against the synced UEX commodity/location lists. */
 export function matchObjectives(
   raw: RawObjective[],
@@ -355,11 +446,10 @@ export function matchObjectives(
   locations: Location[]
 ): OcrObjective[] {
   const commodityNames = commodities.map((c) => c.name)
-  const locationNames = locations.map((l) => l.name)
   return raw.map((o) => ({
     commodity: bestMatch(o.commodity, commodityNames),
     scuAmount: o.scuAmount,
-    destination: bestMatch(o.destination, locationNames),
-    pickups: o.pickups?.map((p) => bestMatch(p, locationNames))
+    destination: resolveLocation(o.destination, locations),
+    pickups: dedupePickups(o.pickups?.map((p) => resolveLocation(p, locations)))
   }))
 }

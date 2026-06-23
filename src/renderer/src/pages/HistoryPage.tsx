@@ -83,19 +83,11 @@ export default function HistoryPage(): React.ReactElement {
         subtitle={`${completed.length} completed · ${abandoned.length} abandoned`}
         right={
           <Btn
-            onClick={() => {
-              if (confirmClear) {
-                clearHistory()
-                setConfirmClear(false)
-              } else {
-                setConfirmClear(true)
-              }
-            }}
-            onMouseLeave={() => setConfirmClear(false)}
+            onClick={() => setConfirmClear(true)}
             style={{
-              border: `1px solid ${confirmClear ? C.red : 'rgba(255,255,255,0.18)'}`,
+              border: `1px solid rgba(255,255,255,0.18)`,
               background: 'transparent',
-              color: confirmClear ? C.red : C.dim,
+              color: C.dim,
               fontFamily: F.display,
               fontSize: 11,
               letterSpacing: '0.14em',
@@ -104,10 +96,23 @@ export default function HistoryPage(): React.ReactElement {
             }}
             hoverStyle={{ border: `1px solid ${C.red}`, color: C.red }}
           >
-            {confirmClear ? 'CONFIRM CLEAR?' : 'CLEAR HISTORY'}
+            CLEAR HISTORY
           </Btn>
         }
       />
+
+      {confirmClear && (
+        <ConfirmModal
+          title="Clear history?"
+          body="This permanently removes every finished contract and its earnings. It can't be undone."
+          confirmLabel="CLEAR HISTORY"
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={() => {
+            clearHistory()
+            setConfirmClear(false)
+          }}
+        />
+      )}
 
       <div
         style={{
@@ -358,6 +363,53 @@ function RewardCell({ entry }: { entry: HistoryEntry }): React.ReactElement {
         )}
       </span>
     </Btn>
+  )
+}
+
+function ConfirmModal({
+  title,
+  body,
+  confirmLabel,
+  onCancel,
+  onConfirm
+}: {
+  title: string
+  body: string
+  confirmLabel: string
+  onCancel: () => void
+  onConfirm: () => void
+}): React.ReactElement {
+  return (
+    <div
+      onClick={onCancel}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 'min(440px, 90vw)', background: '#05080a', border: `1px solid ${C.red}`, boxShadow: '0 18px 50px rgba(0,0,0,0.7)', padding: '22px 24px' }}
+      >
+        <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.06em', color: C.text, textShadow: GLOW, marginBottom: 10 }}>
+          {title}
+        </div>
+        <p style={{ fontFamily: F.body, fontSize: 13, lineHeight: 1.6, color: C.dim, margin: '0 0 20px' }}>{body}</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <Btn
+            onClick={onCancel}
+            style={{ border: `1px solid rgba(255,255,255,0.2)`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', padding: '8px 16px', cursor: 'pointer' }}
+            hoverStyle={{ color: C.text, borderColor: C.body }}
+          >
+            CANCEL
+          </Btn>
+          <Btn
+            onClick={onConfirm}
+            style={{ border: `1px solid ${C.red}`, background: 'transparent', color: C.red, fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', padding: '8px 16px', cursor: 'pointer' }}
+            hoverStyle={{ background: C.red, color: '#000' }}
+          >
+            {confirmLabel}
+          </Btn>
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -20,6 +20,20 @@ export interface StopItem {
   pickups?: string[]
 }
 
+export interface PickupItem {
+  objectiveId: string
+  contractId: string
+  ref: string
+  commodity: string
+  scu: number
+  boxStr: string
+  boxCount: number
+  /** where this cargo is headed. */
+  destination: string
+  /** loads from more than one place (load what's here). */
+  split: boolean
+}
+
 export interface Stop {
   destination: string
   idx: number
@@ -33,6 +47,12 @@ export interface Stop {
   totSCU: number
   totBoxes: number
   totContracts: number
+  /** cargo PICKED UP at this location (shown under the drop-offs). */
+  pickups?: PickupItem[]
+  /** a location you only pick up at (no delivery here). */
+  pickupOnly?: boolean
+  /** the run's starting location - always first, even with nothing to load. */
+  start?: boolean
 }
 
 export interface DerivedContractObjective {
@@ -132,6 +152,123 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
       totContracts
     }
   })
+}
+
+const normLoc = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** Delivery stops with the cargo you PICK UP at each location attached, plus a stop
+ *  for any pickup-only location (you visit it but drop nothing there). A pickup-only
+ *  stop is placed just before the earliest delivery that needs its cargo. When a
+ *  starting location is set, the run leads with it: anything you load there shows
+ *  first, and its own delivery (if any) stays a later stop. */
+export function deriveStopsWithPickups(
+  contracts: HaulingContract[],
+  order: string[],
+  startLocation?: string
+): Stop[] {
+  const stops = deriveStops(contracts, order)
+  const live = activeContracts(contracts)
+  const startKey = startLocation ? normLoc(startLocation) : ''
+
+  const groups = new Map<string, { name: string; items: PickupItem[] }>()
+  for (const c of live) {
+    for (const o of c.objectives) {
+      if (o.delivered) continue
+      const locs = o.pickups && o.pickups.length ? o.pickups : c.pickup ? [c.pickup] : []
+      // Dedupe pickup locations: a "split pickup" objective can list the same
+      // terminal twice, which would otherwise show (and count) the cargo twice.
+      const byKey = new Map<string, string>()
+      for (const pu of locs) {
+        const k = normLoc(pu)
+        if (k && !byKey.has(k)) byKey.set(k, pu)
+      }
+      const item: PickupItem = {
+        objectiveId: o.id,
+        contractId: c.id,
+        ref: c.ref,
+        commodity: o.commodity,
+        scu: o.scuAmount,
+        boxStr: boxBreakdown(o.boxes),
+        boxCount: boxCount(o.boxes),
+        destination: o.destination,
+        split: byKey.size > 1
+      }
+      for (const [key, name] of byKey) {
+        const g = groups.get(key) ?? { name, items: [] }
+        g.items.push(item)
+        groups.set(key, g)
+      }
+    }
+  }
+
+  // The starting location leads the run. Whatever loads there shows at the top
+  // (pulled out so it doesn't also hang off the same place's later delivery stop).
+  let startStop: Stop | null = null
+  if (startKey) {
+    const g = groups.get(startKey)
+    if (g) groups.delete(startKey)
+    const split = splitDestination(startLocation as string)
+    startStop = {
+      destination: startLocation as string,
+      idx: -1,
+      n: '↑',
+      code: split.code,
+      name: split.name || (startLocation as string),
+      region: split.region,
+      color: '#5fd089',
+      items: [],
+      totSCU: 0,
+      totBoxes: 0,
+      totContracts: 0,
+      pickups: g ? g.items : [],
+      pickupOnly: true,
+      start: true
+    }
+  }
+
+  const used = new Set<string>()
+  for (const s of stops) {
+    const g = groups.get(normLoc(s.destination))
+    if (g) {
+      s.pickups = g.items
+      used.add(normLoc(s.destination))
+    }
+  }
+
+  const pos = new Map<string, number>()
+  stops.forEach((s, i) => pos.set(normLoc(s.destination), i))
+  const extras: Array<{ at: number; stop: Stop }> = []
+  for (const [key, g] of groups) {
+    if (used.has(key)) continue
+    const at = Math.min(...g.items.map((it) => pos.get(normLoc(it.destination)) ?? stops.length))
+    const split = splitDestination(g.name)
+    extras.push({
+      at,
+      stop: {
+        destination: g.name,
+        idx: -1,
+        n: '↑',
+        code: split.code,
+        name: split.name || g.name,
+        region: split.region,
+        color: '#5fd089',
+        items: [],
+        totSCU: 0,
+        totBoxes: 0,
+        totContracts: 0,
+        pickups: g.items,
+        pickupOnly: true
+      }
+    })
+  }
+  const out: Stop[] = []
+  for (let i = 0; i < stops.length; i++) {
+    for (const e of extras) if (e.at === i) out.push(e.stop)
+    out.push(stops[i])
+  }
+  for (const e of extras) if (e.at >= stops.length) out.push(e.stop)
+  if (startStop) out.unshift(startStop)
+  return out
 }
 
 export function deriveContracts(contracts: HaulingContract[]): DerivedContract[] {

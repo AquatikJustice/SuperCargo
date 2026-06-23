@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useStore, type ViewId } from '../state/store'
+import { useNarrow } from '../state/useViewport'
 import { C, F } from '../theme'
 import { Btn } from './ui'
 import { MADE_BY_COMMUNITY } from '@shared/legal'
@@ -15,6 +16,9 @@ const NAV: Array<{ id: ViewId; label: string }> = [
 export default function BottomNav(): React.ReactElement {
   const view = useStore((s) => s.view)
   const setView = useStore((s) => s.setView)
+  // Below this the side panels would crowd out the nav tabs; on a portrait/half
+  // window keep the tabs full-width and drop the secondary panels.
+  const narrow = useNarrow(820)
 
   return (
     <div style={{ display: 'flex', height: 70, borderTop: `1px solid ${C.line}`, flex: 'none' }}>
@@ -44,8 +48,8 @@ export default function BottomNav(): React.ReactElement {
           </Btn>
         )
       })}
-      <WatcherStatusPanel />
-      <AttributionPanel />
+      {!narrow && <WatcherStatusPanel />}
+      {!narrow && <AttributionPanel />}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 {
   "name": "supercargo",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Star Citizen hauling manifest & cargo planning desktop app",
   "main": "./out/main/index.js",
   "author": "Travis",

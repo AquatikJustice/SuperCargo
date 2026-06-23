@@ -2,17 +2,6 @@
   "source": "https://uexcorp.space/api/2.0/terminals + scunpacked starmap_positions + trade_locations",
   "locations": [
     {
-      "name": "\"The Orphanage\"",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": 18703515181.48589,
-      "y": -22121557649.606583,
-      "z": 182182.046452,
-      "system": "stanton"
-    },
-    {
       "name": "ARC-L1 Wide Forest Station",
       "code": "ARC-L1",
       "maxContainerSize": 32,
@@ -118,7 +107,8 @@
       "x": 18379366511.42695,
       "y": -22000452660.046917,
       "z": 10620.368276,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Wala"
     },
     {
       "name": "ArcCorp Mining Area 048",
@@ -129,7 +119,8 @@
       "x": 18379471117.19944,
       "y": -22000369011.556034,
       "z": -196339.526963,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Wala"
     },
     {
       "name": "ArcCorp Mining Area 056",
@@ -140,7 +131,8 @@
       "x": 18379765855.56446,
       "y": -22000516914.62886,
       "z": 253154.550617,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Wala"
     },
     {
       "name": "ArcCorp Mining Area 061",
@@ -151,7 +143,8 @@
       "x": 18379628269.999943,
       "y": -22000714315.963623,
       "z": -132569.892484,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Wala"
     },
     {
       "name": "ArcCorp Mining Area 141",
@@ -162,7 +155,8 @@
       "x": -18930557706.53434,
       "y": -2609978403.3315363,
       "z": -232759.931235,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Daymar"
     },
     {
       "name": "ArcCorp Mining Area 157",
@@ -173,18 +167,8 @@
       "x": -19022910775.949898,
       "y": -2613773795.781988,
       "z": 220312.841505,
-      "system": "stanton"
-    },
-    {
-      "name": "Area 18",
-      "code": "Casaba Area 18",
-      "maxContainerSize": 0,
-      "uexId": 94,
-      "hasElevator": false,
-      "x": 18586917330.719185,
-      "y": -22152033653.831776,
-      "z": -262094.438106,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Yela"
     },
     {
       "name": "Area18",
@@ -206,18 +190,8 @@
       "x": 9198410877.015762,
       "y": 5311267744.566891,
       "z": -92750.374668,
-      "system": "pyro"
-    },
-    {
-      "name": "Ashburn Channel Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987608095.40264,
-      "y": -2709267602.776548,
-      "z": -37129.182627,
-      "system": "stanton"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
       "name": "Ashland",
@@ -228,7 +202,8 @@
       "x": 42296606681.00438,
       "y": -7508659828.084339,
       "z": 265629.541865,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Ignis"
     },
     {
       "name": "Astor's Clearing",
@@ -242,6 +217,13 @@
       "system": "stanton"
     },
     {
+      "name": "August Dunlow Spaceport",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
+    },
+    {
       "name": "Baijini Point",
       "code": "Baijini Point",
       "maxContainerSize": 32,
@@ -253,17 +235,6 @@
       "system": "stanton"
     },
     {
-      "name": "Barton Flats Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": 12905811977.20074,
-      "y": 41172671.04558,
-      "z": -159881.078736,
-      "system": "stanton"
-    },
-    {
       "name": "Blackrock Exchange",
       "code": "Shop Blackrock Exchange",
       "maxContainerSize": 0,
@@ -272,18 +243,16 @@
       "x": -52336731329.147514,
       "y": -43918036886.72484,
       "z": -31481.893465,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
-      "name": "Bud's Growery",
+      "name": "Bountiful Harvest",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
       "hasElevator": true,
-      "x": 22436110942.544876,
-      "y": 37290194105.7969,
-      "z": 115270.872745,
-      "system": "stanton"
+      "body": "Daymar"
     },
     {
       "name": "Bueno Ravine",
@@ -294,7 +263,8 @@
       "x": -8900641166.130352,
       "y": -15417499203.701294,
       "z": -57520.632084,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
     },
     {
       "name": "Bullock's Reach",
@@ -305,7 +275,8 @@
       "x": -52336249629.29081,
       "y": -43918218412.69672,
       "z": -93112.5625,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Canard View",
@@ -316,7 +287,8 @@
       "x": -52336719517.25613,
       "y": -43918048691.44216,
       "z": -102070.138758,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Carver's Ridge",
@@ -327,7 +299,8 @@
       "x": -8900616258.409298,
       "y": -15417487752.232645,
       "z": -48106.482573,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
     },
     {
       "name": "Chawla's Beach",
@@ -338,18 +311,8 @@
       "x": 42614206918.97057,
       "y": -7273113044.330512,
       "z": 189412.479765,
-      "system": "pyro"
-    },
-    {
-      "name": "Checkmate",
-      "code": "Checkmate",
-      "maxContainerSize": 32,
-      "uexId": 436,
-      "hasElevator": true,
-      "x": 1833362390.019977,
-      "y": 10434543320.869617,
-      "z": 2570930.841284,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro IV"
     },
     {
       "name": "Checkmate Station",
@@ -357,6 +320,24 @@
       "maxContainerSize": 0,
       "uexId": 442,
       "hasElevator": true
+    },
+    {
+      "name": "Covalex Distribution Center S1DC06",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "operator": "Covalex",
+      "body": "Hurston"
+    },
+    {
+      "name": "Covalex Distribution Center S4DC05",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "operator": "Covalex",
+      "body": "microTech"
     },
     {
       "name": "Covalex Distribution Centre S4DC05",
@@ -411,7 +392,9 @@
       "x": 22462669391.708767,
       "y": 37185744175.4434,
       "z": 812169.190745,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "CryAstro",
+      "body": "microTech"
     },
     {
       "name": "Cry-Astro Processing Plant 34-12",
@@ -422,7 +405,9 @@
       "x": 22461768967.633644,
       "y": 37184862924.49309,
       "z": -350639.382315,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "CryAstro",
+      "body": "microTech"
     },
     {
       "name": "Cutter's Rig",
@@ -433,7 +418,8 @@
       "x": 12850001974.162962,
       "y": -200496.928163,
       "z": 867564.004635,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "Devlin Scrap & Salvage",
@@ -444,7 +430,8 @@
       "x": 22436075655.795883,
       "y": 37290577556.55173,
       "z": 25984.633517,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Euterpe"
     },
     {
       "name": "Dinger's Depot",
@@ -480,17 +467,6 @@
       "system": "stanton"
     },
     {
-      "name": "Dunlow Ridge Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930591389.157986,
-      "y": -2609877833.508542,
-      "z": 75331.286385,
-      "system": "stanton"
-    },
-    {
       "name": "Dupree Industrial Manufacturing Facility",
       "code": "",
       "maxContainerSize": 0,
@@ -499,18 +475,16 @@
       "x": 12850696518.79,
       "y": -969806.5,
       "z": 68635.15,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
-      "name": "Eager Flats Aid Shelter",
+      "name": "Echo Isle",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
       "hasElevator": true,
-      "x": -18930338994.471264,
-      "y": -2610263682.772551,
-      "z": 190096.59476,
-      "system": "stanton"
+      "body": "Hurston"
     },
     {
       "name": "Endgame",
@@ -543,7 +517,8 @@
       "x": 42614520334.90412,
       "y": -7273203700.560071,
       "z": 262249.667636,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro IV"
     },
     {
       "name": "Feo Canyon Depot",
@@ -565,18 +540,8 @@
       "x": 12850260500.6821,
       "y": -197870.934748,
       "z": 961998.923773,
-      "system": "stanton"
-    },
-    {
-      "name": "Flanagan's Ravine Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987805401.642612,
-      "y": -2708857938.687181,
-      "z": 84996.712245,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "Frigid Knot",
@@ -587,7 +552,16 @@
       "x": -8900581800.985285,
       "y": -15417101983.994484,
       "z": -342910.010608,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
+    },
+    {
+      "name": "Gallete Farms",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "body": "Cellin"
     },
     {
       "name": "Gaslight",
@@ -609,7 +583,8 @@
       "x": 42614556792.61686,
       "y": -7273179159.64573,
       "z": 265305.414976,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro IV"
     },
     {
       "name": "Gray Gardens Depot",
@@ -631,7 +606,9 @@
       "x": 12850049635.960781,
       "y": -656296.424811,
       "z": 636321.907941,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Greycat",
+      "body": "Hurston"
     },
     {
       "name": "Greycat Stanton IV Production Complex-A",
@@ -642,18 +619,9 @@
       "x": 22461661905.144794,
       "y": 37185603796.0801,
       "z": -895144.87,
-      "system": "stanton"
-    },
-    {
-      "name": "Grim HEX",
-      "code": "GrimHEX",
-      "maxContainerSize": 32,
-      "uexId": 27,
-      "hasElevator": false,
-      "x": -19023485457.614876,
-      "y": -2613612586.748472,
-      "z": -2042,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Greycat",
+      "body": "microTech"
     },
     {
       "name": "GrimHEX",
@@ -675,7 +643,8 @@
       "x": 12905730686.345882,
       "y": 41135771.383034006,
       "z": 206879.087475,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Aberdeen"
     },
     {
       "name": "HDMS-Bezdek",
@@ -697,7 +666,8 @@
       "x": 12850172612.873583,
       "y": -730502.066139,
       "z": 620924.440594,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Hadley",
@@ -708,7 +678,8 @@
       "x": 12851083259.617704,
       "y": -583971.055696,
       "z": -518485.462709,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Hahn",
@@ -719,7 +690,8 @@
       "x": 12792538975.776962,
       "y": -74756797.48343201,
       "z": 95247.266076,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Magda"
     },
     {
       "name": "HDMS-Lathan",
@@ -730,7 +702,8 @@
       "x": 12893012501.567974,
       "y": -31442443.044386003,
       "z": 55843.181685,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Arial"
     },
     {
       "name": "HDMS-Norgaard",
@@ -741,7 +714,8 @@
       "x": 12905616064.523312,
       "y": 41150868.734238006,
       "z": 132097.595094,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Aberdeen"
     },
     {
       "name": "HDMS-Oparei",
@@ -752,7 +726,8 @@
       "x": 12849900967.009779,
       "y": -72590.748724,
       "z": -828070.672939,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Perlman",
@@ -763,7 +738,8 @@
       "x": 12792545663.384417,
       "y": -74176659.38293801,
       "z": -116687.783422,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Magda"
     },
     {
       "name": "HDMS-Pinewood",
@@ -774,7 +750,8 @@
       "x": 12851442656.995773,
       "y": 90029.273051,
       "z": 149896.296232,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Ryder",
@@ -785,7 +762,8 @@
       "x": 12830018841.60614,
       "y": 114650227.21985699,
       "z": 73709.290517,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Ita"
     },
     {
       "name": "HDMS-Stanhope",
@@ -796,7 +774,8 @@
       "x": 12849808484.922792,
       "y": 198312.645122,
       "z": 735120.829169,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Thedus",
@@ -807,7 +786,8 @@
       "x": 12850900414.550844,
       "y": 891524.914059,
       "z": 101509.036393,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "HDMS-Woodruff",
@@ -818,7 +798,8 @@
       "x": 12830309507.80775,
       "y": 115133269.68359,
       "z": 210466.567686,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Ita"
     },
     {
       "name": "HDPC-Cassillo",
@@ -829,7 +810,9 @@
       "x": 12849667377.059887,
       "y": 615354.400685,
       "z": -2353.089599,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Hurston",
+      "body": "Hurston"
     },
     {
       "name": "HDPC-Farnesway",
@@ -840,7 +823,9 @@
       "x": 12850586316.337423,
       "y": 63887.560398,
       "z": 989574.572256,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Hurston",
+      "body": "Hurston"
     },
     {
       "name": "Hickes Research Outpost",
@@ -851,7 +836,9 @@
       "x": -18987607849.176247,
       "y": -2708996569.998123,
       "z": -260315.952851,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "Cellin"
     },
     {
       "name": "Humboldt Mines",
@@ -862,7 +849,8 @@
       "x": 18703612482.271862,
       "y": -22121843952.38168,
       "z": -112544.821399,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Lyria"
     },
     {
       "name": "HUR-L1 Green Glade Station",
@@ -928,18 +916,8 @@
       "x": 9198800311.717115,
       "y": 5310500634.709372,
       "z": -272467.223889,
-      "system": "pyro"
-    },
-    {
-      "name": "Julep Ravine Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987722646.958466,
-      "y": -2709065957.364554,
-      "z": -228949.606357,
-      "system": "stanton"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
       "name": "Jumptown",
@@ -950,7 +928,8 @@
       "x": -18930459100.42009,
       "y": -2609916049.8639584,
       "z": -147633.537765,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Crusader"
     },
     {
       "name": "Kabir's Post",
@@ -961,7 +940,8 @@
       "x": 42296743348.6167,
       "y": -7508286316.898287,
       "z": 108786.853475,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Ignis"
     },
     {
       "name": "Kinder Plots",
@@ -972,7 +952,8 @@
       "x": -52336776286.47191,
       "y": -43918175963.15171,
       "z": -115526.495668,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Kudre Ore",
@@ -983,7 +964,8 @@
       "x": -18930392922.380646,
       "y": -2610335858.792934,
       "z": -184862.263018,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Daymar"
     },
     {
       "name": "Last Ditch",
@@ -994,7 +976,8 @@
       "x": 9198273955.948278,
       "y": 5310711524.725226,
       "z": 508874.429613,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
       "name": "Last Landings",
@@ -1005,7 +988,8 @@
       "x": -52336804142.38755,
       "y": -43918240543.90625,
       "z": -7854.439822,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Levski",
@@ -1038,7 +1022,8 @@
       "x": 18703788971.06759,
       "y": -22121521967.374832,
       "z": 24939.872495,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Lyria"
     },
     {
       "name": "Ludlow",
@@ -1049,6 +1034,15 @@
       "x": 12849578424.873047,
       "y": -467858.016386,
       "z": 111090.62672,
+      "system": "stanton",
+      "body": "Hurston"
+    },
+    {
+      "name": "Magnus Gateway (Stanton)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
       "system": "stanton"
     },
     {
@@ -1060,7 +1054,15 @@
       "x": 12850303085.782219,
       "y": 128324.546171,
       "z": 979766.026532,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
+    },
+    {
+      "name": "Maria Pure of Heart",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
     },
     {
       "name": "Megumi Refueling",
@@ -1137,7 +1139,9 @@
       "x": 22462969867.484795,
       "y": 37186212832.6501,
       "z": -19152.54,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "microTech",
+      "body": "microTech"
     },
     {
       "name": "microTech Logistics Depot S4LD13",
@@ -1148,7 +1152,9 @@
       "x": 22462929090.434795,
       "y": 37185565430.0001,
       "z": 505834.1,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "microTech",
+      "body": "microTech"
     },
     {
       "name": "Mogote Aid Shelter",
@@ -1159,7 +1165,8 @@
       "x": -18987809783.623302,
       "y": -2708958870.967037,
       "z": 160874.780687,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Cellin"
     },
     {
       "name": "Narena's Rest",
@@ -1170,7 +1177,15 @@
       "x": -8901207950.05631,
       "y": -15417002896.2801,
       "z": -11780.327947,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
+    },
+    {
+      "name": "NB Int. Spaceport",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
     },
     {
       "name": "New Babbage",
@@ -1184,37 +1199,26 @@
       "system": "stanton"
     },
     {
-      "name": "Nyx - Castra Jump Point",
+      "name": "Nyx Gateway (Pyro)",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
-      "hasElevator": true,
-      "x": -13499935650.449425,
-      "y": -23382715137.804523,
-      "z": 0,
-      "system": "nyx"
-    },
-    {
-      "name": "Nyx - Pyro Jump Point",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -12000043844.931711,
-      "y": 20784584131.46289,
-      "z": 0,
-      "system": "nyx"
-    },
-    {
-      "name": "Nyx Gateway",
-      "code": "Nyx Gateway (Stanton)",
-      "maxContainerSize": 32,
-      "uexId": 253,
       "hasElevator": true,
       "x": 32993982418.742573,
       "y": -38151730072.59026,
       "z": 6727.802807,
       "system": "pyro"
+    },
+    {
+      "name": "Nyx Gateway (Stanton)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -62284323873.65362,
+      "y": 23467575725.722538,
+      "z": 20198379369.281647,
+      "system": "stanton"
     },
     {
       "name": "Orbituary",
@@ -1247,7 +1251,8 @@
       "x": 9198926641.479586,
       "y": 5310692057.529628,
       "z": -136103.973164,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
       "name": "Paradise Cove",
@@ -1258,7 +1263,8 @@
       "x": 18379729285.277042,
       "y": -22000684679.223866,
       "z": 162334.817229,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Lyria"
     },
     {
       "name": "Patch City",
@@ -1324,7 +1330,15 @@
       "x": 12849777326.785019,
       "y": 262265.674173,
       "z": -686080.061535,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
+    },
+    {
+      "name": "Port Olisar",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
     },
     {
       "name": "Port Tressler",
@@ -1346,18 +1360,30 @@
       "x": 42263566231.23191,
       "y": -7355986773.051652,
       "z": 154695.129033,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Adir"
     },
     {
-      "name": "Pyro Gateway",
-      "code": "Pyro Gateway (Stanton)",
-      "maxContainerSize": 32,
-      "uexId": 252,
+      "name": "Pyro Gateway (Nyx)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
       "hasElevator": true,
       "x": -12000044529.892805,
       "y": 20784580528.598274,
       "z": -38674.228082999995,
       "system": "nyx"
+    },
+    {
+      "name": "Pyro Gateway (Stanton)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 3310495680.0181007,
+      "y": -27979395047.870785,
+      "z": -2676322341.089648,
+      "system": "stanton"
     },
     {
       "name": "Rappel",
@@ -1368,7 +1394,8 @@
       "x": 12850810045.127275,
       "y": -661889.742397,
       "z": 663889.093977,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "Rat's Nest",
@@ -1390,7 +1417,8 @@
       "x": 22462441156.079376,
       "y": 37185669370.99062,
       "z": 932645.25482,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Calliope"
     },
     {
       "name": "Rayari Anvik Research Outpost",
@@ -1401,7 +1429,9 @@
       "x": 22525616564.388622,
       "y": 37202521456.3169,
       "z": 84723.877576,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "Calliope"
     },
     {
       "name": "Rayari Cantwell Research Outpost",
@@ -1412,7 +1442,9 @@
       "x": 22447225109.615246,
       "y": 37280685133.7071,
       "z": 142842.297229,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "Clio"
     },
     {
       "name": "Rayari Deltana Research Outpost",
@@ -1423,7 +1455,9 @@
       "x": 22461391342.503784,
       "y": 37185096666.03534,
       "z": 316681.366334,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "microTech"
     },
     {
       "name": "Rayari Kaltag Research Outpost",
@@ -1434,7 +1468,9 @@
       "x": 22526006463.734886,
       "y": 37202655511.399796,
       "z": -124485.412183,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "Calliope"
     },
     {
       "name": "Rayari McGrath Research Outpost",
@@ -1445,7 +1481,9 @@
       "x": 22447116380.302612,
       "y": 37280384141.92514,
       "z": -18785.980507,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "Rayari",
+      "body": "Clio"
     },
     {
       "name": "Reclamation & Disposal Orinth",
@@ -1456,7 +1494,22 @@
       "x": 12850458295.763449,
       "y": -794237.216741,
       "z": 607701.139709,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
+    },
+    {
+      "name": "Reclamation and Disposal in Lorville",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
+    },
+    {
+      "name": "Riker Memorial Spaceport",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
     },
     {
       "name": "Rod's Fuel 'N Supplies",
@@ -1478,7 +1531,8 @@
       "x": -52336718331.45731,
       "y": -43918416628.460434,
       "z": 77972.606658,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Ruin Station",
@@ -1500,7 +1554,8 @@
       "x": 1719831469.741281,
       "y": -8092299589.5607,
       "z": 170820.204183,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro I"
     },
     {
       "name": "Sacren's Plot",
@@ -1511,7 +1566,8 @@
       "x": 42614215579.06247,
       "y": -7273124923.757171,
       "z": 194621.1888,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro IV"
     },
     {
       "name": "Sakura Sun Goldenrod Workcenter",
@@ -1522,7 +1578,9 @@
       "x": 22461911830.052658,
       "y": 37184821334.37438,
       "z": -343264.571052,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "SakuraSun",
+      "body": "microTech"
     },
     {
       "name": "Sakura Sun Magnolia Workcenter",
@@ -1533,7 +1591,9 @@
       "x": 12850227719.89123,
       "y": -864792.873355,
       "z": -446960.041887,
-      "system": "stanton"
+      "system": "stanton",
+      "operator": "SakuraSun",
+      "body": "Hurston"
     },
     {
       "name": "Samson & Son's Salvage Center",
@@ -1547,6 +1607,14 @@
       "system": "stanton"
     },
     {
+      "name": "Scraper's Turn",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "body": "Pyro VI"
+    },
+    {
       "name": "Seer's Canyon",
       "code": "Shop Seer's Canyon",
       "maxContainerSize": 0,
@@ -1555,7 +1623,8 @@
       "x": 42216831419.65104,
       "y": -7425848127.167816,
       "z": -119605.389702,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Vatra"
     },
     {
       "name": "Seraphim Station",
@@ -1577,7 +1646,8 @@
       "x": -8900904159.310019,
       "y": -15416726243.740683,
       "z": -57006.207933,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
     },
     {
       "name": "Shady Glen Farms",
@@ -1588,7 +1658,8 @@
       "x": 18379628687.41272,
       "y": -22000197782.73065,
       "z": 87534.217163,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Wala"
     },
     {
       "name": "Shepherd's Rest",
@@ -1599,7 +1670,8 @@
       "x": -8900783030.11479,
       "y": -15416765829.285278,
       "z": -202126.326212,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
     },
     {
       "name": "Shubin Mining Facility SAL-2",
@@ -1610,7 +1682,8 @@
       "x": 18703757807.38505,
       "y": -22121703753.134045,
       "z": 156667.8916,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Lyria"
     },
     {
       "name": "Shubin Mining Facility SAL-5",
@@ -1621,7 +1694,8 @@
       "x": 18703705241.5723,
       "y": -22121571772.88707,
       "z": 185820.579425,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Lyria"
     },
     {
       "name": "Shubin Mining Facility SCD-1",
@@ -1632,7 +1706,8 @@
       "x": -18930413514.36279,
       "y": -2610308346.967502,
       "z": 221253.34404,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Daymar"
     },
     {
       "name": "Shubin Mining Facility SM0-10",
@@ -1643,7 +1718,8 @@
       "x": 22462170728.61854,
       "y": 37184794108.94471,
       "z": 298799.440766,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "microTech"
     },
     {
       "name": "Shubin Mining Facility SM0-13",
@@ -1654,7 +1730,8 @@
       "x": 22461912433.839996,
       "y": 37184763656.493904,
       "z": 97767.182049,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "microTech"
     },
     {
       "name": "Shubin Mining Facility SM0-18",
@@ -1665,7 +1742,8 @@
       "x": 22463005462.59668,
       "y": 37185355423.148155,
       "z": 43836.862656,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "microTech"
     },
     {
       "name": "Shubin Mining Facility SM0-22",
@@ -1676,7 +1754,8 @@
       "x": 22462109551.033733,
       "y": 37184922374.138824,
       "z": 568174.190108,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "microTech"
     },
     {
       "name": "Shubin Mining Facility SMCa-6",
@@ -1687,7 +1766,8 @@
       "x": 22525851263.081974,
       "y": 37202882687.90001,
       "z": 24935.519649,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Calliope"
     },
     {
       "name": "Shubin Mining Facility SMCa-8",
@@ -1698,7 +1778,8 @@
       "x": 22525961362.5329,
       "y": 37202818237.25622,
       "z": -58400.32741,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Calliope"
     },
     {
       "name": "Slowburn Depot",
@@ -1720,18 +1801,30 @@
       "x": 1719643854.9842849,
       "y": -8091873750.286217,
       "z": -103639.219527,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro I"
     },
     {
-      "name": "Stanton Gateway",
-      "code": "Stanton Gateway (Pyro)",
-      "maxContainerSize": 32,
-      "uexId": 520,
+      "name": "Stanton Gateway (Nyx)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
       "hasElevator": true,
       "x": -13499931610.233513,
       "y": -23382701964.218426,
       "z": -36662.089647999994,
       "system": "nyx"
+    },
+    {
+      "name": "Stanton Gateway (Pyro)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -37609223453.24672,
+      "y": 37435743642.387474,
+      "z": 6727.802807,
+      "system": "pyro"
     },
     {
       "name": "Starlight Service Station",
@@ -1753,7 +1846,8 @@
       "x": -52336778620.95711,
       "y": -43918189705.63683,
       "z": -115813.336855,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro VI"
     },
     {
       "name": "Sunset Mesa",
@@ -1764,24 +1858,29 @@
       "x": 9198790736.149548,
       "y": 5310483748.38485,
       "z": -269591.417313,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
-      "name": "Tamdon Plains Aid Shelter",
+      "name": "Supply Room",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
       "hasElevator": true,
-      "x": -18930677653.408043,
-      "y": -2610183228.3478494,
-      "z": -259848.699769,
-      "system": "stanton"
+      "body": "Hurston"
     },
     {
-      "name": "Terra Gateway",
-      "code": "Terra Gateway (Stanton)",
-      "maxContainerSize": 32,
-      "uexId": 251,
+      "name": "Teasa Spaceport",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true
+    },
+    {
+      "name": "Terra Gateway (Stanton)",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
       "hasElevator": true,
       "x": 51118210044.76286,
       "y": -5270029473.660545,
@@ -1797,7 +1896,8 @@
       "x": -8901196933.41506,
       "y": -15416972500.373259,
       "z": 5799.239484,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
     },
     {
       "name": "The Yard",
@@ -1808,7 +1908,16 @@
       "x": -8900468610.927538,
       "y": -15416937006.30173,
       "z": 132065.861482,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro III"
+    },
+    {
+      "name": "Trading Post",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "body": "Pyro II"
     },
     {
       "name": "Tram & Myers Mining",
@@ -1819,7 +1928,8 @@
       "x": -18987852283.277554,
       "y": -2709007264.336514,
       "z": -98700.233272,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Cellin"
     },
     {
       "name": "Watcher's Depot",
@@ -1841,7 +1951,8 @@
       "x": 12850001690.220549,
       "y": -202816.335427,
       "z": 866880.872573,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     },
     {
       "name": "Windfall",
@@ -1855,17 +1966,6 @@
       "system": "pyro"
     },
     {
-      "name": "Wolf Point Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18930543959.317673,
-      "y": -2609879698.8653684,
-      "z": 95732.659059,
-      "system": "stanton"
-    },
-    {
       "name": "Yang's Place",
       "code": "",
       "maxContainerSize": 0,
@@ -1874,7 +1974,8 @@
       "x": 9198878681.370693,
       "y": 5310621841.445952,
       "z": -229886.1434,
-      "system": "pyro"
+      "system": "pyro",
+      "body": "Pyro II"
     },
     {
       "name": "Zephyr",
@@ -1885,7 +1986,8 @@
       "x": 12850565252.996412,
       "y": -133661.614184,
       "z": 986694.257507,
-      "system": "stanton"
+      "system": "stanton",
+      "body": "Hurston"
     }
   ]
 }

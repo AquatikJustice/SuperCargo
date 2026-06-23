@@ -36,19 +36,16 @@ export const F = {
 export const GLOW = '0 0 7px rgba(255,210,30,0.45)'
 export const GLOW_SOFT = '0 0 5px rgba(255,210,30,0.20)'
 
-/** One color per destination, picked by stop index. */
-export const STOP_COLORS = [
-  '#9fc6d6',
-  '#7fb89e',
-  '#c9b07e',
-  '#a89bc4',
-  '#d69b8a',
-  '#8ab0c9',
-  '#b3c47e'
-] as const
-
+/** A distinct color per destination, by stop index. A run can have dozens of stops
+ *  (10 contracts x ~4 drops), so instead of cycling a short list we spread hues by
+ *  the golden angle - consecutive stops land far apart on the wheel - and step the
+ *  lightness on each full wrap so two stops that share a hue still read differently.
+ *  Returned as an hsl() string, which both CSS and three.js accept. */
 export function stopColor(index: number): string {
-  return STOP_COLORS[index % STOP_COLORS.length]
+  const t = index * 137.508
+  const hue = Math.round(t % 360)
+  const light = 66 - (Math.floor(t / 360) % 3) * 9 // 66 / 57 / 48 per wrap
+  return `hsl(${hue}, 58%, ${light}%)`
 }
 
 export function fmt(n: number): string {

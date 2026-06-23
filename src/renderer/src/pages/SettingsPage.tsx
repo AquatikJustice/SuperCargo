@@ -244,8 +244,8 @@ export default function SettingsPage(): React.ReactElement {
         <span style={keyStyle}>Engine</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { id: 'tesseract', label: 'TESSERACT' },
-            { id: 'onnx', label: 'CUSTOM (ONNX)' }
+            { id: 'tesseract', label: 'TESSERACT' }
+            // Custom (ONNX) is hidden until a trained model ships.
           ].map((e) => {
             const active = (settings.ocrEngine || 'tesseract') === e.id
             return (

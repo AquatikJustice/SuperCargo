@@ -37,11 +37,25 @@ export function hasBlueprintMarker(raw: string): boolean {
   return /\[BP\]/i.test(raw)
 }
 
+// Hauling reputation tiers. Standard contracts lead with the tier ("Senior |
+// Medium Haul | ..."), but named ones bury it in the contract name ("Ling Family
+// Rookie Haul - ..."), so scan the whole title rather than trust the first segment.
+const RANKS = ['Trainee', 'Rookie', 'Junior', 'Experienced', 'Senior', 'Expert', 'Master']
+const RANK_RE = new RegExp(`\\b(${RANKS.join('|')})\\b`, 'i')
+
+function rankFromTitle(title: string, firstSegment: string): string {
+  const m = RANK_RE.exec(title)
+  if (m) return RANKS.find((r) => r.toLowerCase() === m[1].toLowerCase()) ?? m[1]
+  // No known tier word: a clean single-word first segment is probably an unlisted
+  // tier, but a multi-word name isn't a rank - leave it blank to edit by hand.
+  return /\s/.test(firstSegment) ? '' : firstSegment
+}
+
 export function parseContractTitle(raw: string): ParsedTitle {
   const title = cleanTitle(raw)
   const parts = title.split('|').map((p) => p.trim()).filter(Boolean)
 
-  const rank = parts[0] ?? ''
+  const rank = rankFromTitle(title, parts[0] ?? '')
   const haulType = parts[1] ?? ''
   let pickup = ''
 

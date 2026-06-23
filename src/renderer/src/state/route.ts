@@ -44,6 +44,8 @@ export interface RouteModel {
   nodes: RouteNode[]
   jobs: RouteJob[]
   jobInfo: JobInfo[]
+  /** index of the start depot node, when a starting location is set. */
+  depot?: number
 }
 
 export interface RouteLegItem {
@@ -146,19 +148,58 @@ function gatewaysBySystem(locations: Location[]): Map<string, Pos[]> {
   return m
 }
 
+/** Same physical place? Prefer the UEX id, fall back to name + system. */
+function sameLoc(a: Location | null, b: Location | null): boolean {
+  if (!a || !b) return false
+  if (a.uexId && b.uexId) return a.uexId === b.uexId
+  return norm(a.name) === norm(b.name) && (a.system ?? '') === (b.system ?? '')
+}
+
 export function buildRouteModel(
   contracts: HaulingContract[],
-  locations: Location[]
+  locations: Location[],
+  startLocation?: string
 ): RouteModel {
   const nodes: RouteNode[] = []
   const byKey = new Map<string, number>()
 
+  // Depot: where the run begins. Cargo whose pickup is the start location loads
+  // here and rides along, and the solver is forced to start from it. The start's
+  // own delivery (if any) stays a normal stop, visited later in the route.
+  const startLoc = startLocation ? matchLocation(startLocation, locations) : null
+  let depot: number | undefined
+  if (startLoc) {
+    const split = splitDestination(startLoc.name)
+    depot = nodes.length
+    byKey.set('depot', depot)
+    nodes.push({
+      key: 'depot',
+      label: startLoc.name,
+      code: startLoc.code || split.code,
+      region: split.region,
+      uexId: startLoc.uexId,
+      x: startLoc.x,
+      y: startLoc.y,
+      z: startLoc.z,
+      system: startLoc.system,
+      destStrings: []
+    })
+  }
+
   const nodeFor = (raw: string, isDest: boolean): number => {
     const loc = matchLocation(raw, locations)
+    // A pickup at the start location loads at the depot, never as its own stop.
+    if (!isDest && depot !== undefined && sameLoc(loc, startLoc)) return depot
     const split = splitDestination(raw)
     // Key by UEX terminal id when there is one; game-file locations (DCs, outposts)
     // share uexId 0, so key those by name or they'd all collide into one node.
-    const key = loc ? (loc.uexId ? `uex:${loc.uexId}` : `loc:${norm(loc.name)}`) : `raw:${norm(raw)}`
+    // Game-file locations share uexId 0; key by name + system so two same-named
+    // gateways ("Nyx Gateway" in Stanton vs in Pyro) stay distinct nodes.
+    const key = loc
+      ? loc.uexId
+        ? `uex:${loc.uexId}`
+        : `loc:${norm(loc.name)}|${loc.system ?? ''}`
+      : `raw:${norm(raw)}`
     let idx = byKey.get(key)
     if (idx === undefined) {
       idx = nodes.length
@@ -188,8 +229,16 @@ export function buildRouteModel(
       const destNode = nodeFor(o.destination, true)
       // A delivery can load from several pickups (many-to-one hauls). Split its SCU
       // across them so the solver routes through every pickup before the drop; the
-      // exact split is unknown, so spread it evenly.
-      const pickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
+      // exact split is unknown, so spread it evenly. Dedupe first - the same terminal
+      // listed twice would otherwise halve the SCU into two identical legs.
+      const rawPickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
+      const seenPu = new Set<string>()
+      const pickups = rawPickups.filter((p) => {
+        const k = norm(p)
+        if (seenPu.has(k)) return false
+        seenPu.add(k)
+        return true
+      })
       const base = Math.floor(o.scuAmount / pickups.length)
       const rem = o.scuAmount - base * pickups.length
       pickups.forEach((pu, i) => {
@@ -201,7 +250,7 @@ export function buildRouteModel(
       })
     }
   }
-  return { nodes, jobs, jobInfo }
+  return { nodes, jobs, jobInfo, depot }
 }
 
 // Jump transit + a fallback for a cross-system leg we can't gate-route. Both in
@@ -267,12 +316,13 @@ function buildDistMatrix(
 export function computeRoutePlan(
   contracts: HaulingContract[],
   locations: Location[],
-  capacity: number
+  capacity: number,
+  startLocation?: string
 ): RoutePlan | null {
-  const model = buildRouteModel(contracts, locations)
+  const model = buildRouteModel(contracts, locations, startLocation)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
-  const result = planRoute({ n: model.nodes.length, jobs: model.jobs, dist, capacity })
+  const result = planRoute({ n: model.nodes.length, jobs: model.jobs, dist, capacity, start: model.depot })
 
   const steps: RouteStep[] = result.order.map((nodeIdx, k) => {
     const node = model.nodes[nodeIdx]

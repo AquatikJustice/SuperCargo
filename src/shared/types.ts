@@ -116,7 +116,7 @@ export interface AppSettings {
   /** Opt-in: save each confirmed (crop, label) pair as a training sample. */
   ocrSaveSamples: boolean
 
-  // Contract data (StarStrings localization) - optional enhancement
+  // Contract data (StarStrings localization)
   /** Override path to a contracts.ini; '' = auto-locate next to the game log. */
   contractsDataPath: string
 
@@ -175,6 +175,9 @@ export interface ManifestDoc {
   order: string[]
   /** Frozen 3D cargo layout, present once the run's load is locked. */
   layout?: CargoLayout
+  /** Where the run starts: cargo picked up here loads first and the route begins
+   *  from it. Empty/undefined = let the solver choose the start. */
+  startLocation?: string
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
@@ -289,6 +292,12 @@ export interface Location {
   y?: number
   z?: number
   system?: string
+  /** Operating company, parsed from the game ClassName (e.g. "Rayari"). Lets us
+   *  resolve contracts that name a pickup by operator + body rather than by the
+   *  facility's own name ("the Rayari, Inc. outpost on Cellin" => Hickes). */
+  operator?: string
+  /** Parent body (moon/planet) the facility sits on, e.g. "Cellin", "Hurston". */
+  body?: string
 }
 
 export interface LocationRoster {
