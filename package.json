@@ -24,7 +24,9 @@
     "gen:uex": "node scripts/gen-uex-snapshots.mjs",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",
-    "publish": "electron-vite build && electron-builder --win --publish always"
+    "dist:linux": "electron-vite build && electron-builder --linux --publish never",
+    "publish": "electron-vite build && electron-builder --win --publish always",
+    "publish:linux": "electron-vite build && electron-builder --linux --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
