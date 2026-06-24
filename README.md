@@ -1,11 +1,9 @@
-# SuperCargo
+# <img src="assets/logo/SuperCargo-Logo.png" alt="SuperCargo logo" height="48" align="middle"> SuperCargo
 
 A desktop app for Star Citizen haulers who stack a pile of contracts into one run.
 It pulls everything into a single manifest: box-size math, a route that orders your
 stops, a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
 interface.
-
-![The cargo manifest, grouped by destination](assets/screens/manifest.png)
 
 ## Download
 
@@ -55,6 +53,10 @@ If you hit problems, please open an issue with your distro and what happened.
 - **StarStrings compatible.** When it's present, blueprint chances and reputation show up.
 
 ## Screenshots
+
+The cargo manifest, grouped by destination:
+
+![The cargo manifest, grouped by destination](assets/screens/manifest.png)
 
 Every accepted contract, with inline editing for anything the log did not give you:
 
