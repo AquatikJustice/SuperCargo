@@ -34,3 +34,6 @@ scripts/train/auto/runs/
 
 docs/
 *~lock~
+
+# local screenshot source (committed copies live in assets/screens)
+README screens/
