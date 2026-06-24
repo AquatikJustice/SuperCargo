@@ -1,0 +1,27 @@
+name: Build Linux release
+
+# Builds the AppImage and uploads it to the draft release for the pushed tag.
+# Windows is published locally; this fills in Linux so electron-updater serves
+# both from one release. Trigger by pushing a v* tag, or run it by hand.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run publish:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
