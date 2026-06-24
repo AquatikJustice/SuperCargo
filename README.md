@@ -1,8 +1,8 @@
 # SuperCargo
 
 A desktop app for Star Citizen haulers who stack a pile of contracts into one run.
-Everything comes together in a single manifest: box-size math, an optimized route,
-a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
+It pulls everything into a single manifest: box-size math, a route that orders your
+stops, a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
 interface.
 
 ![The cargo manifest, grouped by destination](assets/screens/manifest.png)
@@ -33,7 +33,7 @@ If you hit problems, please open an issue with your distro and what happened.
 ## Features
 
 - **Automatic Contract Tracking.** Picks up hauling contract accepts, objectives, completions,
-  and abandons as they happen, so your manifest stays current on its own.
+  and abandons as they happen.
 - **Manifest.** Every active contract's cargo in one place, grouped by destination or by
   contract, with per-stop SCU and box totals and a color-coded hold-capacity bar.
 - **Loading Mode.** Follows your route and tells you what to load at each pickup, where to put it
@@ -46,15 +46,13 @@ If you hit problems, please open an issue with your distro and what happened.
   reward for you to confirm before it lands on the manifest.
 - **Edit anything.** Change a contract after you add it. Pickup, reward, rank, max box size, and
   each objective's commodity, amount, and destination are all editable inline.
-- **Turn-in tracking.** On submit, record a full, partial, or no turn-in per stop. Partial hauls
-  get an accurate payout, reputation included.
-- **Runs and history.** Work is grouped into runs (one trip is one run). History keeps each run's
+- **Turn-in tracking.** On submit, record a full, partial, or no turn-in per stop, including
+  partial payouts and the reputation line.
+- **Runs and history.** Work is grouped into runs. One trip is one run. History keeps each run's
   contracts and earnings.
 - **Compact overlay.** A small always-on-top "next stop" card you can pin over the game.
-- **Bundled game data.** Ship, location, and commodity info comes with the app and stays up to
-  date, so there's no API key or account to set up.
-- **StarStrings compatible.** When it's present, blueprint chances and reputation rewards show
-  up too.
+- **Bundled game data.** Ships, freight locations, and commodities come with the app.
+- **StarStrings compatible.** When it's present, blueprint chances and reputation show up.
 
 ## Screenshots
 
