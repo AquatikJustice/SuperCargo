@@ -1,11 +1,9 @@
-// Game.log line patterns. Ported from SCMDB Watcher (watcher.py) to TypeScript,
-// with extra handling for the "New Objective" delivery lines (spec 5.2).
-
 import { parseContractTitle, isHaulingGenerator, cleanTitle, hasBlueprintMarker } from '@shared/contract'
 import type {
   ContractAcceptedEvent,
   ObjectiveEvent,
-  ContractEndedEvent
+  ContractEndedEvent,
+  CompletionType
 } from '@shared/types'
 
 const PATTERN_TIMESTAMP = /^<([0-9T:\-.Z]+)>/
@@ -19,7 +17,6 @@ const PATTERN_OBJECTIVE =
 const PATTERN_END_MISSION =
   /<EndMission>.*MissionId\[([^\]]+)\].*CompletionType\[(\w+)\](?:.*?Reason\[([^\]]+)\])?/
 
-/** What we read from a single log line, if it is one we care about. */
 export type ParsedLine =
   | { kind: 'marker'; missionId: string; generator: string; contractName: string; defId?: string }
   | { kind: 'accepted'; event: ContractAcceptedEvent; isHauling: boolean }
@@ -32,18 +29,14 @@ export function parseTimestamp(line: string): string | null {
   return match ? match[1] : null
 }
 
-/** Marker data we keep so a later "accepted" line can fill in generator/title. */
+// kept to backfill generator/title later
 export interface MarkerEntry {
   generator: string
   contractName: string
   defId?: string
 }
 
-/**
- * Parse one line. `markers` maps missionId to marker data (updated here as
- * markers come in) so a later "Contract Accepted" can tell if the contract is
- * hauling and recover its template name.
- */
+// mutates the markers map
 export function parseLine(line: string, markers: Map<string, MarkerEntry>): ParsedLine {
   let match: RegExpExecArray | null
 
@@ -74,7 +67,7 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
       acceptedAt: ts,
       blueprint: hasBlueprintMarker(rawTitle)
     }
-    // If no marker arrived yet we can't be sure, so fall back to the title.
+    // no marker yet, use title
     const isHauling = generator ? isHaulingGenerator(generator) : /haul/i.test(rawTitle)
     return { kind: 'accepted', event, isHauling }
   }
@@ -94,7 +87,7 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
 
   if ((match = PATTERN_END_MISSION.exec(line))) {
     const [, missionId, completion, reason] = match
-    return { kind: 'ended', event: { missionId, completion, reason } }
+    return { kind: 'ended', event: { missionId, completion: completion as CompletionType, reason } }
   }
 
   return null

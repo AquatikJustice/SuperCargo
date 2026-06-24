@@ -1,7 +1,4 @@
-// Star Citizen install auto-detection. Adapted from watcher.py's
-// detect_sc_installs(): a depth-bounded BFS over each fixed drive looking for a
-// "StarCitizen" directory whose children are channel folders (LIVE/PTU/...)
-// marked by a build_manifest.id. Windows only; returns {} elsewhere.
+// auto-detect SC installs, windows only
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -77,7 +74,7 @@ function findScRoots(driveRoot: string): string[] {
       const full = path.join(current, entry.name)
       if (SC_ROOT_NAMES.has(nameLower) && looksLikeScRoot(full)) {
         roots.push(full)
-        continue // confirmed install - don't descend further
+        continue // don't descend into install
       }
       if (depth + 1 < SCAN_MAX_DEPTH) queue.push([full, depth + 1])
     }
@@ -86,7 +83,6 @@ function findScRoots(driveRoot: string): string[] {
 }
 
 function fixedDrives(): string[] {
-  // Use WMIC-free PowerShell to list local fixed drives (DriveType 3).
   try {
     const out = execSync(
       'powershell -NoProfile -Command "Get-CimInstance Win32_LogicalDisk -Filter \\"DriveType=3\\" | Select-Object -ExpandProperty DeviceID"',
@@ -101,7 +97,7 @@ function fixedDrives(): string[] {
   } catch {
     /* fall through to brute-force */
   }
-  // Fallback: probe A:..Z:.
+  // fallback: probe a..z
   const drives: string[] = []
   for (let c = 'A'.charCodeAt(0); c <= 'Z'.charCodeAt(0); c++) {
     const root = String.fromCharCode(c) + ':\\'
@@ -114,7 +110,7 @@ function fixedDrives(): string[] {
   return drives
 }
 
-/** Scan local fixed drives for Star Citizen installs -> {channel: Game.log path}. */
+/** channel -> Game.log path */
 export function detectInstalls(): DetectedInstalls {
   if (process.platform !== 'win32') return {}
   const found: DetectedInstalls = {}
@@ -139,7 +135,7 @@ export function detectInstalls(): DetectedInstalls {
   return found
 }
 
-/** Channels ordered LIVE, PTU, ... then the rest alphabetically. */
+/** known channels first, rest alphabetical */
 export function orderChannels(channels: string[]): string[] {
   const known = CHANNEL_ORDER.filter((c) => channels.includes(c))
   const rest = channels.filter((c) => !CHANNEL_ORDER.includes(c)).sort()

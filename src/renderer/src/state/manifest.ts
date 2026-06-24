@@ -1,5 +1,4 @@
-// Pure derivation helpers turning the contract list into the grouped views the
-// UI renders. No React/zustand here so it stays trivially testable.
+// no react/zustand here so it stays testable
 
 import type { HaulingContract, HistoryEntry, HistoryStatus } from '@shared/types'
 import { boxBreakdown, boxCount, boxList } from '@shared/box'
@@ -16,7 +15,7 @@ export interface StopItem {
   boxStr: string
   boxCount: number
   delivered: boolean
-  /** Per-leg pickups, when this objective loads somewhere other than the contract's. */
+  /** loads somewhere other than contract pickup */
   pickups?: string[]
 }
 
@@ -28,9 +27,8 @@ export interface PickupItem {
   scu: number
   boxStr: string
   boxCount: number
-  /** where this cargo is headed. */
   destination: string
-  /** loads from more than one place (load what's here). */
+  /** loads from more than one place */
   split: boolean
 }
 
@@ -47,11 +45,11 @@ export interface Stop {
   totSCU: number
   totBoxes: number
   totContracts: number
-  /** cargo PICKED UP at this location (shown under the drop-offs). */
+  /** cargo picked up here */
   pickups?: PickupItem[]
-  /** a location you only pick up at (no delivery here). */
+  /** pickup only, no delivery */
   pickupOnly?: boolean
-  /** the run's starting location - always first, even with nothing to load. */
+  /** run start, always first */
   start?: boolean
 }
 
@@ -64,9 +62,9 @@ export interface DerivedContractObjective {
   boxStr: string
   boxCount: number
   delivered: boolean
-  /** SCU turned in so far (undefined = not marked -> counts as a full turn-in). */
+  /** undefined = full turn-in */
   deliveredScu?: number
-  /** Per-leg pickups, when this objective loads somewhere other than the contract's. */
+  /** loads somewhere other than contract pickup */
   pickups?: string[]
 }
 
@@ -89,18 +87,12 @@ export interface DerivedContract {
   reputation?: number
 }
 
-/** A contract is HELD while it awaits its first OCR capture (pendingOcr): we
- *  already have its log data, but it's kept out of sight so it isn't shown twice
- *  - once here and once in the capture modal that's open over it. It's still in
- *  the store (so the capture can merge into it) and surfaces the moment the
- *  capture is submitted or dismissed. Every contract thus follows one flow:
- *  accept -> (capture) -> appears. */
+// hidden while its capture modal is open, so it isn't shown twice
 export const isHeld = (c: HaulingContract): boolean => !!c.pendingOcr
 
 export const activeContracts = (contracts: HaulingContract[]): HaulingContract[] =>
   contracts.filter((c) => c.status === 'active' && !isHeld(c))
 
-/** Distinct destinations across active contracts, in the order requested. */
 export function destinationsInOrder(contracts: HaulingContract[], order: string[]): string[] {
   const present = new Set<string>()
   for (const c of activeContracts(contracts)) {
@@ -145,7 +137,6 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
       name: split.name,
       region: split.region,
       color: stopColor(idx),
-      hasElevator: split.hasElevator,
       items,
       totSCU,
       totBoxes,
@@ -156,11 +147,6 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
 
 const normLoc = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
-/** Delivery stops with the cargo you PICK UP at each location attached, plus a stop
- *  for any pickup-only location (you visit it but drop nothing there). A pickup-only
- *  stop is placed just before the earliest delivery that needs its cargo. When a
- *  starting location is set, the run leads with it: anything you load there shows
- *  first, and its own delivery (if any) stays a later stop. */
 export function deriveStopsWithPickups(
   contracts: HaulingContract[],
   order: string[],
@@ -175,8 +161,7 @@ export function deriveStopsWithPickups(
     for (const o of c.objectives) {
       if (o.delivered) continue
       const locs = o.pickups && o.pickups.length ? o.pickups : c.pickup ? [c.pickup] : []
-      // Dedupe pickup locations: a "split pickup" objective can list the same
-      // terminal twice, which would otherwise show (and count) the cargo twice.
+      // dedupe: a split pickup can list the same terminal twice
       const byKey = new Map<string, string>()
       for (const pu of locs) {
         const k = normLoc(pu)
@@ -201,8 +186,7 @@ export function deriveStopsWithPickups(
     }
   }
 
-  // The starting location leads the run. Whatever loads there shows at the top
-  // (pulled out so it doesn't also hang off the same place's later delivery stop).
+  // pull start group out so it isn't also on its delivery stop
   let startStop: Stop | null = null
   if (startKey) {
     const g = groups.get(startKey)
@@ -325,7 +309,6 @@ export function deriveTotals(stops: Stop[], contracts: HaulingContract[]): Manif
   }
 }
 
-/** Snapshot a finished contract into a history entry (totals computed once). */
 export function toHistoryEntry(
   c: HaulingContract,
   status: HistoryStatus,
@@ -334,9 +317,7 @@ export function toHistoryEntry(
 ): HistoryEntry {
   const destinations = [...new Set(c.objectives.map((o) => o.destination))]
   const totalScu = c.objectives.reduce((a, o) => a + o.scuAmount, 0)
-  // How much was actually turned in. A completion with nothing explicitly marked
-  // is assumed FULL (you submitted the whole contract); an abandon/fail with
-  // nothing marked delivered nothing. An explicit deliveredScu always wins.
+  // unmarked: completed counts full, abandon counts zero; explicit wins
   const deliveredScu = c.objectives.reduce(
     (a, o) => a + (o.deliveredScu ?? (status === 'completed' ? o.scuAmount : 0)),
     0
@@ -366,7 +347,6 @@ export function toHistoryEntry(
   }
 }
 
-/** Box list shaped for the Phase 4 3D packer (carries stop index + commodity). */
 export function packBoxes(
   contracts: HaulingContract[],
   order: string[]
@@ -395,7 +375,7 @@ export function packBoxes(
     for (const c of live) {
       for (const o of c.objectives) {
         if (o.destination !== stop.destination) continue
-        if (o.delivered) continue // delivered cargo is off the ship - don't lay it out
+        if (o.delivered) continue // already off the ship
         for (const size of boxList(o.boxes)) {
           out.push({
             id: `pk-${n++}`,

@@ -4,7 +4,7 @@ type DivProps = React.HTMLAttributes<HTMLDivElement> & {
   hoverStyle?: React.CSSProperties
 }
 
-/** A div that merges `hoverStyle` over `style` while hovered. */
+// hoverStyle wins while hovered
 export function HoverDiv({ hoverStyle, style, ...rest }: DivProps): React.ReactElement {
   const [hover, setHover] = useState(false)
   return (
@@ -27,7 +27,7 @@ type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   hoverStyle?: React.CSSProperties
 }
 
-/** A button that merges `hoverStyle` over `style` while hovered. */
+// hoverStyle wins while hovered
 export function Btn({ hoverStyle, style, ...rest }: BtnProps): React.ReactElement {
   const [hover, setHover] = useState(false)
   return (

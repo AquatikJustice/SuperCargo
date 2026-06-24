@@ -1,15 +1,4 @@
-// Optional StarStrings contract-data layer (main process).
-//
-// StarStrings (a loose-file localization mod) adds the blueprints a contract can
-// award, its reputation, and (for recover-cargo jobs) the max box size to the
-// game's contract strings. This module finds the user's LOCAL localization files
-// next to their Game.log, parses the named-contract title->detail mapping, and
-// fills in accepted contracts by matching on title text.
-//
-// This is optional extra data: if no file is found (vanilla install, or org-mates
-// who don't run StarStrings), every lookup returns null and the app still works.
-// We never bundle or redistribute CIG/StarStrings text. Only the user's local
-// copy is read, on their machine.
+// optional contract details from local localization files
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -18,7 +7,6 @@ import { normalize, bestMatch } from '@shared/fuzzy'
 import type { AppSettings, ContractAcceptedEvent, ContractDataStatus } from '@shared/types'
 
 export interface ContractInfo {
-  /** Cleaned, player-visible title (source of the match key). */
   title: string
   blueprints: string[]
   reputation?: number
@@ -33,31 +21,24 @@ function snapBoxSize(n: number): number | undefined {
   return best
 }
 
-// ---- module state ----------------------------------------------------------
-
 let byTitle = new Map<string, ContractInfo>()
 let knownNorms: string[] = []
 let sources: string[] = []
-
-// ---- locating the files -----------------------------------------------------
 
 function candidatePaths(gameLogPath: string, override: string): string[] {
   const out: string[] = []
   if (override) out.push(override)
   if (gameLogPath) {
     const dir = path.dirname(gameLogPath)
-    // SC loads loose files from lowercase `data\`; include `Data\` as a fallback.
     for (const d of ['data', 'Data']) {
       const base = path.join(dir, d, 'Localization', 'english')
-      // global.ini first so a StarStrings-enriched contracts.ini overrides it.
+      // global.ini first so contracts.ini can override it
       out.push(path.join(base, 'global.ini'))
       out.push(path.join(base, 'contracts.ini'))
     }
   }
   return out.filter((p, i, a) => a.indexOf(p) === i).filter((p) => fs.existsSync(p))
 }
-
-// ---- parsing ----------------------------------------------------------------
 
 const RE_TITLE_KEY = /^(.*?)_Title(?:_\d+)?$/i
 const RE_DESC_KEY = /^(.*?)_Desc(?:ription)?(?:Long)?(?:_\d+)?$/i
@@ -104,7 +85,6 @@ function extractReputation(titleRaw: string, descRaw: string): number | undefine
   return d ? parseInt(d[1], 10) : undefined
 }
 
-/** Parse one .ini file, accumulating Title/Desc entries by base key. */
 function parseFile(file: string, titles: Map<string, Entry[]>, descs: Map<string, Entry[]>): void {
   let raw: string
   try {
@@ -115,7 +95,7 @@ function parseFile(file: string, titles: Map<string, Entry[]>, descs: Map<string
   for (const line of raw.split('\n')) {
     const eq = line.indexOf('=')
     if (eq < 1) continue
-    const rawKey = line.slice(0, eq).replace(/,\w+$/, '').trim() // drop ",P" plural tag
+    const rawKey = line.slice(0, eq).replace(/,\w+$/, '').trim() // drop trailing ",tag"
     const value = line.slice(eq + 1)
     let m = RE_TITLE_KEY.exec(rawKey)
     if (m) {
@@ -127,7 +107,6 @@ function parseFile(file: string, titles: Map<string, Entry[]>, descs: Map<string
   }
 }
 
-/** (Re)build the title->info index from the user's local localization files. */
 export function rebuild(settings: AppSettings): ContractDataStatus {
   byTitle = new Map()
   knownNorms = []
@@ -140,12 +119,11 @@ export function rebuild(settings: AppSettings): ContractDataStatus {
   for (const [base, titleList] of titles) {
     const descList = descs.get(base) ?? []
     for (const t of titleList) {
-      // Skip generic templates and placeholder stubs. Those
-      // procedurally-generated hauls carry the [BP] marker but no named details.
+      // skip templates and placeholder stubs
       if (/~mission\(/i.test(t.value) || /^\s*\[PH\]/i.test(t.value)) continue
       const title = cleanTitle(t.value)
       if (!title) continue
-      // Prefer a desc with the matching numeric suffix, else the first available.
+      // match desc by suffix, else first
       const desc = (descList.find((d) => d.suffix === t.suffix) ?? descList[0])?.value ?? ''
       const blueprints = extractBlueprints(desc)
       const info: ContractInfo = {
@@ -156,7 +134,7 @@ export function rebuild(settings: AppSettings): ContractDataStatus {
       }
       const norm = normalize(title)
       if (!norm) continue
-      // On a collision, prefer an entry that actually has blueprint detail.
+      // on collision keep whichever has blueprints
       const existing = byTitle.get(norm)
       if (!existing || (!existing.blueprints.length && blueprints.length)) {
         if (!existing) knownNorms.push(norm)
@@ -179,20 +157,17 @@ export function status(): ContractDataStatus {
   }
 }
 
-/** Look up a contract's details by its (raw or cleaned) title text. */
 export function lookupByTitle(rawTitle: string): ContractInfo | null {
   if (byTitle.size === 0) return null
   const norm = normalize(cleanTitle(rawTitle))
   if (!norm) return null
   const direct = byTitle.get(norm)
   if (direct) return direct
-  // High-threshold fuzzy fallback so OCR/log noise still resolves, without
-  // false matches across unrelated contracts.
+  // high threshold so noise resolves without false matches
   const res = bestMatch(norm, knownNorms, { threshold: 0.92, limit: 1 })
   return res.match ? byTitle.get(res.match) ?? null : null
 }
 
-/** Fill in an accepted-contract event with StarStrings details, if available. */
 export function enrichAccepted(e: ContractAcceptedEvent): ContractAcceptedEvent {
   const info = lookupByTitle(e.title)
   if (!info) return e

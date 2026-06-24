@@ -6,9 +6,7 @@ import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
-// SCU never runs past 4 digits in practice; keep the column ~5 chars so it doesn't
-// hog space. Commodity and destination get their own columns; minmax(0,…) lets a
-// long name ellipsize instead of blowing the track wide.
+// minmax(0,…) so long names ellipsize, don't widen the track
 const OBJ_COLS = '58px minmax(0,1fr) minmax(0,1.4fr) 220px 70px'
 
 const statusColor: Record<string, string> = {
@@ -25,8 +23,7 @@ export default function ContractsPage(): React.ReactElement {
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const editContract = useStore((s) => s.editContract)
   const editObjective = useStore((s) => s.editObjective)
-  // Hide contracts waiting on their first OCR capture, so a contract shows up
-  // here only once that capture finishes (same as the manifest).
+  // hide until ocr capture resolves
   const derived = useMemo(() => deriveContracts(contracts.filter((c) => !c.pendingOcr)), [contracts])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
 
@@ -158,8 +155,8 @@ export default function ContractsPage(): React.ReactElement {
                     </div>
                     {c.objectives.length === 0 && (
                       <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim, padding: '12px 0' }}>
-                        No objective details captured yet (Star Citizen only logs them for the first contract
-                        accepted; add them manually, or capture the contract screen with OCR).
+                        No objective details captured yet. Add them manually, or capture the contract
+                        screen with OCR.
                       </div>
                     )}
                     {c.objectives.map((o) => (
@@ -182,7 +179,6 @@ export default function ContractsPage(): React.ReactElement {
                       </div>
                     ))}
 
-                    {/* blueprints (from StarStrings contract data, named contracts only) */}
                     {c.blueprints.length > 0 && (
                       <div style={{ marginTop: 16, border: `1px solid ${C.accBorder}`, background: C.accFill, padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -242,9 +238,7 @@ function ActionBtn({ label, color, onClick }: { label: string; color: string; on
   )
 }
 
-/** Click-to-edit SCU for one objective. Saves on Enter/blur (re-boxing happens
- *  in the store), Escape cancels. Lets you fix an OCR misread against the in-game
- *  contract screen, which this page mirrors. */
+/** click-to-edit scu */
 function EditableScu({ value, onCommit }: { value: number; onCommit: (n: number) => void }): React.ReactElement {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(String(value))
@@ -329,7 +323,7 @@ function DetailField({ label, children }: { label: string; children: React.React
   )
 }
 
-/** Click-to-edit text. Enter/blur commits, Escape cancels. */
+/** click-to-edit text */
 function EditableText({
   value,
   onCommit,
@@ -395,7 +389,7 @@ function EditableText({
   )
 }
 
-/** Click-to-edit non-negative integer (reward, max box). */
+/** click-to-edit number */
 function EditableNum({
   value,
   onCommit,
@@ -452,11 +446,10 @@ function EditableNum({
   )
 }
 
-/** Badge (from StarStrings) showing this contract can award a blueprint. */
 function BlueprintBadge(): React.ReactElement {
   return (
     <span
-      title="Has a chance to award a blueprint (detected from the StarStrings [BP] marker)"
+      title="Has a chance to award a blueprint"
       style={{
         flex: 'none',
         display: 'inline-flex',

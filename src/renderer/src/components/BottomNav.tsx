@@ -16,8 +16,7 @@ const NAV: Array<{ id: ViewId; label: string }> = [
 export default function BottomNav(): React.ReactElement {
   const view = useStore((s) => s.view)
   const setView = useStore((s) => s.setView)
-  // Below this the side panels would crowd out the nav tabs; on a portrait/half
-  // window keep the tabs full-width and drop the secondary panels.
+  // below this, panels crowd out the tabs
   const narrow = useNarrow(820)
 
   return (
@@ -57,9 +56,7 @@ export default function BottomNav(): React.ReactElement {
 const FOOTER_H = 70
 
 function AttributionPanel(): React.ReactElement {
-  // CIG Fankit rule: the "Made by the Community" badge fills the footer corner.
-  // On hover the stack slides up one row, so the badge exits the top and the
-  // trademark/unofficial line appears underneath. Full notice is also in Settings.
+  // hover slides badge up, reveals trademark
   const [logoOk, setLogoOk] = useState(true)
   const [hover, setHover] = useState(false)
   const row: React.CSSProperties = {

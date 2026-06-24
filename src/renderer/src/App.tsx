@@ -13,8 +13,7 @@ import CompactWindowApp from './components/CompactWindowApp'
 import Onboarding from './components/Onboarding'
 import UpdateBanner from './components/UpdateBanner'
 
-// The compact overlay is a separate always-on-top window that loads this same
-// bundle with the URL hash #compact. There we render just the card, no app chrome.
+// overlay window loads this bundle at #compact
 const IS_COMPACT = typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
 
 export default function App(): React.ReactElement {
@@ -34,12 +33,10 @@ function MainApp(): React.ReactElement {
     void init()
   }, [init])
 
-  // Apply the saved zoom (text and layout scale) whenever it changes.
   useEffect(() => {
     window.supercargo.setZoom(uiZoom || 1)
   }, [uiZoom])
 
-  // Ctrl/Cmd with +, -, or 0 to grow, shrink, or reset the text size.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.ctrlKey || e.metaKey)) return
@@ -61,9 +58,7 @@ function MainApp(): React.ReactElement {
   return (
     <div
       style={{
-        // In-game tablet bezel: accent outline flush to the window edge so the OS
-        // resize cursor lands right on it. Rounded like a tablet. No outer glow (it
-        // pushed the apparent edge inward); a faint inner wash keeps the holo feel.
+        // no outer glow, it shifts the apparent edge inward
         position: 'fixed',
         inset: 0,
         display: 'flex',

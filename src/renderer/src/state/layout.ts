@@ -1,8 +1,4 @@
-// The frozen cargo layout: once a run's load is locked, box positions stop moving.
-// snapshotLayout captures the current plan; reconcileLayout keeps that snapshot in
-// step with the contracts without ever shifting a placed box - delivered/removed
-// boxes are flagged (kept in the pack so nothing slides into their cell, hidden in
-// the view) and newly accepted cargo is appended as fresh sections at the back.
+// frozen: never move a placed box
 
 import type { HaulingContract, DeliveryObjective, CargoLayout, FrozenBox } from '@shared/types'
 import { boxList } from '@shared/box'
@@ -31,7 +27,6 @@ function boxesFor(
   }))
 }
 
-/** Freeze the current plan into a locked layout. */
 export function snapshotLayout(contracts: HaulingContract[], order: string[]): CargoLayout {
   const dests = destinationsInOrder(contracts, order)
   const idxOf = new Map(dests.map((d, i) => [d, i]))
@@ -47,8 +42,7 @@ export function snapshotLayout(contracts: HaulingContract[], order: string[]): C
   return { locked: true, boxes }
 }
 
-/** Bring a locked layout up to date with the contracts: refresh delivered flags and
- *  append any cargo accepted since the lock, never moving an existing box. */
+// reflag + append, never move existing
 export function reconcileLayout(contracts: HaulingContract[], layout: CargoLayout): CargoLayout {
   const byId = new Map(activeContracts(contracts).map((c) => [c.id, c]))
 
@@ -88,7 +82,6 @@ export interface LayoutStop {
   refs: Array<{ contractId: string; objectiveId: string }>
 }
 
-/** Sections of a locked layout, in load order, for the legend + turn-in. */
 export function layoutStops(layout: CargoLayout): LayoutStop[] {
   const byIdx = new Map<number, LayoutStop>()
   for (const b of layout.boxes) {

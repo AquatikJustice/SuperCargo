@@ -1,65 +1,44 @@
-// Capacitated pickup-and-delivery route planner for a single ship.
-//
-// The hauling problem: each contract has ONE pickup location and N delivery
-// objectives (each its own destination + SCU). You must pick a contract's cargo
-// up before you can drop any of it off, and the cargo you're carrying can never
-// exceed the ship's SCU at any point in the run. Goal: order the location visits
-// to minimise total travel (UEX terminal-to-terminal distance), e.g. batch two
-// Crusader-area pickups before the single hop to ArcCorp because both deliver to
-// Baijini Point.
-//
-// This is a capacitated PDP (NP-hard) but real manifests are tiny (a handful of
-// unique locations), so we solve it exactly with a Held-Karp DP over visited
-// subsets for n <= HK_MAX, and fall back to a greedy nearest-feasible heuristic
-// beyond that. Pure and deterministic, so it's easy to test.
+// capacitated pickup-and-delivery solver. exact held-karp for small n,
+// greedy fallback above HK_MAX.
 
 export interface RouteJob {
-  /** index into the locations array - where this cargo is loaded. */
   pickup: number
-  /** index into the locations array - where it's delivered. */
   dest: number
-  /** SCU carried between pickup and dest. */
   scu: number
 }
 
 export interface RouteInput {
-  /** number of unique locations (node ids 0..n-1). */
+  /** unique location count, node ids 0..n-1 */
   n: number
   jobs: RouteJob[]
-  /** nxn travel cost; dist[i][j] >= 0. Use a finite large value for unknown legs. */
+  /** nxn travel cost, finite large value for unknown legs */
   dist: number[][]
-  /** ship capacity in SCU. <= 0 disables the capacity constraint. */
+  /** <= 0 disables capacity constraint */
   capacity: number
-  /** force the route to begin at this node (a depot / where the run starts). When
-   *  unset, the solver is free to choose the cheapest starting node. */
+  /** pin start node, else solver picks cheapest */
   start?: number
 }
 
 export interface RouteResult {
-  /** visit order - a permutation of the location indices. */
   order: number[]
-  /** total travel cost along `order`. */
   totalDistance: number
-  /** cargo aboard right AFTER visiting order[k] (deliver-then-load at each stop). */
+  /** cargo aboard after visiting order[k] */
   loadAfter: number[]
-  /** peak cargo aboard across the whole run. */
   peakLoad: number
-  /** true when precedence + capacity are both satisfied by `order`. */
   feasible: boolean
   method: 'exact' | 'heuristic'
-  /** set when not feasible (capacity bottleneck); order is still a best effort. */
+  /** set when infeasible, order is still best effort */
   reason?: string
 }
 
-const HK_MAX = 15 // 2^15 * 15 states - still instant; above this we go heuristic
+const HK_MAX = 15 // 2^15*15 states, above this go heuristic
 
-/** Drop trivial same-location jobs (load + unload at one stop never ride along). */
+/** drop same-location jobs */
 function realJobs(jobs: RouteJob[]): RouteJob[] {
   return jobs.filter((j) => j.pickup !== j.dest && j.scu > 0)
 }
 
-/** Cargo aboard once the visited set is `mask`: picked up (pickup in mask) but not
- *  yet delivered (dest not in mask). Precedence guarantees dest in mask => pickup in mask. */
+/** scu picked up but not yet delivered in mask */
 function loadForMask(mask: number, jobs: RouteJob[]): number {
   let load = 0
   for (const j of jobs) {
@@ -70,7 +49,7 @@ function loadForMask(mask: number, jobs: RouteJob[]): number {
   return load
 }
 
-/** A location can be visited only once every contract delivered THERE is aboard. */
+/** can't visit a dest until its pickup is aboard */
 function canVisit(mask: number, v: number, jobs: RouteJob[]): boolean {
   if ((mask >> v) & 1) return false
   for (const j of jobs) {
@@ -103,14 +82,13 @@ function pathStats(
   return { totalDistance: total, loadAfter, peakLoad: peak, feasible }
 }
 
-/** Exact open-path Held-Karp with precedence + capacity feasibility masks. */
 function solveExact(input: RouteInput): number[] | null {
   const { n, dist, capacity } = input
   const jobs = realJobs(input.jobs)
   const full = (1 << n) - 1
   const cap = capacity > 0 ? capacity : Infinity
   const NEG = Infinity
-  // dp[mask][last] = min cost of a feasible path visiting exactly mask, ending at last
+  // dp[mask][last] = min cost path over mask, ending at last
   const dp: Float64Array[] = Array.from({ length: 1 << n }, () => new Float64Array(n).fill(NEG))
   const par = Array.from({ length: 1 << n }, () => new Int8Array(n).fill(-1))
 
@@ -142,7 +120,7 @@ function solveExact(input: RouteInput): number[] | null {
       bestLast = v
     }
   }
-  if (bestLast < 0) return null // no capacity/precedence-feasible full tour
+  if (bestLast < 0) return null
   const order: number[] = []
   let mask = full
   let last = bestLast
@@ -156,9 +134,7 @@ function solveExact(input: RouteInput): number[] | null {
   return order
 }
 
-/** Greedy nearest-feasible fallback (large n). Tries each start, keeps the best;
- *  if capacity blocks everything, retries ignoring capacity so we still emit an
- *  order (flagged infeasible by pathStats). */
+/** greedy nearest-feasible fallback, best over all starts */
 function solveGreedy(input: RouteInput, enforceCap: boolean): number[] | null {
   const { n, dist, capacity } = input
   const jobs = realJobs(input.jobs)
@@ -209,15 +185,14 @@ export function planRoute(input: RouteInput): RouteResult {
   let order = exact ? solveExact(input) : solveGreedy(input, true)
   let reason: string | undefined
   if (!order) {
-    // No capacity-feasible single-trip ordering, so fall back to a precedence-only
-    // route (capacity ignored) so the user still sees a plan plus the overflow.
+    // nothing fits capacity, retry without it
     order = exact
       ? solveExact({ ...input, capacity: 0 })
       : solveGreedy(input, false)
     reason = 'Cargo exceeds ship capacity. No single-trip order fits; showing best pickup-before-delivery order.'
   }
   if (!order) {
-    // precedence itself is impossible (shouldn't happen with well-formed jobs)
+    // precedence unsatisfiable, shouldn't happen with valid jobs
     order = Array.from({ length: n }, (_, i) => i)
     reason = 'Could not satisfy pickup-before-delivery ordering.'
   }

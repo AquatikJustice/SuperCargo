@@ -245,7 +245,7 @@ export default function SettingsPage(): React.ReactElement {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {[
             { id: 'tesseract', label: 'TESSERACT' }
-            // Custom (ONNX) is hidden until a trained model ships.
+            // onnx hidden until model ships
           ].map((e) => {
             const active = (settings.ocrEngine || 'tesseract') === e.id
             return (
@@ -484,9 +484,7 @@ export default function SettingsPage(): React.ReactElement {
 }
 
 function AboutBlock(): React.ReactElement {
-  // The "Made by the Community" badge is a Fankit asset. Show it if the PNG
-  // exists at renderer/public/made-by-community.png, otherwise hide the image
-  // and keep the text credit, which is always required.
+  // badge png optional, text credit not
   const [logoOk, setLogoOk] = useState(true)
   const [showPolicy, setShowPolicy] = useState(false)
   return (

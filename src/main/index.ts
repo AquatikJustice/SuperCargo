@@ -15,9 +15,7 @@ import { engineInfo, capturePreview, runOcr, saveSample } from './ocr'
 import { prunePending } from './ocr/samples'
 import * as contractData from './contractData'
 import * as telemetry from './telemetry'
-// App icon (cargo-stack logo) for the window and Windows taskbar button. In a
-// packaged build the .exe/installer icon comes from build/icon.ico; this sets
-// the live window icon (and the dev taskbar icon).
+// live window icon; packaged exe icon comes from build/icon.ico
 import appIcon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | null = null
@@ -25,23 +23,15 @@ let compactWindow: BrowserWindow | null = null
 let watcher: LogWatcher | null = null
 let settings: AppSettings = loadSettings()
 
-// ---------------------------------------------------------------------------
-// Window
-// ---------------------------------------------------------------------------
-
-/** An http(s) link that isn't the dev server's own page = open it in the browser. */
 function isExternalUrl(url: string): boolean {
   const dev = process.env['ELECTRON_RENDERER_URL']
   if (dev && url.startsWith(dev)) return false
   return /^https?:\/\//i.test(url)
 }
 
-/** Pin the window above other apps and games. */
 function applyAlwaysOnTop(value: boolean): void {
   if (!mainWindow) return
-  // 'screen-saver' is the highest level, keeps the hologram above normal
-  // windows (a fullscreen-exclusive game still covers any overlay; borderless
-  // windowed is required for it to show over SC).
+  // screen-saver is the highest level
   mainWindow.setAlwaysOnTop(value, 'screen-saver')
 }
 
@@ -53,9 +43,7 @@ function createWindow(): void {
     minHeight: 560,
     show: false,
     frame: false,
-    // Opaque, not transparent: transparent frameless windows resize terribly on
-    // Windows (laggy, the wrong edge jumps). Win11 rounds the frameless corners
-    // natively, so we still get the rounded tablet look with smooth resizing.
+    // opaque keeps frameless resize smooth on windows
     backgroundColor: '#000000',
     icon: appIcon,
     alwaysOnTop: settings.alwaysOnTop,
@@ -73,21 +61,18 @@ function createWindow(): void {
     if (settings.alwaysOnTop) applyAlwaysOnTop(true)
   })
 
-  // Keep the renderer's maximize/restore button icon in sync with real state.
   const sendMaxState = (): void => send(IPC.evtWindowState, { maximized: !!mainWindow?.isMaximized() })
   mainWindow.on('maximize', sendMaxState)
   mainWindow.on('unmaximize', sendMaxState)
 
-  // The compact overlay is a child window, tear it down with the main window so
-  // closing the app actually quits (window-all-closed won't fire otherwise).
+  // tear down overlay too, else window-all-closed never fires
   mainWindow.on('closed', () => {
     if (compactWindow && !compactWindow.isDestroyed()) compactWindow.destroy()
     compactWindow = null
     mainWindow = null
   })
 
-  // Enforce a strict CSP for the packaged app (file:// content only). In dev we
-  // leave it off so Vite's HMR client / React Fast Refresh preamble can run.
+  // off in dev so vite HMR can run
   if (app.isPackaged) {
     session.defaultSession.webRequest.onHeadersReceived((details, done) => {
       done({
@@ -101,13 +86,11 @@ function createWindow(): void {
     })
   }
 
-  // Open external links in the OS browser, never in-app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
-  // Plain <a href> clicks navigate the window itself, which would replace the app
-  // with the page. Catch external URLs here and hand them to the OS browser.
+  // catch <a href> nav that would otherwise replace the app
   mainWindow.webContents.on('will-navigate', (e, url) => {
     if (isExternalUrl(url)) {
       e.preventDefault()
@@ -122,20 +105,12 @@ function createWindow(): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Compact overlay window: a small always-on-top card pinned to the top-right of
-// the screen, over where SC shows tracked-contract info. Separate window so it
-// floats over the game; it shares the manifest with the main window via the
-// evt:manifest:changed broadcast.
-// ---------------------------------------------------------------------------
-
 const COMPACT_W = 332
 const COMPACT_H = 432
 
 function positionCompact(): void {
   if (!compactWindow) return
-  // Full display bounds (not workArea): the game's tracker sits at the true
-  // top-right corner of the screen, over the taskbar region when fullscreen.
+  // bounds not workArea so it can sit over the taskbar region
   const { bounds } = screen.getPrimaryDisplay()
   const margin = 10
   compactWindow.setBounds({
@@ -185,7 +160,7 @@ function createCompactWindow(): void {
     compactWindow = null
     broadcast(IPC.evtCompactState, { open: false })
   })
-  // Same renderer, routed to the compact card via the URL hash.
+  // same renderer, routed to the compact card via url hash
   if (process.env['ELECTRON_RENDERER_URL']) {
     compactWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#compact`)
   } else {
@@ -196,7 +171,7 @@ function createCompactWindow(): void {
 function showCompact(): void {
   if (!compactWindow || compactWindow.isDestroyed()) createCompactWindow()
   positionCompact()
-  compactWindow?.showInactive() // don't steal focus from the game
+  compactWindow?.showInactive() // don't steal focus
   compactWindow?.setAlwaysOnTop(true, 'screen-saver')
   broadcast(IPC.evtCompactState, { open: true })
 }
@@ -206,17 +181,12 @@ function hideCompact(): void {
   broadcast(IPC.evtCompactState, { open: false })
 }
 
-// ---------------------------------------------------------------------------
-// Log watcher lifecycle
-// ---------------------------------------------------------------------------
-
 function send(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload)
   }
 }
 
-/** Send to every live window, optionally skipping the webContents that triggered it. */
 function broadcast(channel: string, payload: unknown, exceptId?: number): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (w.isDestroyed()) continue
@@ -225,7 +195,6 @@ function broadcast(channel: string, payload: unknown, exceptId?: number): void {
   }
 }
 
-/** Push the latest cached ship + location + commodity rosters to the renderer. */
 function pushRosters(): void {
   const ships = loadCachedRoster()
   if (ships) send(IPC.evtShips, ships)
@@ -235,36 +204,26 @@ function pushRosters(): void {
   if (commodities) send(IPC.evtCommodities, commodities)
 }
 
-// ---------------------------------------------------------------------------
-// OCR triggers (global hotkey + auto-capture after a contract accept)
-// ---------------------------------------------------------------------------
-
 let ocrBusy = false
 
-/** Run `fn` with the always-on-top compact overlay hidden for a moment, so it
- *  never lands in the screenshot and blocks the contract panel. We hide the
- *  window directly (not via hideCompact) so the user's open-state and the
- *  renderer's evtCompactState stay untouched, this is only visual. A short
- *  delay lets the compositor drop the frame before the capture reads the screen. */
+// hide overlay so it stays out of the screenshot
 async function withCompactHidden<T>(fn: () => Promise<T>): Promise<T> {
   const wasVisible =
     !!compactWindow && !compactWindow.isDestroyed() && compactWindow.isVisible()
   if (!wasVisible) return fn()
   compactWindow!.hide()
-  await new Promise((r) => setTimeout(r, 150))
+  await new Promise((r) => setTimeout(r, 150)) // let compositor drop the frame first
   try {
     return await fn()
   } finally {
     if (compactWindow && !compactWindow.isDestroyed()) {
-      compactWindow.showInactive() // restore without stealing focus from the game
+      compactWindow.showInactive() // restore without stealing focus
       compactWindow.setAlwaysOnTop(true, 'screen-saver')
     }
   }
 }
 
-/** Run a full OCR pass and push the result to the renderer's confirm modal.
- *  `targetMissionId` (set for auto-capture after a log accept) is threaded back so
- *  the renderer merges the read into that contract instead of adding a duplicate. */
+// targetMissionId threaded back so renderer merges instead of dup'ing
 async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   if (ocrBusy) return
   ocrBusy = true
@@ -289,15 +248,13 @@ async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   }
 }
 
-/** Fire an auto-capture after the configured delay so the mobiGlas contract
- *  panel has rendered on-screen before we read it. */
+// delay lets the contract panel render before capture
 function scheduleAutoCapture(targetMissionId?: string): void {
   if (!settings.ocrAutoCapture) return
   const delayMs = Math.max(0, settings.ocrCaptureDelay) * 1000
   setTimeout(() => void runOcrAndPush(targetMissionId), delayMs)
 }
 
-/** (Re)bind the global capture hotkey from settings. */
 function registerHotkey(): void {
   globalShortcut.unregisterAll()
   const hotkey = settings.ocrHotkey
@@ -331,21 +288,10 @@ function startWatcher(): void {
   watcher = new LogWatcher(logPath, channel)
   watcher.on('status', (s) => send(IPC.evtWatcherStatus, s))
   watcher.on('accepted', (e, isHauling) => {
-    // Only hauling contracts feed the manifest (box math / destinations are
-    // hauling concepts). Non-hauling accepts are ignored here.
     if (isHauling) send(IPC.evtContractAccepted, contractData.enrichAccepted(e))
 
-    // Auto-capture the contract screen a moment after acceptance so the mobiGlas
-    // panel is on-screen. Opt-in (off by default).
-    //
-    // HAULING captures are driven by the RENDERER (ocr:requestCapture), not here:
-    // the renderer owns the contract list, so it only requests a capture for a
-    // genuinely-new contract and skips relog re-emits / contracts we already
-    // have. That avoids the capture spam on every relog.
-    //
-    // Non-hauling accepts never reach the manifest; their only use is OCR
-    // training data, so we still auto-pop those from here when the user is
-    // actively collecting samples.
+    // hauling captures fire from the renderer instead, which dedups relog re-emits.
+    // non-hauling only matters as training data, so auto-pop those here.
     if (!isHauling && (settings.ocrSaveSamples || settings.contributeTrainingData)) {
       scheduleAutoCapture(undefined)
     }
@@ -355,7 +301,6 @@ function startWatcher(): void {
   watcher.start()
 }
 
-/** If no log path is configured, try to auto-detect one on startup. */
 function autoDetectLogPath(): void {
   if (settings.gameLogPath) return
   const installs = detectInstalls()
@@ -366,10 +311,6 @@ function autoDetectLogPath(): void {
   settings = { ...settings, gameLogPath: installs[preferred], gameChannel: preferred }
   saveSettings(settings)
 }
-
-// ---------------------------------------------------------------------------
-// IPC handlers
-// ---------------------------------------------------------------------------
 
 function registerIpc(): void {
   ipcMain.handle(IPC.settingsGet, () => settings)
@@ -382,18 +323,15 @@ function registerIpc(): void {
     if (patch.alwaysOnTop !== undefined && mainWindow) {
       applyAlwaysOnTop(!!patch.alwaysOnTop)
     }
-    // Restart the watcher if the log source changed.
     if (
       patch.gameLogPath !== undefined &&
       patch.gameLogPath !== prev.gameLogPath
     ) {
       startWatcher()
     }
-    // Re-bind the capture hotkey if it changed.
     if (patch.ocrHotkey !== undefined && patch.ocrHotkey !== prev.ocrHotkey) {
       registerHotkey()
     }
-    // Re-index StarStrings contract data if the log location or override changed.
     if (
       (patch.gameLogPath !== undefined && patch.gameLogPath !== prev.gameLogPath) ||
       (patch.contractsDataPath !== undefined && patch.contractsDataPath !== prev.contractsDataPath)
@@ -422,7 +360,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.manifestLoad, () => loadManifest())
   ipcMain.handle(IPC.manifestSave, (e, doc: ManifestDoc) => {
     saveManifest(doc)
-    // Keep the other window (main <-> compact) in sync without a save loop.
+    // sync the other window without looping the save back
     broadcast(IPC.evtManifestChanged, doc, e.sender.id)
     return true
   })
@@ -484,13 +422,11 @@ function registerIpc(): void {
     return value
   })
 
-  // --- OCR (Phase 2) ---
   ipcMain.handle(IPC.ocrListDisplays, () => listDisplays())
   ipcMain.handle(IPC.ocrEngineInfo, () => engineInfo(settings))
   ipcMain.handle(IPC.ocrPreview, () => capturePreview(settings))
   ipcMain.handle(IPC.ocrRun, () => runOcr(settings))
-  // Renderer-driven auto-capture for a just-accepted, genuinely-new hauling
-  // contract (it already filtered out relog re-emits / known contracts).
+  // renderer requests this only for genuinely-new hauling contracts
   ipcMain.on(IPC.ocrRequestCapture, (_e, missionId: unknown) => {
     scheduleAutoCapture(typeof missionId === 'string' ? missionId : undefined)
   })
@@ -511,10 +447,6 @@ function registerIpc(): void {
   })
 }
 
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
-
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -532,24 +464,22 @@ if (!gotLock) {
     createWindow()
     startWatcher()
     registerHotkey()
-    prunePending() // clear stale unconfirmed crops from prior sessions
+    prunePending() // drop stale crops from prior sessions
 
-    // Anonymous, stable id for grouping this client's opt-in uploads.
+    // stable id to group this client's opt-in uploads
     if (!settings.telemetryClientId) {
       settings = { ...settings, telemetryClientId: randomUUID() }
       saveSettings(settings)
     }
-    telemetry.init() // load + flush the upload queue (no-op unless samples are queued)
+    telemetry.init()
     try {
-      const data = contractData.rebuild(settings) // optional StarStrings layer
+      const data = contractData.rebuild(settings)
       if (data.active) console.log(`[contractData] ${data.titles} contracts, ${data.blueprintContracts} with blueprints`)
     } catch (e) {
       console.warn('[contractData] index build failed:', e)
     }
 
-    // Ships, freight locations and commodities ship bundled with the app. Seed the
-    // cache so matching works at once, then pull any list whose hash changed from
-    // the repo in the background. No account or token involved.
+    // seed bundled data first, then refresh changed lists in the background
     seedCacheIfNeeded()
     pushRosters()
     void refreshFromRepo().then((changed) => {
@@ -558,13 +488,7 @@ if (!gotLock) {
 
     initUpdater(() => mainWindow)
     if (app.isPackaged) {
-      // Check shortly after launch (once the window's update listener is up), then
-      // re-check quietly every hour so a long-running session still notices a
-      // release instead of only catching it on the next launch. autoDownload pulls
-      // it in the background and it installs on the next normal quit
-      // (autoInstallOnAppQuit), so nothing ever restarts while someone is using it.
-      // Each check honours the live autoCheckUpdates toggle, so turning it off in
-      // Settings stops further checks without a restart.
+      // recheck hourly so long sessions notice releases
       const RECHECK_MS = 1000 * 60 * 60
       if (settings.autoCheckUpdates) setTimeout(() => void checkForUpdates(), 4000)
       setInterval(() => {

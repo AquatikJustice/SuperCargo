@@ -33,14 +33,12 @@ export default function ManifestPage(): React.ReactElement {
     () => deriveTotals(stops.filter((s) => !s.pickupOnly), contracts),
     [stops, contracts]
   )
-  // activeContracts already drops finished and held-pending-OCR contracts, so a
-  // contract being captured stays out of the list until its capture resolves.
+  // activeContracts drops finished + held-pending-ocr
   const derivedContracts = useMemo(() => deriveContracts(activeContracts(contracts)), [contracts])
 
   const capMax = shipCapacity(ships.find((s) => s.name === activeShip), installedModules[activeShip])
   const capPct = capMax > 0 ? Math.min(999, Math.round((totals.scu / capMax) * 100)) : 0
   const over = capMax > 0 && totals.scu > capMax
-  // Hold-capacity color: <=50% green, 51-75% yellow, >75% (including over) red.
   const capColor = capPct <= 50 ? C.green : capPct <= 75 ? C.amber : C.red
 
   if (totals.contracts === 0) {
@@ -139,9 +137,8 @@ function MissingObjectivesBanner({
     >
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.amber, flex: 'none' }} />
       <div style={{ flex: 1, fontFamily: F.body, fontSize: 13, color: C.textBody, lineHeight: 1.5 }}>
-        {contracts.length === 1 ? '1 contract has' : `${contracts.length} contracts have`} no objective
-        details yet. Star Citizen only logs them for the first contract accepted per session. Add them
-        manually so they appear on the manifest.
+        {contracts.length === 1 ? '1 contract needs' : `${contracts.length} contracts need`} details.
+        Add them manually on the Contracts tab so they appear on the Manifest.
       </div>
       <Btn
         onClick={() => onAdd(first.id)}
@@ -165,9 +162,7 @@ function MissingObjectivesBanner({
   )
 }
 
-/** Sets the run's starting location. Cargo picked up there loads first and the
- *  route is solved from it, so a stop you deliver to but haven't loaded for yet
- *  no longer lands at the front. Optional - blank lets the solver pick the start. */
+// blank lets the solver pick the start
 function StartLocationPicker(): React.ReactElement {
   const startLocation = useStore((s) => s.startLocation)
   const setStartLocation = useStore((s) => s.setStartLocation)
@@ -420,8 +415,6 @@ function ByDestination({
   )
 }
 
-/** "PICK UP HERE" block under a stop's drop-offs: cargo loaded at this location and
- *  where each piece is headed. Green to set it apart from the drop-off rows. */
 function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMath: boolean }): React.ReactElement {
   return (
     <div style={{ marginTop: 6 }}>
@@ -476,8 +469,7 @@ function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMat
 
 function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): React.ReactElement {
   const locations = useStore((s) => s.locations)
-  // External-elevator flag: a manual override wins (stop.hasElevator), otherwise use
-  // the UEX loading-dock flag on the matched location.
+  // manual override wins over the location's flag
   const loc = useMemo(() => locations.find((l) => l.name === stop.destination), [locations, stop.destination])
   const external = stop.hasElevator ?? loc?.hasElevator
   const anyLeft = stop.items.some((i) => !i.delivered)
@@ -564,8 +556,6 @@ function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): R
   )
 }
 
-/** "from A · B" note for an objective that loads somewhere other than the
- *  contract's default pickup (multi-pickup / chain hauls). */
 function PickupNote({ pickups }: { pickups?: string[] }): React.ReactElement | null {
   const uniq = pickups ? [...new Set(pickups)] : []
   if (!uniq.length) return null
@@ -650,10 +640,6 @@ function ByContract({
 
 type TurnInMode = 'full' | 'part' | 'none'
 
-/** Per-destination turn-in: record FULL / PARTIAL / NONE for each objective at this
- *  stop. Any turn-in clears the stop from the cargo grid (a partial only happens when
- *  you never had the missing boxes, so nothing's left aboard); the SCU just feeds the
- *  payout. Submitting marks them delivered and locks the layout if it wasn't. */
 function TurnInModal({
   stop,
   onClose,

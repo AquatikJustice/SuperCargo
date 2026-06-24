@@ -1,11 +1,4 @@
-// Auto-update via electron-updater + GitHub Releases (spec section 11).
-// Update checks run against latest.yml in the release assets. We publish the
-// installer locally (see electron-builder.yml) so no GitHub Actions minutes
-// are used.
-//
-// electron-updater's `autoUpdater` is a lazy getter that builds a platform
-// updater on first access (which needs Electron's `app`). So we only touch it
-// from initUpdater(), called inside app.whenReady().
+// autoUpdater needs app ready, touch only after whenReady
 
 import electronUpdater, { type AppUpdater } from 'electron-updater'
 import type { BrowserWindow } from 'electron'

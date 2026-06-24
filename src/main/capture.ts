@@ -1,15 +1,9 @@
-// Screen capture for the OCR pipeline (main process).
-//
-// We capture in the main process via desktopCapturer with the thumbnail sized to
-// the display's full pixel resolution. This avoids renderer getUserMedia and any
-// media permission prompts. The captured NativeImage is cropped to the calibrated
-// mobiGlas panel and handed to the OCR pipeline as a PNG buffer.
+// screen capture for OCR
 
 import { desktopCapturer, screen, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
 import type { CropRect, DisplayInfo } from '@shared/types'
 
-/** Enumerate displays the user can target for capture. */
 export function listDisplays(): DisplayInfo[] {
   const primaryId = screen.getPrimaryDisplay().id
   return screen.getAllDisplays().map((d, i) => ({
@@ -29,10 +23,6 @@ function resolveDisplay(displayId: string): Electron.Display {
   return screen.getPrimaryDisplay()
 }
 
-/**
- * Capture a full-resolution screenshot of the chosen display. Returns the
- * NativeImage, or null if no matching capture source was produced.
- */
 export async function captureDisplay(displayId: string): Promise<NativeImage | null> {
   const display = resolveDisplay(displayId)
   const scale = display.scaleFactor || 1
@@ -45,15 +35,14 @@ export async function captureDisplay(displayId: string): Promise<NativeImage | n
   })
   if (sources.length === 0) return null
 
-  // Match the capture source to the requested display when the platform exposes
-  // display_id; otherwise fall back to the first (single-monitor) source.
+  // match source to display
   const match =
     sources.find((s) => s.display_id && s.display_id === String(display.id)) ?? sources[0]
   const img = match.thumbnail
   return img.isEmpty() ? null : img
 }
 
-/** Crop a NativeImage to a fractional rect, returning a fresh image. */
+// crop to fractional rect
 export function cropImage(img: NativeImage, crop: CropRect): NativeImage {
   const size = img.getSize()
   const rect = {
@@ -62,14 +51,14 @@ export function cropImage(img: NativeImage, crop: CropRect): NativeImage {
     width: Math.min(size.width, Math.round(crop.w * size.width)),
     height: Math.min(size.height, Math.round(crop.h * size.height))
   }
-  // If the rect is too small, fall back to the whole frame.
+  // too small: use whole frame
   if (rect.width < 4 || rect.height < 4) return img
   if (rect.x + rect.width > size.width) rect.width = size.width - rect.x
   if (rect.y + rect.height > size.height) rect.height = size.height - rect.y
   return img.crop(rect)
 }
 
-/** Downscale a data-URL-able preview so calibration screenshots stay light. */
+// light preview for calibration
 export function toPreviewDataUrl(img: NativeImage, maxWidth = 1280): string {
   const size = img.getSize()
   const scaled =
@@ -83,12 +72,7 @@ export function toPng(img: NativeImage): Buffer {
   return img.toPNG()
 }
 
-/**
- * Upscale before recognition. Tesseract estimates the contract panel at ~150 DPI
- * and wants ~300, so doubling with a high-quality filter lifts the read on the
- * thin in-game text. Color is left alone: Tesseract grayscales and binarizes
- * internally, so pre-graying or inverting changes nothing.
- */
+// upscale 2x for OCR
 export function toUpscaledPng(img: NativeImage, factor = 2): Buffer {
   const { width, height } = img.getSize()
   if (factor <= 1 || width < 4 || height < 4) return img.toPNG()
@@ -97,12 +81,7 @@ export function toUpscaledPng(img: NativeImage, factor = 2): Buffer {
     .toPNG()
 }
 
-/**
- * Grayscale PNG of an image. This roughly halves the size of stored/uploaded
- * training crops, and the OCR pipeline works on grayscale anyway so nothing is
- * lost. Uses nativeImage's BGRA bitmap so we need no extra image dependency at
- * runtime.
- */
+// grayscale for smaller samples
 export function toGrayscalePng(img: NativeImage): Buffer {
   const { width, height } = img.getSize()
   const bmp = img.toBitmap() // BGRA

@@ -1,34 +1,19 @@
-// List of cargo-capable, flyable ships.
-//
-// Built from the UEXcorp API v2 /vehicles endpoint (flyable ships with cargo
-// capacity, no ground vehicles or concept ships). `scu` is cargo capacity;
-// `containerSizes` are the box sizes the ship's grid accepts.
-// To rebuild, re-run the UEX sync (see docs / Settings -> UEX).
-// Source: https://uexcorp.space/api/2.0/vehicles
-//
-// Snapshot taken 2026-06-20, 108 ships.
+// from uexcorp api /vehicles, rebuild via UEX sync. snapshot 2026-06-20
 
-/** A cargo bay/module you can install on a modular ship (e.g. Retaliator bow/stern). */
 export interface ShipModule {
-  /** Stable id (slug). Used to remember which modules the user has installed. */
   id: string
-  /** Name shown to the user, e.g. "Cargo Module - Bow". */
   name: string
-  /** SCU this module adds when installed. */
   scu: number
 }
 
 export interface Ship {
   name: string
-  /** Cargo capacity. For modular ships this is the max (hull plus all modules). */
+  /** max scu (hull plus all modules) */
   scu: number
-  /** UEXcorp vehicle id, used to re-sync. */
   uexId: number
-  /** SCU box sizes the ship's cargo grid accepts. */
   containerSizes: number[]
-  /** Hull cargo without any modules (modular ships only). */
+  /** hull scu without modules */
   baseScu?: number
-  /** Cargo modules you can install (modular ships only). */
   modules?: ShipModule[]
 }
 

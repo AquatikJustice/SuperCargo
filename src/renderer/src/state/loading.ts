@@ -1,11 +1,4 @@
-// Loading Mode plan: walk the solved ROUTE one stop at a time and, at each stop,
-// tell the user what to LOAD here (the legs whose cargo is collected at this stop)
-// and what to UNLOAD here (deliveries that drop here). Cargo can be picked up in
-// several places, so loading interleaves with delivery - this follows the route
-// order instead of assuming one load session.
-//
-// Each line leads with a "tell": the one stack unique to its contract among all
-// active contracts, so you can pick the right look-alike freight-elevator mission.
+// per-stop load/unload walkthrough
 
 import type { HaulingContract } from '@shared/types'
 import { boxBreakdown } from '@shared/box'
@@ -15,15 +8,10 @@ import type { RoutePlan } from './route'
 const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
   c.objectives.filter((o) => !o.delivered)
 
-/** Format a (commodity,size,count) tell, e.g. "5x 16 SCU Titanium Ore". */
 const tellLabel = (commodity: string, size: number, count: number): string =>
   `${count}× ${size} SCU ${commodity}`
 
-/**
- * For each active contract, the single most distinctive thing to look for in the
- * freight elevator: a (commodity, box-size, count) stack no other active contract
- * has, else a commodity only it carries, else null (genuinely ambiguous).
- */
+// distinctive tell per contract, else null
 function distinctiveTells(contracts: HaulingContract[]): Map<string, string | null> {
   const live = activeContracts(contracts)
   const tupleOwners = new Map<string, Set<string>>()
@@ -65,17 +53,12 @@ function distinctiveTells(contracts: HaulingContract[]): Map<string, string | nu
 }
 
 export interface RouteLoadLine {
-  /** contract ref, to match the freight-elevator mission. */
   ref: string
-  /** the unique-among-active stack used to FIND this contract in the FE. */
   tell: string | null
   commodity: string
   scu: number
-  /** e.g. "5x16 + 1x4". */
   breakdown: string
-  /** where this cargo is going. */
   destination: string
-  /** true when the delivery loads from more than one pickup (load what's here). */
   multiPickup: boolean
   objectiveId: string
 }
@@ -85,17 +68,12 @@ export interface RouteLoadStop {
   label: string
   code: string
   region: string
-  /** cargo to load at this stop. */
   loads: RouteLoadLine[]
-  /** cargo to unload at this stop. */
   drops: RouteLoadLine[]
-  /** SCU aboard after this stop. */
   loadAfter: number
-  /** objectives touched here, for the 3D highlight. */
   objectiveIds: string[]
 }
 
-/** Turn the solved route into a load/unload walkthrough. */
 export function buildRouteLoadingPlan(
   contracts: HaulingContract[],
   plan: RoutePlan

@@ -6,6 +6,25 @@ import { Btn } from './ui'
 import Typeahead from './Typeahead'
 import { shipCapacity } from '@shared/shipModules'
 
+// close popover on outside click
+function useOutsideClose<T extends HTMLElement>(): {
+  open: boolean
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ref: React.MutableRefObject<T | null>
+} {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<T | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+  return { open, setOpen, ref }
+}
+
 const labelStyle: React.CSSProperties = {
   fontFamily: F.display,
   fontSize: 11,
@@ -74,17 +93,7 @@ function RunChip(): React.ReactElement {
   const runId = useStore((s) => s.runId)
   const startNewRun = useStore((s) => s.startNewRun)
   const activeCount = useStore((s) => s.contracts.length)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
+  const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
 
   return (
     <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26 }}>
@@ -181,23 +190,12 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const installedModules = useStore((s) => s.settings.installedModules)
   const ships = useStore((s) => s.ships)
   const updateSettings = useStore((s) => s.updateSettings)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
+  const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
   const shipNames = useMemo(() => ships.map((s) => s.name), [ships])
   const ship = ships.find((s) => s.name === shipName)
   const scu = shipCapacity(ship, installedModules[shipName])
   const modules = ship?.modules ?? []
   const installed = installedModules[shipName] ?? modules.map((m) => m.id)
-
-  // Close the popover on any click outside it.
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
 
   const toggleModule = (id: string): void => {
     if (!ship?.modules) return
@@ -403,7 +401,6 @@ function WindowControls(): React.ReactElement {
         title={maximized ? 'Restore' : 'Maximize'}
       >
         {maximized ? (
-          // Restore: two offset squares
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="8" y="3" width="13" height="13" />
             <path d="M3 8v11a2 2 0 0 0 2 2h11" />
@@ -446,9 +443,6 @@ function CompactIcon(): React.ReactElement {
 }
 
 function Logo(): React.ReactElement {
-  // Isometric stacked-cargo mark from the design comp: three solid SCU crates
-  // stacked into an L, with a translucent purple "ghost" crate (light outline,
-  // the snap target) filling the open top slot to complete the square.
   const scu = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '26.1',

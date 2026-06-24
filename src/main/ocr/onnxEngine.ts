@@ -1,13 +1,5 @@
-// Custom CRNN+CTC recognizer that runs the exported ONNX model via onnxruntime-node.
-//
-// Drop-in alternative to TesseractEngine: train in scripts/train/, export
-// model.onnx + charset.json, put them in userData/ocr-model/, and pick engine
-// "onnx". Preprocessing must match scripts/train/dataset.py:
-//   grayscale, height 32, normalize (x/255 - 0.5)/0.5, input [1,1,32,W],
-//   output [1,T,C], CTC blank = index 0, charset.json = { chars: ["<blank>", ...] }.
-//
-// onnxruntime-node is imported lazily so a missing or broken runtime reports
-// "unavailable" instead of crashing the app at startup.
+// CRNN+CTC ONNX recognizer.
+// preprocessing must match scripts/train/dataset.py.
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -16,7 +8,7 @@ import type { OcrEngine, OcrRecognition } from './engine'
 
 const IMG_H = 32
 
-// onnxruntime-node ships no types here (optional dep), so describe the part we use.
+// optional dep ships no types
 interface OrtTensor {
   data: Float32Array
   dims: number[]
@@ -92,11 +84,10 @@ export class OnnxEngine implements OcrEngine {
     return this.loading
   }
 
-  /** PNG buffer -> Float32 [1,1,32,W] normalized to [-1,1]; returns {data,width}. */
   private preprocess(png: Buffer): { data: Float32Array; width: number } {
     const resized = nativeImage.createFromBuffer(png).resize({ height: IMG_H })
     const { width } = resized.getSize()
-    const bmp = resized.toBitmap() // BGRA pixels, length width*32*4
+    const bmp = resized.toBitmap() // bgra
     const w = Math.max(1, width)
     const data = new Float32Array(IMG_H * w)
     for (let y = 0; y < IMG_H; y++) {
@@ -117,7 +108,6 @@ export class OnnxEngine implements OcrEngine {
     let confSum = 0
     let confN = 0
     for (let t = 0; t < T; t++) {
-      // pick the top class (argmax) and its softmax probability over the C classes at this step
       let best = 0, bestV = -Infinity, sumExp = 0, max = -Infinity
       for (let c = 0; c < C; c++) {
         const v = logits[t * C + c]
@@ -157,7 +147,7 @@ export class OnnxEngine implements OcrEngine {
     try {
       await this.session?.release?.()
     } catch {
-      /* ignore */
+      //
     }
     this.session = null
     this.chars = null

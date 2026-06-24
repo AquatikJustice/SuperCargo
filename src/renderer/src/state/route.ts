@@ -1,8 +1,4 @@
-// Renderer-side glue between the manifest and the pure route solver (@shared/route).
-// Turns contracts into unique location nodes plus pickup/delivery jobs, builds a
-// distance matrix (real UEX terminal distances where we have them, a system/body
-// grouping cost otherwise), and shapes the solved order into UI steps plus a
-// destination order the rest of the app can use.
+// manifest -> route solver glue
 
 import type { HaulingContract, Location } from '@shared/types'
 import { planRoute, type RouteJob, type RouteResult } from '@shared/route'
@@ -15,12 +11,11 @@ export interface RouteNode {
   code: string
   region: string
   uexId?: number
-  /** Game-file position + system, for local distance math. Undefined => unmatched. */
+  /** undefined => unmatched */
   x?: number
   y?: number
   z?: number
   system?: string
-  /** raw destination strings (as stored on objectives) that resolve to this node. */
   destStrings: string[]
 }
 
@@ -33,8 +28,6 @@ interface JobInfo {
   objectiveId: string
 }
 
-/** Points back at the objective handled at a stop, so the loading guide can resolve
- *  box counts + tells. */
 export interface StepRef {
   contractId: string
   objectiveId: string
@@ -44,14 +37,13 @@ export interface RouteModel {
   nodes: RouteNode[]
   jobs: RouteJob[]
   jobInfo: JobInfo[]
-  /** index of the start depot node, when a starting location is set. */
   depot?: number
 }
 
 export interface RouteLegItem {
   commodity: string
   scu: number
-  /** other end of this leg (destination for a pickup, origin for a drop). */
+  /** dest if pickup, origin if drop */
   other: string
 }
 
@@ -60,21 +52,15 @@ export interface RouteStep {
   label: string
   code: string
   region: string
-  /** cargo loaded here. */
   pickups: RouteLegItem[]
-  /** cargo delivered here. */
   drops: RouteLegItem[]
-  /** objectives loaded here (deduped), for the loading guide. */
   loadRefs: StepRef[]
-  /** objectives delivered here (deduped), for the loading guide. */
   dropRefs: StepRef[]
-  /** SCU aboard after this stop. */
   loadAfter: number
 }
 
 export interface RoutePlan {
   steps: RouteStep[]
-  /** ordered destination strings, for the manifest `order`. */
   destOrder: string[]
   totalDistance: number
   feasible: boolean
@@ -82,7 +68,7 @@ export interface RoutePlan {
   capacity: number
   method: RouteResult['method']
   reason?: string
-  /** true when at least one leg used a real UEX distance (vs grouping fallback). */
+  /** real distance vs grouping fallback */
   usedRealDistance: boolean
 }
 
@@ -93,7 +79,6 @@ const norm = (s: string): string =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** Try to match a free pickup/destination string to a UEX Location. */
 export function matchLocation(raw: string, locations: Location[]): Location | null {
   if (!raw || !locations.length) return null
   const split = splitDestination(raw)
@@ -105,7 +90,7 @@ export function matchLocation(raw: string, locations: Location[]): Location | nu
   const n = norm(raw)
   const byExact = locations.find((l) => norm(l.name) === n || norm(l.code) === n)
   if (byExact) return byExact
-  // one name contains the other (e.g. "Baijini Point" vs "Baijini")
+  // one name contains the other
   const byContains = locations.find((l) => {
     const ln = norm(l.name)
     return ln.includes(n) || n.includes(ln)
@@ -113,7 +98,7 @@ export function matchLocation(raw: string, locations: Location[]): Location | nu
   return byContains ?? null
 }
 
-/** System code prefix, e.g. "CRU-L1" / "Crusader" -> "CRU"/"". */
+/** 3-letter system prefix from a code */
 function systemOf(code: string): string {
   const m = /^([A-Za-z]{3})\b/.exec(code)
   return m ? m[1].toUpperCase() : ''
@@ -128,15 +113,14 @@ interface Pos {
 function hasPos(n: { x?: number; system?: string }): n is Pos & typeof n {
   return typeof n.x === 'number' && typeof n.system === 'string'
 }
-/** Straight-line distance in gigameters (game-file coords are meters). Star
- *  Citizen bodies don't orbit the star, so within a system this is accurate. */
+/** gigameters; coords are meters, hence /1e9 */
 function dist3(a: Pos, b: Pos): number {
   const dx = a.x - b.x
   const dy = a.y - b.y
   const dz = a.z - b.z
   return Math.sqrt(dx * dx + dy * dy + dz * dz) / 1e9
 }
-/** Jump-gate stations per system, for pricing cross-system legs. */
+/** gateway stations per system */
 function gatewaysBySystem(locations: Location[]): Map<string, Pos[]> {
   const m = new Map<string, Pos[]>()
   for (const l of locations) {
@@ -148,7 +132,7 @@ function gatewaysBySystem(locations: Location[]): Map<string, Pos[]> {
   return m
 }
 
-/** Same physical place? Prefer the UEX id, fall back to name + system. */
+/** match by uex id, else name + system */
 function sameLoc(a: Location | null, b: Location | null): boolean {
   if (!a || !b) return false
   if (a.uexId && b.uexId) return a.uexId === b.uexId
@@ -163,9 +147,7 @@ export function buildRouteModel(
   const nodes: RouteNode[] = []
   const byKey = new Map<string, number>()
 
-  // Depot: where the run begins. Cargo whose pickup is the start location loads
-  // here and rides along, and the solver is forced to start from it. The start's
-  // own delivery (if any) stays a normal stop, visited later in the route.
+  // forced start; pickups here load at depot
   const startLoc = startLocation ? matchLocation(startLocation, locations) : null
   let depot: number | undefined
   if (startLoc) {
@@ -188,13 +170,9 @@ export function buildRouteModel(
 
   const nodeFor = (raw: string, isDest: boolean): number => {
     const loc = matchLocation(raw, locations)
-    // A pickup at the start location loads at the depot, never as its own stop.
     if (!isDest && depot !== undefined && sameLoc(loc, startLoc)) return depot
     const split = splitDestination(raw)
-    // Key by UEX terminal id when there is one; game-file locations (DCs, outposts)
-    // share uexId 0, so key those by name or they'd all collide into one node.
-    // Game-file locations share uexId 0; key by name + system so two same-named
-    // gateways ("Nyx Gateway" in Stanton vs in Pyro) stay distinct nodes.
+    // uexId 0 isn't unique, so key those by name + system
     const key = loc
       ? loc.uexId
         ? `uex:${loc.uexId}`
@@ -227,10 +205,7 @@ export function buildRouteModel(
     for (const o of c.objectives) {
       if (o.delivered) continue
       const destNode = nodeFor(o.destination, true)
-      // A delivery can load from several pickups (many-to-one hauls). Split its SCU
-      // across them so the solver routes through every pickup before the drop; the
-      // exact split is unknown, so spread it evenly. Dedupe first - the same terminal
-      // listed twice would otherwise halve the SCU into two identical legs.
+      // dedupe first or a repeated pickup halves the scu
       const rawPickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
       const seenPu = new Set<string>()
       const pickups = rawPickups.filter((p) => {
@@ -253,16 +228,11 @@ export function buildRouteModel(
   return { nodes, jobs, jobInfo, depot }
 }
 
-// Jump transit + a fallback for a cross-system leg we can't gate-route. Both in
-// gigameters, larger than any within-system hop so the solver batches a system
-// before crossing.
+// gigameters; bigger than any in-system hop so solver batches by system
 const GATE_HOP_GM = 50
 const CROSS_SYSTEM_GM = 200
 
-/** nxn travel-cost matrix (gigameters). Same-system pairs are exact Cartesian
- *  distance; cross-system routes through each system's nearest jump gate; nodes
- *  without coordinates fall back to a body/system grouping estimate, kept on the
- *  same gigameter scale so it mixes cleanly. */
+/** nxn travel-cost matrix in gigameters */
 function buildDistMatrix(
   nodes: RouteNode[],
   locations: Location[]
@@ -274,7 +244,7 @@ function buildDistMatrix(
     if (!gs || !gs.length) return null
     return Math.min(...gs.map((g) => dist3(node, g)))
   }
-  // grouping estimate for a pair we can't place, on the gigameter scale.
+  // fallback when a node has no coords
   const groupCost = (a: RouteNode, b: RouteNode): number => {
     if (a.region && a.region === b.region) return 5
     const sa = systemOf(a.code)
@@ -311,8 +281,6 @@ function buildDistMatrix(
   return { dist, usedReal }
 }
 
-/** Solve and shape into a RoutePlan. Distances are computed locally from the
- *  bundled game-file coordinates, so no network/token is involved. */
 export function computeRoutePlan(
   contracts: HaulingContract[],
   locations: Location[],
@@ -342,7 +310,7 @@ export function computeRoutePlan(
       }
       if (j.destNode === nodeIdx) {
         drops.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.pickupNode].label })
-        // A multi-pickup delivery has one job per pickup, all dropping here; show it once.
+        // one job per pickup, all drop here; show once
         if (!dropSeen.has(j.objectiveId)) {
           dropSeen.add(j.objectiveId)
           dropRefs.push({ contractId: j.contractId, objectiveId: j.objectiveId })

@@ -1,15 +1,7 @@
-// Fuzzy string matching that catches OCR mistakes.
-//
-// OCR of the mobiGlas contract screen is never perfect ("Titaniurn", "Stanton 1 -
-// ARC-L1"). Every recognized commodity / destination is matched back against the
-// official UEXcorp lists, so a near-miss read still lands on the right entry.
-//
-// No dependencies and no side effects, so both the main process (during a capture)
-// and the renderer (when the user corrects a field) can use it.
+// fuzzy match against known names
 
 import type { MatchResult } from './types'
 
-/** Lowercase, collapse whitespace, and drop the stray punctuation OCR adds. */
 export function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -19,33 +11,7 @@ export function normalize(s: string): string {
     .trim()
 }
 
-/** Levenshtein edit distance between two strings. */
-export function editDistance(a: string, b: string): number {
-  if (a === b) return 0
-  if (!a.length) return b.length
-  if (!b.length) return a.length
-
-  let prev = new Array<number>(b.length + 1)
-  let curr = new Array<number>(b.length + 1)
-  for (let j = 0; j <= b.length; j++) prev[j] = j
-
-  for (let i = 1; i <= a.length; i++) {
-    curr[0] = i
-    const ca = a.charCodeAt(i - 1)
-    for (let j = 1; j <= b.length; j++) {
-      const cost = ca === b.charCodeAt(j - 1) ? 0 : 1
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-    }
-    const tmp = prev
-    prev = curr
-    curr = tmp
-  }
-  return prev[b.length]
-}
-
-// Characters OCR routinely swaps for one another. A substitution within a group
-// costs a fraction of a normal edit, so a read like "Baljini" still lands hard on
-// "Baijini" (the lone i<->l swap barely dents the score).
+// look-alikes; same-group swaps cost less
 const CONFUSABLE_GROUPS = ['il1|', 'o0', 's5']
 const confusableGroup = new Map<string, number>()
 CONFUSABLE_GROUPS.forEach((g, i) => {
@@ -58,7 +24,6 @@ function subCost(a: number, b: number): number {
   return ga !== undefined && ga === gb ? 0.4 : 1
 }
 
-/** Edit distance that treats OCR look-alike swaps (i/l/1, o/0, s/5) as cheap. */
 function confusableDistance(a: string, b: string): number {
   if (a === b) return 0
   if (!a.length) return b.length
@@ -82,7 +47,6 @@ function confusableDistance(a: string, b: string): number {
   return prev[b.length]
 }
 
-/** 0..1 similarity (1 = identical) derived from normalized edit distance. */
 export function similarity(a: string, b: string): number {
   const na = normalize(a)
   const nb = normalize(b)
@@ -94,9 +58,7 @@ export function similarity(a: string, b: string): number {
   const longest = Math.max(na.length, nb.length)
   let score = 1 - dist / longest
 
-  // Boost the score when one string contains the other. OCR often grabs a longer
-  // line that still holds the real name (or the reverse), e.g. "deliver to hur l1"
-  // vs "hur-l1".
+  // substring containment still scores high
   if (na.includes(nb) || nb.includes(na)) {
     score = Math.max(score, 0.85)
   }
@@ -104,17 +66,12 @@ export function similarity(a: string, b: string): number {
 }
 
 export interface MatchOptions {
-  /** Minimum similarity to accept as a confident match. Default 0.62. */
+  /** default 0.62 */
   threshold?: number
-  /** How many ranked suggestions to return. Default 5. */
+  /** default 5 */
   limit?: number
 }
 
-/**
- * Match a raw OCR token against a list of known names. Returns the best match
- * (or null if nothing clears the threshold) plus ranked suggestions for a
- * correction dropdown.
- */
 export function bestMatch(input: string, candidates: string[], opts: MatchOptions = {}): MatchResult {
   const threshold = opts.threshold ?? 0.62
   const limit = opts.limit ?? 5

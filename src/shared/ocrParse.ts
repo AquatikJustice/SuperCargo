@@ -1,109 +1,57 @@
-// Parse recognized contract-screen text into structured delivery objectives.
-//
-// The patterns below come from the GAME'S OWN objective templates, pulled
-// from Data.p4k -> Data/Localization/english/global.ini (the same source the
-// community localization / StarStrings projects use). Using the real format
-// strings (not guesses) is what makes parsing reliable. Reference keys:
-//
-//   HaulCargo_obj_itemspecifics      = "~mission(item)\n~mission(destination): ~mission(amount)/~mission(total) SCU"
-//   HaulCargo_obj_itemspecifics_01,P = "Deliver ~mission(amount)/~mission(total) SCU of ~mission(item) to ~mission(Destination|ListAll)"
-//   hauling_deliver_resource_objective = "Deliver ~mission(amount)/~mission(total) SCU of ~mission(item) to ~mission(Destination|Address|ListAll)."
-//   hauling_delivery_unlimited_objective,P = "~mission(amount) SCU of ~mission(item) Delivered to ~mission(Destination|ListAll)"
-//   hauling_return_resource_objective,P    = "Deliver ~mission(amount)/~mission(total) SCU of ~mission(item)."
-//   (box size, from CFP_RecoverCargo desc) = "...carry ~mission(MissionMaxSCUSize) cargo containers"
-//
-// Commodity / destination strings come out raw here; fuzzy matching against the
-// UEX lists (see fuzzy.ts) happens as a separate step so this stays list-free.
+// parse contract text to objectives; fuzzy matching is a separate step (fuzzy.ts)
 
 import { bestMatch, similarity } from './fuzzy'
-import type { Commodity, Location, MatchResult, OcrObjective } from './types'
+import type { Commodity, Location, MatchResult, OcrObjective, OcrWord } from './types'
 
 export interface RawObjective {
   commodity: string
   scuAmount: number
   destination: string
-  /** Where this leg loads, from "Collect <item> from <location>" lines. A delivery
-   *  can have several. */
   pickups?: string[]
 }
 
 export interface ParsedOcr {
   objectives: RawObjective[]
   maxBoxSize?: number
-  /** Full contract reward in aUEC, when the panel text included it. */
   reward?: number
 }
 
-// The "done/total" slash is one of OCR's worst glyphs: a freshly accepted "0/21"
-// routinely comes back "0721" (slash read as 7) or "0|21" / "0l21" / "0I21". So
-// the fraction separator allows those look-alikes. It still consumes exactly one
-// separator char between done and total, so the digit count disambiguates: "0721"
-// -> total 21, "07721" -> total 721.
+// ocr slash look-alikes; one separator so digit count disambiguates total
 const FRAC = '[\\/71|lI]'
-// Inline "Deliver <n>/<total> SCU of <item> to <dest>" (itemspecifics_01 /
-// deliver_resource). The amount we want is the TOTAL required (group 1).
+// group 1 is the total, not the done count
 const RE_DELIVER_TO = new RegExp(`deliver\\s+\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\s+of\\s+(.+?)\\s+to\\s+([^.\\n]+)`, 'gi')
-// "<n> SCU of <item> Delivered to <dest>" (delivery_unlimited).
 const RE_DELIVERED_TO = /(\d+)\s*scu\s+of\s+(.+?)\s+delivered\s+to\s+([^.\n]+)/gi
-// Generic fallback "<n> SCU of <item> to <dest>".
 const RE_GENERIC = /(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
-// Panel line "<destination>: <n>/<total> SCU", commodity is the line above it.
+// commodity is the line above
 const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\b`, 'i')
-// A line we should never treat as a commodity name when scanning upward.
+// never a commodity name
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
-// "Collect <item> from <location>" - the game's hauling_collect_objective. Gives
-// each leg its pickup(s); a delivery can have several (many-pickups-to-one-drop).
-// Capture the full "from <location>" phrase to the end of the (re-broken) line,
-// keeping a trailing "outpost on <body>" qualifier. The "Inc." abbreviation no
-// longer truncates it; cutSentence() drops any description sentence that follows.
 const RE_COLLECT = /collect\s+(.+?)\s+from\s+(.+)/gi
 
-// Max-box-size wording, from the game's own ~mission(MaxBoxSize) / MissionMaxSCUSize
-// templates (Data.p4k + StarStrings contracts.ini), most specific first:
-//   "...cargo boxes (all 16 SCU or smaller)"   <- recover-cargo descriptions
-//   "...carry 32 SCU cargo containers"          <- CFP recover descriptions
-//   "maximum container size 16 SCU" / "will be 16 SCU"
+// box-size wording, most specific first
 const BOX_PATTERNS = [
-  // "<n> SCU container(s)" / "<n> SCU cargo container(s)", e.g. the Covalex
-  // flavour text "(8 SCU containers or smaller)". Most reliable, so check first.
+  // most reliable, so check first
   /(\d+)\s*scu\s+(?:cargo\s+)?containers?/i,
-  // "(all 16 SCU or smaller)" / "16 SCU or smaller"
   /(?:all\s+)?(\d+)\s*scu\s+or\s+smaller/i,
-  // "maximum container size 16 SCU" / "max box 16 SCU"
   /max(?:imum)?\s+(?:container|box)[^0-9]{0,24}(\d+)\s*scu/i,
-  // "...will be 16 SCU"
   /(?:be|will\s+be)\s+(\d+)\s*scu/i
 ]
 
 const BOX_SIZES = [1, 2, 4, 8, 16, 24, 32]
 
-// Contract reward, shown top-right of the contract as "<n> aUEC" (often with a
-// "Reward" label). Thousands are comma-separated in-game ("88,500"); we strip all
-// non-digits from the captured number, so periods/commas are fine. The currency
-// token is kept lenient for OCR noise ("aUEC", "a UEC", "auEC"). The number class
-// deliberately excludes spaces so it can't bridge two unrelated figures into one.
+// no spaces, so it can't bridge two figures
 const NUM = '([0-9][0-9.,]*[0-9]|[0-9])'
-// "Reward" (lenient for OCR slop: rewarc / rewerd / rewald) then the amount,
-// optionally followed by the currency token. The number class excludes spaces so
-// it can't bridge two unrelated figures.
+// lenient for ocr slop: rewarc / rewerd / rewald
 const REWARD_LABEL = 'rew[ae][rl][a-z]?'
 const RE_REWARD_LABEL_CUR = new RegExp(`${REWARD_LABEL}[^0-9]{0,18}${NUM}\\s*a?\\s*u\\s?ec`, 'i')
-// Fallback: a number next to "Reward" WITHOUT a readable currency token. The
-// reward often shows next to a coin icon OCR can't read. Require comma-grouping
-// or 4+ digits so a small stray number (an SCU count, an index) can't win.
+// grouping or 4+ digits, so a stray scu count can't win
 const RE_REWARD_LABEL_NUM = new RegExp(
   `${REWARD_LABEL}[^0-9]{0,18}([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,})`,
   'i'
 )
 const RE_AUEC = new RegExp(`${NUM}\\s*a?\\s*u\\s?ec`, 'gi')
-// Currency-first form, e.g. "aUEC 88,500".
 const RE_AUEC_PRE = new RegExp(`a?\\s*u\\s?ec\\s*${NUM}`, 'gi')
-// Last resort when neither the "Reward" label nor an aUEC token survives OCR (the
-// reward sits next to a coin glyph that often eats the label, so the number can be
-// the only readable part, e.g. "a 325,250"). Find the largest money-shaped figure:
-// a comma/period-grouped thousands value (88,500 / 325.250) or a bare 5+ digit run.
-// Guard against an objective amount sneaking in: not part of a longer number, not
-// an "n/total" fraction, not glued to "SCU".
+// last resort: biggest money-shaped figure, not a fraction or scu count
 const RE_MONEY = /(?<![\d/.,])(\d{1,3}(?:[.,]\d{3})+|\d{5,})(?!\s*\/)(?!\s*scu)/gi
 
 function toAmount(s: string): number {
@@ -111,12 +59,7 @@ function toAmount(s: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** Pull the contract reward (aUEC) from the panel text. In priority order:
- *  1) a value next to "Reward" with the aUEC token, 2) a (comma-grouped / 4+ digit)
- *  value next to "Reward" alone (the currency may be a coin icon OCR can't read),
- *  3) the largest "<n> aUEC" figure, 4) the largest money-shaped number anywhere
- *  (label and currency both lost to OCR). Returns undefined when nothing plausible
- *  was read. */
+/** pull reward (aUEC), most reliable signal first */
 export function parseReward(text: string): number | undefined {
   for (const re of [RE_REWARD_LABEL_CUR, RE_REWARD_LABEL_NUM]) {
     const m = re.exec(text)
@@ -144,8 +87,7 @@ export function parseReward(text: string): number | undefined {
   return best > 0 ? best : undefined
 }
 
-// Body name -> station-code prefix, for rebuilding a code from the long
-// "Address|ListAll" destination form (see normalizeDestination).
+// body name -> station-code prefix, see normalizeDestination
 const BODY_CODE: Record<string, string> = {
   hurston: 'HUR',
   crusader: 'CRU',
@@ -153,15 +95,12 @@ const BODY_CODE: Record<string, string> = {
   microtech: 'MIC',
   pyro: 'PYR'
 }
-// "<Station> at <Body>'s L<n> Lagrange point", the descriptive destination the
-// panel shows instead of "HUR-L1 <Station>". Apostrophe/spacing kept lenient for
-// OCR noise (straight/curly quote, dropped apostrophe, "micro tech", "L 1"). The
-// Lagrange digit is captured as one char and OCR-confusable letters are mapped
-// back to digits (see lagDigit), e.g. "L5" is routinely misread as "LS".
+// long lagrange address form, lenient for ocr noise.
+// lag digit as one char since L5 reads as LS (see lagDigit)
 const RE_LAGRANGE_ADDRESS =
   /^(.+?)\s+at\s+(hurston|crusader|arccorp|micro\s?tech|pyro)['']?\s*s?\s+L\s?([1-5sSiIlLzZaA])\s+lagrange\s+point/i
 
-/** Map a Lagrange-point glyph (digit, or its common OCR look-alike letter) to 1-5. */
+/** map a lag glyph or its ocr look-alike to 1-5 */
 function lagDigit(ch: string): string | null {
   switch (ch.toLowerCase()) {
     case '1':
@@ -184,9 +123,7 @@ function lagDigit(ch: string): string | null {
   }
 }
 
-// Drop a description sentence the game appends after a location ("... on Cellin.
-// The folks need it."). A real sentence opens ". " + capital; an abbreviation like
-// "Inc." (". " + lowercase) is kept.
+// drop a trailing sentence (". " + capital), keep "Inc." (". " + lowercase)
 function cutSentence(s: string): string {
   return s.replace(/\.\s+[A-Z].*$/s, '')
 }
@@ -200,33 +137,25 @@ function cleanFragment(s: string): string {
     .trim()
 }
 
-// Trailing junk OCR sweeps onto the destination: the Reward/Accept UI, the
-// currency, the next objective's verb, status words, the contract description, or
-// a stray amount. A real freight location never contains these, so cut the
-// destination at the first one. Otherwise fuzzy matching sees a whole sentence and
-// can't place it. The description usually opens "Contractor ..." and OCR loves to
-// drop that leading C, so match it with or without ("c?ontract"); "for a/the" and
-// "is a/the" catch the rest of the flavour prose.
+// cut at the first trailing ui/prose word.
+// "c?ontract" since ocr drops the leading C of "Contractor"
 const DEST_TAIL =
   /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|c?ontract\w*|mission\w*|location|for\s+(?:you|a|an|the)|is\s+(?:a|an|the))\b/i
 
-// Two body suffixes the panel tacks onto a destination that aren't part of the
-// location name and block the match:
-//   "...to HDPC-Farnesway on Hurston."          (distribution centers)
-//   "...to Baijini Point above ArcCorp"         (bulk "from <x>" letter contracts)
-// Drop from the suffix on. "on" is scoped to a body name so it can't eat a real
-// "... on ..." location; "above" is always junk here (no freight name contains it).
-// The Lagrange form ("...at Hurston's L5 Lagrange point") uses "at <body>'s", so
-// neither branch touches it.
+// drop a trailing "on <body>"/"above" suffix.
+// "on" scoped to a body so it can't eat a real "... on ..." location
 const DEST_BODY_SUFFIX =
   /\s+(?:on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)|above)\b.*$/i
 
-// Real freight names end in one of these. When a destination soft-wraps without a
-// period, OCR runs the next line's letter prose straight onto it ("Green Glade
-// Station The folks at Everus Harbor..."). Cut at the first suffix so fuzzy matching
-// sees the name, not a sentence. A trailing pad code (e.g. "Depot S4LD01") is kept.
+// mission flavor words; none appear in a real location name, so they mean the
+// destination capture ran into the details prose
+const DEST_PROSE =
+  /\b(?:seems|like|currently|whatever|smaller|cargo|separated|delivered|spots?|encourage|contractors?|please|expect|greetings|thanks|prompt|anything|anywhere|folks|waiting|distributed)\b/i
+
+// cut at the suffix word so wrapped prose isn't appended.
+// trailing pad code (e.g. "Depot S4LD01") is kept
 const STATION_SUFFIX =
-  /\b(?:station|outpost|depot|harbou?r|hub|gateway|complex|platform|plant|refinery|processing|workcenter|cent(?:er|re))\b/i
+  /\b(?:station|spaceport|outpost|depot|harbou?r|hub|gateway|complex|platform|plant|refinery|processing|workcenter|cent(?:er|re))\b/i
 const PAD_CODE = /^\s+[A-Z0-9][A-Z0-9-]{1,7}\b/
 
 function anchorToStation(s: string): string {
@@ -234,10 +163,9 @@ function anchorToStation(s: string): string {
   if (!m) return s
   const end = m.index + m[0].length
   const after = s.slice(end)
-  // Leave the Lagrange address form intact ("... Station at Hurston's L1 ...") so
-  // normalizeDestination can rebuild the code from it.
+  // leave lagrange form intact for normalizeDestination to rebuild the code
   if (/^\s+at\s/i.test(after)) return s
-  // Keep a body qualifier ("outpost on Cellin") - it's the disambiguator, not prose.
+  // keep the body qualifier, it's the disambiguator not prose
   if (/^\s+on\s+\S/i.test(after)) return s
   const pad = PAD_CODE.exec(after)
   return s.slice(0, end + (pad ? pad[0].length : 0))
@@ -247,28 +175,21 @@ function trimDestinationTail(s: string): string {
   return anchorToStation(
     s.split(DEST_TAIL)[0].replace(DEST_BODY_SUFFIX, '')
   )
-    // a trailing amount (reward) with no keyword: only comma-grouped / 4+ digits,
-    // so a real "L1"/"Area18"-style number isn't stripped.
+    // trailing reward, no keyword: grouped / 4+ only, so "L1"/"Area18" survive
     .replace(/\s+\d{1,3}(?:[.,]\d{3})+\s*$/g, '')
     .replace(/\s+\d{4,}\s*$/g, '')
     .replace(/[\s,;:.\-•·|>]+$/g, '')
     .trim()
 }
 
-/**
- * Normalize a destination into the leading-code form the rest of the app expects
- * ("HUR-L1 Green Glade Station"). Contracts that present the long Lagrange address
- * ("Green Glade Station at Hurston's L1 Lagrange point") have no code, so we
- * rebuild it from the body + Lagrange number. Anything else passes through.
- */
+/** rebuild the leading "HUR-L1 ..." code from a long lagrange address */
 function normalizeDestination(dest: string): string {
   const m = RE_LAGRANGE_ADDRESS.exec(dest)
   if (!m) return dest
   const station = m[1].trim()
   const body = BODY_CODE[m[2].replace(/\s+/g, '').toLowerCase()]
   const lag = lagDigit(m[3])
-  // Rebuilt code form when we have both parts, else fall back to the bare station
-  // name (still fuzzy-matchable to "HUR-Ln <Station>"), never the whole raw run.
+  // bare station name still fuzzy-matches; never the raw run
   if (body && lag) return `${body}-L${lag} ${station}`
   return station || dest
 }
@@ -280,6 +201,47 @@ function snapBoxSize(n: number): number | undefined {
   return best
 }
 
+// the contract panel is two columns (details | objectives) and the engine
+// sometimes reads across them, fouling the parse. rebuild the text from word
+// boxes: split at the emptiest middle band, read each column top to bottom.
+export function reorderColumns(words: OcrWord[]): string | null {
+  if (words.length < 6) return null
+  const maxX = Math.max(...words.map((w) => w.x1))
+  if (maxX <= 0) return null
+  const avgHeight = words.reduce((s, w) => s + (w.y1 - w.y0), 0) / words.length
+
+  const cols = 40
+  const density = new Array(cols).fill(0)
+  for (const w of words) density[Math.min(cols - 1, Math.floor((w.x0 / maxX) * cols))]++
+  let split = -1
+  let lowest = Infinity
+  for (let i = Math.floor(cols * 0.34); i <= Math.floor(cols * 0.62); i++) {
+    if (density[i] < lowest) {
+      lowest = density[i]
+      split = i
+    }
+  }
+  const gutter = (split / cols) * maxX
+
+  const lines: string[] = []
+  for (const inColumn of [(w: OcrWord) => w.x0 < gutter, (w: OcrWord) => w.x0 >= gutter]) {
+    const col = words.filter(inColumn).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+    let row: OcrWord[] = []
+    let lastY: number | null = null
+    const flush = (): void => {
+      if (row.length) lines.push(row.sort((a, b) => a.x0 - b.x0).map((w) => w.text).join(' '))
+      row = []
+    }
+    for (const w of col) {
+      if (lastY !== null && w.y0 - lastY > avgHeight * 0.6) flush()
+      row.push(w)
+      lastY = w.y0
+    }
+    flush()
+  }
+  return lines.join('\n')
+}
+
 export function parseOcrText(rawText: string): ParsedOcr {
   const text = rawText.replace(/\r/g, '').replace(/[ \t]+/g, ' ')
   const found: RawObjective[] = []
@@ -289,19 +251,21 @@ export function parseOcrText(rawText: string): ParsedOcr {
     const commodity = cleanFragment(commodityRaw)
     const destination = normalizeDestination(trimDestinationTail(cleanFragment(destinationRaw)))
     if (!commodity || !destination || !Number.isFinite(scuAmount) || scuAmount <= 0) return
+    // drop over-captured prose: a real destination never spans another "to"/"from"
+    // nor carries mission flavor words, so those mean we ran past the real name
+    if (/\b(?:to|from)\b/i.test(destination) || DEST_PROSE.test(destination)) return
     const key = `${commodity.toLowerCase()}|${destination.toLowerCase()}`
     if (seen.has(key)) return
     seen.add(key)
     found.push({ commodity, scuAmount, destination })
   }
 
-  // 1) Panel format (most common in the mobiGlas detail list): a
-  //    "<destination>: <n>/<total> SCU" line preceded by the commodity name.
+  // panel format: "<dest>: <n>/<total> SCU", commodity on the line before
   const lines = text.split('\n').map((l) => l.trim())
   for (let i = 0; i < lines.length; i++) {
     const m = RE_PANEL_LINE.exec(lines[i])
     if (!m) continue
-    // Walk upward for the nearest plausible commodity line.
+    // nearest commodity line above
     let commodity = ''
     for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
       if (lines[j] && !RE_NOISE_LINE.test(lines[j])) {
@@ -312,12 +276,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
     if (commodity) add(commodity, parseInt(m[2], 10), m[1])
   }
 
-  // 2) Inline formats, most specific first.
-  //    The panel soft-wraps long destinations onto a second line, which would
-  //    otherwise truncate the captured destination at the newline (e.g. just
-  //    "Green Glade"). Rejoin into one logical line per objective by flattening
-  //    newlines and re-breaking before each objective keyword, so each
-  //    "Deliver ..."/"... Delivered ..." is captured whole (up to its trailing period).
+  // re-break before each keyword so a wrapped destination isn't cut at the newline
   const inlineText = text
     .replace(/\n+/g, ' ')
     .replace(/\s{2,}/g, ' ')
@@ -331,9 +290,8 @@ export function parseOcrText(rawText: string): ParsedOcr {
   collect(RE_DELIVERED_TO, 1, 2, 3)
   collect(RE_GENERIC, 1, 2, 3)
 
-  // Pickups: "Collect <item> from <location>" lines, grouped by commodity onto the
-  // matching delivery objective. inlineText has already broken a line before each
-  // "Collect", so the location capture stops at the next leg.
+  // group pickups by commodity; inlineText already broke before each "Collect"
+  // so the location capture stops at the next leg
   const pickupsByCommodity = new Map<string, string[]>()
   RE_COLLECT.lastIndex = 0
   let pm: RegExpExecArray | null
@@ -363,10 +321,8 @@ export function parseOcrText(rawText: string): ParsedOcr {
   return { objectives: found, maxBoxSize, reward: parseReward(text) }
 }
 
-// Collapse pickups that resolve to the same place. OCR can read one "Collect ...
-// from <X>" line slightly differently across legs, so two raw variants survive the
-// parse-time (raw-string) dedup yet both fuzzy-match the same station - which would
-// otherwise show as two identical pickup fields and split the leg's SCU in two.
+// collapse pickups that resolve to the same place; raw-string dedup misses these
+// when ocr reads the same line slightly differently across legs
 function dedupePickups(ps?: MatchResult[]): MatchResult[] | undefined {
   if (!ps || !ps.length) return ps
   const seen = new Set<string>()
@@ -381,20 +337,85 @@ function dedupePickups(ps?: MatchResult[]): MatchResult[] | undefined {
   return out
 }
 
-// Trailing "on <Body>" qualifier the game appends to disambiguate a facility
-// ("... outpost on Cellin"). Captured so operator+body can pick the right one.
+// trailing "on <body>", captured so operator+body picks the facility
 const ON_BODY = /\bon\s+(?:the\s+)?([A-Za-z][A-Za-z0-9 ]*?)\s*$/i
-// Operator brand at the head of a "the <Company>, Inc. outpost ..." phrase.
+// operator brand from "the <Company>, Inc. outpost ..."
 const OP_HEAD = /^(?:the\s+)?(.+?)(?:[,.]?\s*(?:inc|corp|ltd|co)\b|\s+outpost\b|[,.]|$)/i
 
-/**
- * Resolve a pickup/destination string to a known location. A direct name match
- * wins first; when that fails and the text carries an "on <body>" qualifier, fall
- * back to operator + body - so "the Rayari, Inc. outpost on Cellin" lands on Hickes
- * (the only Rayari outpost on Cellin) even though "Hickes" never appears in the
- * text. An operator phrase we can't place returns NO match (the user picks) rather
- * than a confident wrong guess.
- */
+// structural words shared across names; never used as an anchor
+const ANCHOR_STOP = new Set([
+  'station', 'outpost', 'depot', 'harbor', 'harbour', 'hub', 'gateway', 'complex',
+  'platform', 'plant', 'refinery', 'processing', 'workcenter', 'center', 'centre',
+  'point', 'port', 'mining', 'area', 'distribution', 'orbital', 'space', 'city',
+  'hurston', 'crusader', 'arccorp', 'microtech', 'micro', 'tech', 'pyro', 'magnus',
+  'terra', 'nyx', 'stanton', 'lagrange', 'the', 'and', 'hur', 'cru', 'arc', 'mic', 'pyr'
+])
+
+function anchorTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !/^\d+$/.test(t) && !ANCHOR_STOP.has(t))
+}
+
+interface AnchorIndex {
+  unigram: Map<string, string>
+  bigram: Map<string, string>
+}
+let anchorCache: { locs: Location[]; idx: AnchorIndex } | null = null
+
+// token/pair -> location, only when unique to one
+function anchorIndex(locations: Location[]): AnchorIndex {
+  if (anchorCache && anchorCache.locs === locations) return anchorCache.idx
+  const uni = new Map<string, Set<string>>()
+  const bi = new Map<string, Set<string>>()
+  const add = (m: Map<string, Set<string>>, key: string, name: string): void => {
+    const set = m.get(key)
+    if (set) set.add(name)
+    else m.set(key, new Set([name]))
+  }
+  for (const l of locations) {
+    const toks = anchorTokens(l.name)
+    for (const t of toks) add(uni, t, l.name)
+    for (let i = 0; i + 1 < toks.length; i++) add(bi, `${toks[i]} ${toks[i + 1]}`, l.name)
+  }
+  const unique = (m: Map<string, Set<string>>): Map<string, string> => {
+    const out = new Map<string, string>()
+    for (const [k, set] of m) if (set.size === 1) out.set(k, [...set][0])
+    return out
+  }
+  const idx = { unigram: unique(uni), bigram: unique(bi) }
+  anchorCache = { locs: locations, idx }
+  return idx
+}
+
+// pin a location by a distinctive word; bigrams first, then tokens.
+// fuzzy only for long tokens so a near-hit isn't chance. null => defer
+function anchorMatch(input: string, locations: Location[]): { name: string; score: number } | null {
+  const idx = anchorIndex(locations)
+  const toks = anchorTokens(input)
+  if (!toks.length) return null
+  for (let i = 0; i + 1 < toks.length; i++) {
+    const name = idx.bigram.get(`${toks[i]} ${toks[i + 1]}`)
+    if (name) return { name, score: 0.97 }
+  }
+  let best: { name: string; score: number } | null = null
+  for (const t of toks) {
+    const exact = idx.unigram.get(t)
+    if (exact) return { name: exact, score: 0.95 }
+    if (t.length < 5) continue
+    for (const [anchor, name] of idx.unigram) {
+      if (Math.abs(anchor.length - t.length) > 2) continue
+      const s = similarity(anchor, t)
+      if (s >= 0.82 && (!best || s > best.score)) best = { name, score: 0.8 * s }
+    }
+  }
+  return best
+}
+
+/** resolve a string to a known location; falls back to operator+body */
 export function resolveLocation(raw: string, locations: Location[]): MatchResult {
   const names = locations.map((l) => l.name)
   const input = raw.trim()
@@ -402,9 +423,8 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
   const bodyHint = bm ? bm[1].trim() : ''
   const core = bm ? input.slice(0, bm.index).trim() : input
 
-  // With a body qualifier, prefer the precise operator+body signal over a loose name
-  // match (which can latch onto a facility literally named after the operator, e.g.
-  // a location whose display name is just "Rayari").
+  // prefer operator+body; a loose name match can latch onto a facility
+  // named after the operator
   if (bodyHint) {
     const onBody = locations.filter((l) => l.body && similarity(l.body, bodyHint) >= 0.8)
     if (onBody.length) {
@@ -422,24 +442,27 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
             suggestions: onBody.slice(0, 5).map((l) => l.name)
           }
       }
-      // No operator to choose by: try a name match limited to that body.
+      // no operator to choose by: name match limited to that body
       const inBody = bestMatch(core, onBody.map((l) => l.name))
       if (inBody.match) return { ...inBody, input }
       if (onBody.length === 1)
         return { input, match: onBody[0].name, score: 0.85, suggestions: onBody.slice(0, 5).map((l) => l.name) }
-      // Several on that body, nothing to choose between them: let the user pick.
+      // ambiguous, let the user pick
       return { input, match: null, score: 0, suggestions: onBody.slice(0, 5).map((l) => l.name) }
     }
-    // Body not in our data: try a plain name match on the core, else don't guess.
+    // body not in our data: plain name match, else don't guess
     const direct = bestMatch(core, names)
     if (direct.match) return { ...direct, input }
     return { input, match: null, score: 0, suggestions: bestMatch(input, names).suggestions }
   }
 
+  // no body qualifier: anchor on a distinctive word, else whole-string fuzzy
+  const anchor = anchorMatch(input, locations)
+  if (anchor) return { input, match: anchor.name, score: anchor.score, suggestions: [anchor.name] }
   return bestMatch(input, names)
 }
 
-/** Fuzzy-match parsed objectives against the synced UEX commodity/location lists. */
+/** fuzzy-match parsed objectives against the uex lists */
 export function matchObjectives(
   raw: RawObjective[],
   commodities: Commodity[],

@@ -1,12 +1,7 @@
-// Drain the shared OCR-sample bucket into a local training set, then (optionally)
-// clear it so storage stays near zero. Run by whoever trains the model.
-//
-// Uses the SECRET key (full access). Never embed this in the app. Pass it via env:
-//   set SUPABASE_SECRET_KEY=sb_secret_xxx                (PowerShell: $env:SUPABASE_SECRET_KEY="sb_secret_xxx")
+// drain ocr-samples bucket to a local training set, --delete clears it.
+// needs SUPABASE_SECRET_KEY in env. never embed the secret key in the app.
 //   node scripts/train/drain_supabase.mjs --out harvested --delete
-//
-// Output: <out>/images/<client>_<id>.png + <out>/labels.jsonl (same shape as
-// gen-training-data.mjs), so train.py can consume it directly or merged.
+// output matches gen-training-data.mjs (labels.jsonl + images/).
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -63,7 +58,6 @@ async function main() {
   fs.mkdirSync(path.join(OUT, 'images'), { recursive: true })
   const manifest = fs.createWriteStream(path.join(OUT, 'labels.jsonl'), { flags: 'a' })
 
-  // Top level is one folder per anonymous client; go one level into each.
   const folders = (await list('')).filter((e) => e.id === null).map((e) => e.name)
   const clients = folders.length ? folders : [''] // flat bucket fallback
 
@@ -94,7 +88,6 @@ async function main() {
 
   console.log(`drained ${saved} samples -> ${OUT}`)
   if (DELETE && toDelete.length) {
-    // delete in chunks
     for (let i = 0; i < toDelete.length; i += 500) await remove(toDelete.slice(i, i + 500))
     console.log(`cleared ${toDelete.length} objects from the bucket`)
   } else if (toDelete.length) {

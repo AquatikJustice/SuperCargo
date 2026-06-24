@@ -1,11 +1,7 @@
 import React from 'react'
 import { C, F } from '../theme'
 
-/** Plain-language privacy policy. SuperCargo is a local desktop tool. The only
- *  thing that ever leaves the machine is an opt-in, anonymous OCR training
- *  sample. Kept in one place and shown both at first launch (Onboarding) and in
- *  Settings -> ABOUT. Text is large and high-contrast on purpose (the audience
- *  skews older and lower-vision). */
+// shown in onboarding and settings
 export const PRIVACY_UPDATED = '2026-06-21'
 
 interface Section {

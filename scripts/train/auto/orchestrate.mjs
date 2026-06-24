@@ -1,19 +1,4 @@
-// OCR pipeline orchestrator - runs LOCALLY on the trainer's machine. Two modes:
-//
-//   node scripts/train/auto/orchestrate.mjs drain
-//       Pull every uploaded sample down (drain_supabase.mjs --delete) into the
-//       accumulating harvested corpus, and clear the bucket.
-//
-//   node scripts/train/auto/orchestrate.mjs train [--min-new N] [--epochs E] [--synth-count C]
-//       Merge synthetic + harvested into a build set, train the CRNN, export ONNX,
-//       and log the run's validation metrics. Skips if fewer than N new harvested
-//       samples have arrived since the last train (when --min-new is given).
-//
-// This ONLY downloads + trains. It does NOT deploy or ship anything - the trained
-// model.onnx just lands in models/<timestamp>/crnn/ for you to review.
-//
-// Prereqs: SUPABASE_SECRET_KEY in the environment (drain), and a Python env with
-// scripts/train/requirements.txt installed (train). See README.md.
+// local ocr drain/train runner, never deploys. see README.md
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -34,8 +19,6 @@ const LOG_FILE = path.join(HERE, 'train-log.jsonl')
 const RUNS_DIR = path.join(HERE, 'runs')
 
 const PYTHON = process.env.PYTHON || 'python'
-
-// ---- small helpers ----------------------------------------------------------
 
 const args = process.argv.slice(3) // argv[2] is the mode
 const flag = (name, def) => {
@@ -69,7 +52,6 @@ function countLabels(dir) {
     .filter((l) => l.trim()).length
 }
 
-/** Run a command, copy its stdout/stderr to our console, resolve with the captured stdout. */
 function run(cmd, cmdArgs, opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, cmdArgs, { cwd: opts.cwd || REPO, shell: false, env: process.env })
@@ -86,8 +68,6 @@ function run(cmd, cmdArgs, opts = {}) {
   })
 }
 
-// ---- drain ------------------------------------------------------------------
-
 async function drain() {
   if (!process.env.SUPABASE_SECRET_KEY) {
     console.error('SUPABASE_SECRET_KEY is not set - cannot drain. See README.md.')
@@ -98,10 +78,6 @@ async function drain() {
   console.log(`[drain] harvested corpus now holds ${countLabels(HARVEST_DIR)} samples total.`)
 }
 
-// ---- train ------------------------------------------------------------------
-
-/** Link (or copy) every image listed in srcDir/labels.jsonl into BUILD_DIR, and
- *  append its label line. Try a hard link first (instant, no extra disk); copy if that fails. */
 function mergeInto(srcDir) {
   const labels = path.join(srcDir, 'labels.jsonl')
   if (!fs.existsSync(labels)) return 0
@@ -122,7 +98,7 @@ function mergeInto(srcDir) {
     fs.mkdirSync(path.dirname(to), { recursive: true })
     if (!fs.existsSync(to)) {
       try {
-        fs.linkSync(from, to)
+        fs.linkSync(from, to) // hard link, no extra disk
       } catch {
         fs.copyFileSync(from, to)
       }
@@ -171,7 +147,6 @@ async function train() {
 
   await ensureSynthetic(synthCount)
 
-  // Rebuild the merged build set from scratch.
   fs.rmSync(BUILD_DIR, { recursive: true, force: true })
   fs.mkdirSync(path.join(BUILD_DIR, 'images'), { recursive: true })
   const nSynth = mergeInto(SYNTH_DIR)
@@ -224,8 +199,6 @@ async function train() {
   )
 }
 
-// ---- status -----------------------------------------------------------------
-
 function status() {
   const state = readState()
   console.log('OCR pipeline status')
@@ -235,8 +208,6 @@ function status() {
   if (state.lastModel) console.log(`  last model       : ${state.lastModel} (val_cer ${state.lastValCer ?? '?'})`)
   console.log(`  secret key set   : ${process.env.SUPABASE_SECRET_KEY ? 'yes' : 'NO (drain will fail)'}`)
 }
-
-// ---- main -------------------------------------------------------------------
 
 const mode = process.argv[2]
 const table = { drain, train, status }

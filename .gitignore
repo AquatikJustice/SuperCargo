@@ -1,52 +1,36 @@
-# dependencies
 node_modules/
 
-# build output
 out/
 dist/
 release/
 *.tsbuildinfo
 
-# scratch / working files
 tmp/
-
-# logs
 logs/
 *.log
 npm-debug.log*
 
-# editor / OS
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
 
-# env / secrets (electron-builder publish token, etc.)
 .env
 .env.local
 
-# synthetic OCR training data + derived glyph atlas (embed CIG strings — never commit)
+# OCR training data + model artifacts
 training-data/
 glyph-atlas/
-
-# CRNN training artifacts (large weights; derived from CIG strings)
 models/
 harvested/
 scripts/train/.venv/
 **/__pycache__/
-
-# OCR pipeline automation runtime state (machine-local, may embed sample text)
 scripts/train/auto/.state.json
 scripts/train/auto/train-log.jsonl
 scripts/train/auto/runs/
 
 .scunpacked-cache/
 
-# internal dev docs + design scratch — not shipped to the repo. (Build/brand
-# assets — the MBTC logos + SuperCargo logo source — live in assets/, which IS
-# committed, and the runtime badge stays at src/renderer/public/.)
 docs/
-
-# design-app lock files (Affinity, etc.)
 *~lock~

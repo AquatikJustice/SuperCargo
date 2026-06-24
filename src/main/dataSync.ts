@@ -1,16 +1,5 @@
-// Keep the bundled UEX lists (ships, freight locations, commodities) current
-// without shipping an app update for every game patch.
-//
-// The repo hosts data/uex/{ships,locations,commodities}.json plus hashes.json
-// holding their sha256s. At launch, for users WITHOUT their own UEX token, we:
-//   1. seed the userData cache from the bundled copy if it's empty (so a fresh /
-//      offline install has working commodity + location matching right away), then
-//   2. compare each cached file's hash to the repo hashes and pull only the lists
-//      that changed, writing them into the same uex-*.json cache the token sync
-//      uses, so everything downstream is unchanged.
-//
-// Token users skip all of this: their live sync is fresher and also drives route
-// distances, and it would fight the hash compare.
+// refresh bundled uex lists from the repo without an app update.
+// token users skip this, their live sync is fresher.
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -20,7 +9,6 @@ import { app } from 'electron'
 const RAW_BASE = 'https://raw.githubusercontent.com/AquatikJustice/SuperCargo/master/data/uex'
 const FETCH_TIMEOUT_MS = 12000
 
-// repo file <-> the userData cache file the rest of the app already reads.
 const SPECS = [
   { repo: 'ships.json', cache: 'uex-vehicles.json', key: 'ships' },
   { repo: 'locations.json', cache: 'uex-locations.json', key: 'locations' },
@@ -31,7 +19,6 @@ function cachePath(file: string): string {
   return path.join(app.getPath('userData'), file)
 }
 
-/** Where the bundled seed lives: packaged resources, or the repo root in dev. */
 function seedDir(): string {
   const candidates = [
     path.join(process.resourcesPath, 'data', 'uex'),
@@ -45,11 +32,7 @@ function sha256(buf: Buffer | string): string {
   return crypto.createHash('sha256').update(buf).digest('hex')
 }
 
-/** Seed the cache from the bundled lists, and reconcile a stale cache left by an
- *  older version. A missing file is copied. An existing file is refreshed only when
- *  the bundled seed is BOTH newer (mtime) and different (hash) - the mtime guard
- *  keeps us from clobbering a cache the user updated themselves (e.g. token sync),
- *  which is always newer than a freshly-installed bundle. */
+// mtime guard: don't clobber a user-updated cache
 export function seedCacheIfNeeded(): void {
   const dir = seedDir()
   for (const s of SPECS) {
@@ -84,11 +67,7 @@ async function fetchText(url: string): Promise<string | null> {
   }
 }
 
-/**
- * Pull any list whose repo hash differs from the local copy. Returns true if at
- * least one file was updated (so the caller can re-push rosters). Best effort:
- * any network or parse failure leaves the existing cache untouched.
- */
+// true if anything changed, so caller re-pushes rosters
 export async function refreshFromRepo(): Promise<boolean> {
   const hashesText = await fetchText(`${RAW_BASE}/hashes.json`)
   if (!hashesText) return false
@@ -113,8 +92,7 @@ export async function refreshFromRepo(): Promise<boolean> {
 
     const body = await fetchText(`${RAW_BASE}/${s.repo}`)
     if (!body) continue
-    // Only trust it if it hashes to what the manifest promised and parses as the
-    // expected roster shape. Guards against a truncated download or a bad commit.
+    // verify hash + shape: guards truncated download or bad commit
     if (sha256(body) !== want) continue
     try {
       const parsed = JSON.parse(body)

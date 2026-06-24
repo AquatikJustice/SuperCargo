@@ -36,8 +36,7 @@ export default function HistoryPage(): React.ReactElement {
     [sorted, filter]
   )
 
-  // Group the entries (already newest-first) by run. A run id is first seen at
-  // its most recent activity, so the groups come out newest-run-first.
+  // shown is newest-first; map insertion order keeps runs sorted
   const groups = useMemo<RunGroupData[]>(() => {
     const map = new Map<string, HistoryEntry[]>()
     for (const e of shown) {
@@ -143,7 +142,6 @@ export default function HistoryPage(): React.ReactElement {
         ))}
       </div>
 
-      {/* one expandable card per run; click a run to see its contracts */}
       {groups.map((g, i) => (
         <RunGroup key={g.runId} group={g} defaultOpen={i === 0} />
       ))}
@@ -173,7 +171,6 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
 
   return (
     <div style={{ marginBottom: 10, border: `1px solid ${C.line}` }}>
-      {/* run header; click to expand */}
       <Btn
         onClick={() => setOpen((o) => !o)}
         style={{

@@ -13,12 +13,10 @@ import { Btn } from '../components/ui'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
 
-// 1 grid cell (1.25 m / 1 SCU cube) = 1 three.js unit. A small gap keeps stacked
-// boxes apart so you can see each one.
+// keeps stacked boxes visible
 const GAP = 0.08
 
-// Fixed height for the Loading Mode panel so it never grows/shrinks per step and
-// shoves the 3D grid around. Longer load/drop lists scroll inside it.
+// fixed so the grid doesn't jump per step
 const LOADING_PANEL_H = 268
 
 interface HoverInfo {
@@ -30,13 +28,10 @@ interface HoverInfo {
   color: string
 }
 
-/** Center of a box covering cells [p, p+size), in scene space (minus origin). */
 function center(p: number, size: number, origin: number): number {
   return p + size / 2 - origin
 }
 
-// In Loading Mode: 'current' = the destination you're loading now (bright),
-// 'loaded' = already placed (dimmed), 'future' = not yet (ghosted).
 type BoxMode = 'normal' | 'current' | 'loaded' | 'future'
 
 function Box({
@@ -57,8 +52,7 @@ function Box({
   const wx = (grid.x || 0) + pl.x
   const wy = (grid.y || 0) + pl.y
   const wz = (grid.z || 0) + pl.z
-  // Already-loaded cargo goes flat gray so only THIS stop's new boxes carry colour -
-  // you can see at a glance exactly what got added this step.
+  // gray loaded so only this stop carries colour
   const loaded = mode === 'loaded'
   const color = loaded ? '#6a7176' : pl.box.color
   const emissive = mode === 'current' ? 0.55 : loaded ? 0 : 0.18
@@ -113,7 +107,7 @@ function GridShell({
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={refOnly ? C.amber : C.acc} transparent opacity={refOnly ? 0.5 : 0.32} />
       </lineSegments>
-      {/* faint floor fill so empty bays look like solid volumes */}
+      {/* faint fill so empty bays show */}
       <mesh geometry={geo}>
         <meshBasicMaterial
           color={refOnly ? C.amber : C.acc}
@@ -126,7 +120,6 @@ function GridShell({
   )
 }
 
-// small local alias for the fiber pointer event we use
 type ThreeEvent = { nativeEvent: PointerEvent; stopPropagation: () => void }
 
 export default function CargoGridPage(): React.ReactElement {
@@ -143,9 +136,7 @@ export default function CargoGridPage(): React.ReactElement {
   const installed = installedModules[activeShip]
   const grids = useMemo(() => gridsFor(activeShip, installed), [activeShip, installed])
 
-  // Box source: a locked layout is fixed - delivered boxes stay in the pack so
-  // nothing slides into their cell, but they're hidden from the view. Unlocked is
-  // the live plan that re-flows as the manifest and route change.
+  // locked keeps delivered boxes so nothing slides into their cell
   const livePack = useMemo(() => packBoxes(contracts, order), [contracts, order])
   const packInput: PackBox[] = locked ? layout!.boxes : livePack
   const result = useMemo(() => packCargo(grids, packInput), [grids, packInput])
@@ -160,8 +151,6 @@ export default function CargoGridPage(): React.ReactElement {
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = locked ? layout!.boxes.filter((b) => !b.delivered).length : livePack.length
 
-  // Sections still carrying cargo, unified across locked/unlocked, each carrying the
-  // objective refs behind it (for the quick "mark this stop delivered" check).
   const sections = useMemo(() => {
     if (locked) {
       return layoutStops(layout!)
@@ -181,15 +170,15 @@ export default function CargoGridPage(): React.ReactElement {
       }))
   }, [locked, layout, contracts, order])
 
-  // Per-destination visibility (view only, lets you peek under a layer while loading).
   const [hidden, setHidden] = useState<Set<number>>(new Set())
   const toggleHidden = (idx: number): void =>
     setHidden((prev) => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
-  // scene bounds across ALL grids (so reference-only bays are framed too)
+  // bounds over all grids so ref-only bays get framed
   const { origin, span } = useMemo(() => {
     if (!grids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10 }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -202,7 +191,6 @@ export default function CargoGridPage(): React.ReactElement {
     return { origin: o, span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6) }
   }, [grids])
 
-  // --- Loading Mode: walk the route, loading at pickups and unloading at drops ---
   const loadPlan = useMemo(() => (route ? buildRouteLoadingPlan(contracts, route) : []), [contracts, route])
   const [loading, setLoading] = useState(false)
   const [loadIdx, setLoadIdx] = useState(0)
@@ -338,7 +326,6 @@ export default function CargoGridPage(): React.ReactElement {
           />
         </div>
       ) : (
-        /* legend: click a swatch to show or hide that stop's boxes (turn-ins happen on the Manifest) */
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
         {sections.map((s) => {
           const off = hidden.has(s.idx)
@@ -388,8 +375,7 @@ export default function CargoGridPage(): React.ReactElement {
             if (!g) return null
             if (!loading && hidden.has(pl.box.stopIdx)) return null
             const mode = boxMode(pl.box.objectiveId)
-            // In Loading Mode, only show cargo already aboard (this step + earlier).
-            // Future cargo is hidden so a full grid stays readable instead of buried.
+            // hide future cargo, keeps grid readable
             if (loading && mode === 'future') return null
             return (
               <Box
@@ -435,8 +421,6 @@ export default function CargoGridPage(): React.ReactElement {
   )
 }
 
-// One step of the route: what to LOAD at this pickup and/or UNLOAD at this drop,
-// each line tagged with its contract "tell" so you can find the right FE mission.
 function LoadingPanel({
   stop,
   done,
@@ -454,7 +438,6 @@ function LoadingPanel({
   onLoaded: () => void
   onBack: () => void
   onExit: () => void
-  /** Finished the walkthrough: lock the layout and leave loading mode. */
   onFinish: () => void
 }): React.ReactElement {
   const navBtn = (label: string, onClick: () => void, disabled?: boolean): React.ReactElement => (

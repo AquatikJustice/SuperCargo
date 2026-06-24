@@ -1,7 +1,6 @@
 import React from 'react'
 import { C, F } from '../theme'
 
-/** Panel shown on pages that are not built yet ("coming in a later phase"). */
 export default function Placeholder({ phase, lines }: { phase: string; lines: string[] }): React.ReactElement {
   return (
     <div style={{ padding: '70px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 16 }}>

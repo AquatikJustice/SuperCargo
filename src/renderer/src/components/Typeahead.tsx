@@ -4,26 +4,19 @@ import { C, F } from '../theme'
 export interface TypeaheadProps {
   value: string
   options: string[]
-  /** Called on every keystroke. Only fires when freeText is true. */
+  /** fires only when freeText */
   onChange?: (v: string) => void
-  /** Called when an option is picked (click / Enter). */
   onSelect?: (v: string) => void
   placeholder?: string
-  /** Allow values not in the option list (e.g. destinations). Default true. */
+  /** allow off-list values */
   freeText?: boolean
   maxResults?: number
   mono?: boolean
   autoFocus?: boolean
-  /** Empty the field on focus so it reads as a search box, not a filled-in value. */
   clearOnFocus?: boolean
-  /** Show a magnifier icon to signal it's a search field. */
   search?: boolean
 }
 
-/**
- * Filtered combobox. Renders only the matching options (capped), so a list of
- * hundreds stays cheap, far lighter than mounting every row in a dropdown.
- */
 export default function Typeahead({
   value,
   options,
@@ -43,8 +36,7 @@ export default function Typeahead({
   const [focused, setFocused] = useState(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Don't overwrite what the user is doing while the field is focused (e.g. a
-  // clearOnFocus reset). Re-sync to the selected value once focus leaves.
+  // don't clobber input while focused
   useEffect(() => {
     if (!focused) setQuery(value)
   }, [value, focused])
@@ -100,7 +92,7 @@ export default function Typeahead({
     blurTimer.current = setTimeout(() => {
       setFocused(false)
       setOpen(false)
-      if (!freeText && query !== value) setQuery(value) // not in the list, so revert it
+      if (!freeText && query !== value) setQuery(value) // revert off-list value
     }, 120)
   }
 
@@ -167,7 +159,7 @@ export default function Typeahead({
           {filtered.map((opt, i) => (
             <div
               key={opt}
-              // use onMouseDown (not onClick) so it runs before the input blur
+              // mousedown fires before blur
               onMouseDown={(e) => {
                 e.preventDefault()
                 commit(opt)
