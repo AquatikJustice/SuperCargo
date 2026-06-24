@@ -1,7 +1,4 @@
-// One-shot scan of the current Game.log to recover the hauling contracts that
-// are still active this session, for the case where SuperCargo was opened after
-// contracts were already accepted. Active = accepted minus ended (same as the
-// SCMDB watcher's active set), plus any New Objective lines that fired.
+// recover active hauls mid-session
 
 import * as fs from 'node:fs'
 import { parseLine, type MarkerEntry } from './logParser'
@@ -34,7 +31,6 @@ export function scanActiveContracts(logPath: string): ScannedContract[] {
         break
       }
       case 'ended':
-        // Any ending (complete, abandon, fail, disconnect) drops it from active.
         active.delete(parsed.event.missionId)
         break
     }

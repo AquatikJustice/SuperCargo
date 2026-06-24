@@ -11,12 +11,7 @@ type Drag =
   | { mode: 'resize'; mx: number; my: number; crop: CropRect }
   | null
 
-/**
- * Visual crop calibrator: capture a full-display screenshot, then drag/resize a
- * box over the mobiGlas contract panel. The box is stored as fractions of the
- * display so it survives resolution changes. A test read shows what the engine
- * pulls from the current crop.
- */
+// crop as fractions so it survives resolution changes
 export default function OcrCalibrator(): React.ReactElement {
   const crop = useStore((s) => s.settings.ocrCrop)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -125,13 +120,11 @@ export default function OcrCalibrator(): React.ReactElement {
             userSelect: 'none',
             border: `1px solid ${C.line}`,
             lineHeight: 0,
-            // Clip the crop box's 9999px dimming shadow to the preview only.
-            // Without this it bleeds out and darkens the whole Settings page.
+            // clip the 9999px dimming shadow to the preview
             overflow: 'hidden'
           }}
         >
           <img src={preview} alt="display preview" style={{ width: '100%', display: 'block' }} draggable={false} />
-          {/* dim everything outside the crop with an inset shadow trick */}
           <div
             onPointerDown={onPointerDown('move')}
             style={{

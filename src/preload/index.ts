@@ -10,7 +10,6 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   UpdateState,
-  UexSyncSummary,
   ShipRoster,
   LocationRoster,
   CommodityRoster,
@@ -30,7 +29,6 @@ function on<T>(channel: string, cb: (payload: T) => void): Unsubscribe {
 }
 
 const api = {
-  // settings
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.settingsGet),
   setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
     ipcRenderer.invoke(IPC.settingsSet, patch),
@@ -38,30 +36,22 @@ const api = {
     ipcRenderer.invoke(IPC.detectInstalls),
   pickLogFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.pickLogFile),
 
-  // manifest
   loadManifest: (): Promise<ManifestDoc> => ipcRenderer.invoke(IPC.manifestLoad),
   saveManifest: (doc: ManifestDoc): Promise<boolean> =>
     ipcRenderer.invoke(IPC.manifestSave, doc),
 
-  // history
   loadHistory: (): Promise<HistoryDoc> => ipcRenderer.invoke(IPC.historyLoad),
   saveHistory: (doc: HistoryDoc): Promise<boolean> =>
     ipcRenderer.invoke(IPC.historySave, doc),
 
-  // UEXcorp sync
   getUexShips: (): Promise<ShipRoster | null> => ipcRenderer.invoke(IPC.uexGetShips),
   getUexLocations: (): Promise<LocationRoster | null> => ipcRenderer.invoke(IPC.uexGetLocations),
   getUexCommodities: (): Promise<CommodityRoster | null> => ipcRenderer.invoke(IPC.uexGetCommodities),
-  syncUex: (): Promise<UexSyncSummary> => ipcRenderer.invoke(IPC.uexSync),
-  routeDistances: (ids: number[]): Promise<{ matrix: Record<string, number> }> =>
-    ipcRenderer.invoke(IPC.routeDistances, ids),
 
-  // watcher
   getWatcherStatus: (): Promise<WatcherStatus> => ipcRenderer.invoke(IPC.watcherStatus),
   restartWatcher: (): Promise<boolean> => ipcRenderer.invoke(IPC.watcherRestart),
   scanSession: (): Promise<ScannedContract[]> => ipcRenderer.invoke(IPC.scanSession),
 
-  // window
   windowControl: (action: 'minimize' | 'maximize' | 'close'): Promise<void> =>
     ipcRenderer.invoke(IPC.windowControl, action),
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>
@@ -70,7 +60,6 @@ const api = {
   onWindowState: (cb: (s: { maximized: boolean }) => void): Unsubscribe =>
     on(IPC.evtWindowState, cb),
 
-  // compact overlay window
   compactShow: (): Promise<void> => ipcRenderer.invoke(IPC.compactShow),
   compactHide: (): Promise<void> => ipcRenderer.invoke(IPC.compactHide),
   onCompactState: (cb: (s: { open: boolean }) => void): Unsubscribe =>
@@ -78,11 +67,9 @@ const api = {
   onManifestChanged: (cb: (doc: ManifestDoc) => void): Unsubscribe =>
     on(IPC.evtManifestChanged, cb),
 
-  // UI zoom (text + layout scale for readability). Uses webFrame so it scales
-  // the viewport itself, so we avoid the layout overflow that CSS `zoom` would cause.
+  // webFrame zoom avoids layout overflow
   setZoom: (factor: number): void => webFrame.setZoomFactor(factor),
 
-  // OCR (Phase 2)
   ocrListDisplays: (): Promise<DisplayInfo[]> => ipcRenderer.invoke(IPC.ocrListDisplays),
   ocrEngineInfo: (): Promise<OcrEngineInfo> => ipcRenderer.invoke(IPC.ocrEngineInfo),
   ocrPreview: (): Promise<string | null> => ipcRenderer.invoke(IPC.ocrPreview),
@@ -94,28 +81,21 @@ const api = {
   }): Promise<boolean> => ipcRenderer.invoke(IPC.ocrSaveSample, payload),
   onOcrResult: (cb: (r: OcrResult) => void): Unsubscribe => on(IPC.evtOcrResult, cb),
   onOcrStatus: (cb: (s: string) => void): Unsubscribe => on(IPC.evtOcrStatus, cb),
-  // Ask the main process to auto-capture for a just-accepted contract. The
-  // renderer only sends this when the contract is actually new (relog re-emits, and
-  // contracts already in the manifest are skipped); main checks the opt-in.
   requestOcrCapture: (missionId: string): void =>
     ipcRenderer.send(IPC.ocrRequestCapture, missionId),
 
-  // Contract data (StarStrings)
   getContractDataStatus: (): Promise<ContractDataStatus> =>
     ipcRenderer.invoke(IPC.contractDataStatus),
   rescanContractData: (): Promise<ContractDataStatus> =>
     ipcRenderer.invoke(IPC.contractDataRescan),
 
-  // Training-data contribution
   getTelemetryStatus: (): Promise<{ uploaded: number; queued: number }> =>
     ipcRenderer.invoke(IPC.telemetryStatus),
 
-  // updater
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.appVersion),
   checkForUpdates: (): Promise<boolean> => ipcRenderer.invoke(IPC.updaterCheck),
   quitAndInstall: (): Promise<boolean> => ipcRenderer.invoke(IPC.updaterQuitAndInstall),
 
-  // events (main -> renderer)
   onWatcherStatus: (cb: (s: WatcherStatus) => void): Unsubscribe =>
     on(IPC.evtWatcherStatus, cb),
   onContractAccepted: (cb: (e: ContractAcceptedEvent) => void): Unsubscribe =>

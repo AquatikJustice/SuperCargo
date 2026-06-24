@@ -1,9 +1,4 @@
-// Terminal palette and fonts, taken from the design mockup
-// Bright yellow accent (#ffd21e),
-// pure black background, amber/red kept for warnings.
-
-// Text colors are kept on the bright side on purpose: most users are older or
-// have low vision, so even the "dim" tiers stay readable on pure black.
+// dim tiers stay bright for low-vision
 export const C = {
   black: '#000000',
   acc: '#ffd21e',
@@ -32,30 +27,21 @@ export const F = {
   mono: "'JetBrains Mono', ui-monospace, monospace"
 } as const
 
-/** Soft text glow used across the mockup. */
 export const GLOW = '0 0 7px rgba(255,210,30,0.45)'
 export const GLOW_SOFT = '0 0 5px rgba(255,210,30,0.20)'
 
-/** One color per destination, picked by stop index. */
-export const STOP_COLORS = [
-  '#9fc6d6',
-  '#7fb89e',
-  '#c9b07e',
-  '#a89bc4',
-  '#d69b8a',
-  '#8ab0c9',
-  '#b3c47e'
-] as const
-
+// golden angle keeps hues distinct
 export function stopColor(index: number): string {
-  return STOP_COLORS[index % STOP_COLORS.length]
+  const t = index * 137.508
+  const hue = Math.round(t % 360)
+  const light = 66 - (Math.floor(t / 360) % 3) * 9 // step lightness per wrap
+  return `hsl(${hue}, 58%, ${light}%)`
 }
 
 export function fmt(n: number): string {
   return n.toLocaleString('en-US')
 }
 
-// UI zoom (text + layout scale for readability)
 export const ZOOM_MIN = 0.9
 export const ZOOM_MAX = 1.6
 export const ZOOM_STEP = 0.05

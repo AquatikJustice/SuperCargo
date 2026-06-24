@@ -1,19 +1,11 @@
-// Opt-in training-data contribution: upload confirmed, grayscale contract-panel
-// crops to a shared Supabase Storage bucket so the org's OCR model improves from
-// everyone's use. Privacy-first: opt-in (default OFF), anonymous client id, only
-// the tight panel crop + the user's confirmed text, nothing else.
-//
-// The bucket is PRIVATE with an INSERT-ONLY policy, so this publishable key can
-// upload but cannot read, list, or delete anything (verified). Uploads are queued
-// to disk and retried, so an offline machine or a paused project just means
-// samples upload later, none are lost.
+// opt-in ocr sample upload, queued + retried
+// bucket is insert-only so this key can't read/list/delete
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
 
-// Publishable (anon) key, safe to embed by design. The insert-only storage
-// policy is what protects the bucket. Rotate in the dashboard if ever abused.
+// publishable key, safe to embed
 const SUPABASE_URL = 'https://rjljbmbuegqerhxyaypq.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_wb_4KDrnvRc39ZaUfsUFxw_3Cvy1cxC'
 const BUCKET = 'ocr-samples'
@@ -55,8 +47,7 @@ function saveQueue(): void {
 }
 
 async function putObject(objectPath: string, body: Buffer, contentType: string): Promise<boolean> {
-  // Plain create (NO x-upsert): upsert would need a SELECT policy that the
-  // write-only bucket deliberately lacks. Unique ids mean we never need it.
+  // no x-upsert: bucket has no SELECT policy
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${objectPath}`, {
     method: 'POST',
     headers: {
@@ -66,7 +57,7 @@ async function putObject(objectPath: string, body: Buffer, contentType: string):
     },
     body: new Uint8Array(body)
   })
-  // 200 = stored; 409 = already exists (from an earlier partial run), treat as done.
+  // 409 = already there, treat as done
   return res.status === 200 || res.status === 409
 }
 
@@ -78,7 +69,7 @@ async function processQueue(): Promise<void> {
     for (const item of queue.items) {
       const png = path.join(outboxDir(), `${item.id}.png`)
       const json = path.join(outboxDir(), `${item.id}.json`)
-      if (!fs.existsSync(png) || !fs.existsSync(json)) continue // dropped; skip
+      if (!fs.existsSync(png) || !fs.existsSync(json)) continue
       try {
         const okPng = await putObject(`${item.clientId}/${item.id}.png`, fs.readFileSync(png), 'image/png')
         const okJson = await putObject(`${item.clientId}/${item.id}.json`, fs.readFileSync(json), 'application/json')
@@ -87,10 +78,10 @@ async function processQueue(): Promise<void> {
           fs.unlinkSync(json)
           queue.uploaded++
         } else {
-          remaining.push(item) // server-side failure, retry later
+          remaining.push(item) // retry later
         }
       } catch {
-        remaining.push(item) // network failure, retry later
+        remaining.push(item) // retry later
       }
     }
     queue.items = remaining
@@ -100,7 +91,6 @@ async function processQueue(): Promise<void> {
   }
 }
 
-/** Queue a confirmed sample for upload (PNG already grayscale). */
 export function enqueue(clientId: string, id: string, png: Buffer, label: object): void {
   try {
     fs.mkdirSync(outboxDir(), { recursive: true })
@@ -115,7 +105,6 @@ export function enqueue(clientId: string, id: string, png: Buffer, label: object
   void processQueue()
 }
 
-/** Load the queue and start the retry timer + an initial flush. */
 export function init(): void {
   loadQueue()
   if (!timer) timer = setInterval(() => void processQueue(), RETRY_MS)

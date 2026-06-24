@@ -1,19 +1,21 @@
-// Tesseract recognizer (tesseract.js), the default OCR engine.
-//
-// tesseract.js is loaded lazily so a missing or broken install reports an
-// "engine unavailable" status instead of crashing the app at boot. The worker
-// stays warm between captures. Language data (eng.traineddata) is cached under
-// userData/tessdata; the first run downloads it if missing (a later milestone
-// bundles it for fully-offline use, see docs/PROGRESS.md).
+// lazy load so a broken install degrades instead of crashing boot
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
+import type { OcrWord } from '@shared/types'
 import type { OcrEngine, OcrRecognition } from './engine'
 
-// Don't import tesseract.js types statically so the dependency stays optional.
+// keep types local so the dep stays optional
+type TessWord = { text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }
+type TessBlock = { paragraphs: { lines: { words: TessWord[] }[] }[] }
+type TessData = { text: string; confidence: number; blocks?: TessBlock[] | null }
 type TessWorker = {
-  recognize: (img: Buffer) => Promise<{ data: { text: string; confidence: number } }>
+  recognize: (
+    img: Buffer,
+    opts?: Record<string, unknown>,
+    output?: Record<string, unknown>
+  ) => Promise<{ data: TessData }>
   setParameters: (p: Record<string, unknown>) => Promise<unknown>
   terminate: () => Promise<unknown>
 }
@@ -58,7 +60,6 @@ export class TesseractEngine implements OcrEngine {
       try {
         const cachePath = this.tessdataDir()
         fs.mkdirSync(cachePath, { recursive: true })
-        // Optional dependency, loaded lazily so it stays out of the static graph.
         const tesseract = (await import('tesseract.js')) as unknown as TessModule
         const createWorker = tesseract.createWorker ?? tesseract.default?.createWorker
         if (!createWorker) throw new Error('tesseract.js missing createWorker')
@@ -66,8 +67,8 @@ export class TesseractEngine implements OcrEngine {
           cachePath,
           gzip: true
         })
-        // The contract screen is white text on a dark UI, so favor accuracy.
-        await worker.setParameters({ preserve_interword_spaces: '1' })
+        // psm 3 stops column text bleeding (the everus bug)
+        await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: '3' })
         this.worker = worker
         return worker
       } catch (e) {
@@ -84,8 +85,15 @@ export class TesseractEngine implements OcrEngine {
   async recognize(png: Buffer): Promise<OcrRecognition> {
     const worker = await this.ensureWorker()
     if (!worker) throw new Error('tesseract engine is unavailable')
-    const { data } = await worker.recognize(png)
-    return { text: data.text ?? '', confidence: data.confidence ?? 0 }
+    const { data } = await worker.recognize(png, {}, { blocks: true })
+    const words: OcrWord[] = []
+    for (const block of data.blocks ?? [])
+      for (const para of block.paragraphs ?? [])
+        for (const line of para.lines ?? [])
+          for (const w of line.words ?? [])
+            if (w.text.trim())
+              words.push({ text: w.text, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 })
+    return { text: data.text ?? '', confidence: data.confidence ?? 0, words }
   }
 
   async dispose(): Promise<void> {

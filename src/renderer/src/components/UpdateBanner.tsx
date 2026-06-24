@@ -3,11 +3,7 @@ import { useStore } from '../state/store'
 import { C, F, GLOW } from '../theme'
 import { Btn } from './ui'
 
-// Surfaces a ready-to-install update from any page. Settings -> Updates also has
-// the button, but on its own that hides the update where nobody looks. This is a
-// bar under the title bar: a quiet progress line while it downloads, then a loud
-// one with RESTART & INSTALL once it's ready. LATER hides it for the session
-// (the Settings button stays as a fallback).
+// settings button gets missed
 export default function UpdateBanner(): React.ReactElement | null {
   const update = useStore((s) => s.update)
   const [hidden, setHidden] = useState(false)

@@ -4,22 +4,19 @@ import { C, F } from '../theme'
 export interface TypeaheadProps {
   value: string
   options: string[]
-  /** Called on every keystroke. Only fires when freeText is true. */
+  /** fires only when freeText */
   onChange?: (v: string) => void
-  /** Called when an option is picked (click / Enter). */
   onSelect?: (v: string) => void
   placeholder?: string
-  /** Allow values not in the option list (e.g. destinations). Default true. */
+  /** allow off-list values */
   freeText?: boolean
   maxResults?: number
   mono?: boolean
   autoFocus?: boolean
+  clearOnFocus?: boolean
+  search?: boolean
 }
 
-/**
- * Filtered combobox. Renders only the matching options (capped), so a list of
- * hundreds stays cheap, far lighter than mounting every row in a dropdown.
- */
 export default function Typeahead({
   value,
   options,
@@ -29,14 +26,20 @@ export default function Typeahead({
   freeText = true,
   maxResults = 8,
   mono = false,
-  autoFocus = false
+  autoFocus = false,
+  clearOnFocus = false,
+  search = false
 }: TypeaheadProps): React.ReactElement {
   const [query, setQuery] = useState(value)
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
+  const [focused, setFocused] = useState(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => setQuery(value), [value])
+  // don't clobber input while focused
+  useEffect(() => {
+    if (!focused) setQuery(value)
+  }, [value, focused])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -87,8 +90,9 @@ export default function Typeahead({
 
   const onBlur = (): void => {
     blurTimer.current = setTimeout(() => {
+      setFocused(false)
       setOpen(false)
-      if (!freeText && query !== value) setQuery(value) // not in the list, so revert it
+      if (!freeText && query !== value) setQuery(value) // revert off-list value
     }, 120)
   }
 
@@ -100,12 +104,26 @@ export default function Typeahead({
     color: C.text,
     fontFamily: mono ? F.mono : F.body,
     fontSize: 14,
-    padding: '7px 0',
+    padding: search ? '7px 0 7px 24px' : '7px 0',
     outline: 'none'
   }
 
   return (
     <div style={{ position: 'relative' }}>
+      {search && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={C.dim}
+          strokeWidth="2"
+          style={{ position: 'absolute', left: 2, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+      )}
       <input
         value={query}
         placeholder={placeholder}
@@ -113,6 +131,11 @@ export default function Typeahead({
         onChange={(e) => onInput(e.target.value)}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current)
+          setFocused(true)
+          if (clearOnFocus) {
+            setQuery('')
+            setHighlight(0)
+          }
           setOpen(true)
         }}
         onBlur={onBlur}
@@ -136,7 +159,7 @@ export default function Typeahead({
           {filtered.map((opt, i) => (
             <div
               key={opt}
-              // use onMouseDown (not onClick) so it runs before the input blur
+              // mousedown fires before blur
               onMouseDown={(e) => {
                 e.preventDefault()
                 commit(opt)

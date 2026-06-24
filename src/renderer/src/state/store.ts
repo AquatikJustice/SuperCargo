@@ -13,7 +13,8 @@ import type {
   OcrResult,
   OcrEngineInfo,
   HistoryEntry,
-  HistoryStatus
+  HistoryStatus,
+  CargoLayout
 } from '@shared/types'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
@@ -22,12 +23,11 @@ import { payoutFactor, snapPayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules, shipCapacity } from '@shared/shipModules'
-import { destinationsInOrder, toHistoryEntry } from './manifest'
-import { computeRoutePlan, routeTerminalIds, type RoutePlan } from './route'
+import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
+import { computeRoutePlan, type RoutePlan } from './route'
+import { snapshotLayout, reconcileLayout } from './layout'
 
-// The bundled snapshot still lists edition variants, the mining Golem, and raw
-// cargo-module rows. Filter and fold modules so the fallback roster (shown
-// before the first UEX sync) matches the live data the main process serves.
+// fallback roster before first uex sync
 const ROSTER_SHIPS = withModules(SHIPS.filter((s) => isRosterShip(s.name)))
 
 export type ViewId = 'manifest' | 'contracts' | 'grid' | 'history' | 'settings'
@@ -36,6 +36,8 @@ export interface ManualObjectiveInput {
   commodity: string
   scuAmount: number
   destination: string
+  /** empty = use contract pickup */
+  pickups?: string[]
 }
 
 export interface ManualContractInput {
@@ -53,7 +55,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   gameChannel: 'LIVE',
   activeShip: DEFAULT_SHIP,
   installedModules: {},
-  uexApiKey: '',
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
   ocrEngine: 'tesseract',
@@ -68,8 +69,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   uiZoom: 1.1,
   autoCheckUpdates: true,
-  // Pre-init fallback only (real value loads from main on init). Default true so
-  // the welcome screen does not flash before settings are ready.
+  // pre-init only; true so welcome screen doesn't flash
   onboarded: true
 }
 
@@ -79,26 +79,29 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${uidCounter}`
 }
 
+const BOX_SIZES = [1, 2, 4, 8, 16, 24, 32]
+function snapMaxBox(n: number): number {
+  const fit = BOX_SIZES.filter((s) => s <= n)
+  return fit.length ? fit[fit.length - 1] : 1
+}
+
 function makeObjective(input: ManualObjectiveInput, maxBoxSize: number): DeliveryObjective {
+  const pickups = input.pickups?.map((p) => p.trim()).filter(Boolean)
   return {
     id: uid('obj'),
     commodity: input.commodity.trim(),
     scuAmount: input.scuAmount,
     destination: input.destination.trim(),
+    pickups: pickups && pickups.length ? pickups : undefined,
     boxes: calculateBoxes(input.scuAmount, maxBoxSize),
     delivered: false
   }
 }
 
-/** Whether a contract still needs an OCR pass. The log gives us commodity,
- *  destination and SCU reliably; the one thing it never carries is the max box
- *  size. So OCR is only worth firing when that's still unknown. Otherwise the
- *  log already gave us everything and a capture would add nothing. */
 function contractNeedsOcr(c: HaulingContract): boolean {
   return !c.boxSizeConfirmed
 }
 
-/** Build a log-sourced contract shell from a Contract Accepted event. */
 function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingContract {
   return {
     id: e.missionId,
@@ -107,8 +110,7 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     haulType: e.haulType,
     pickup: e.pickup,
     reward: 0,
-    // The log doesn't state box size; StarStrings contract data sometimes does,
-    // otherwise default to 16 (corrected via OCR/manual entry).
+    // 16 default when unknown, corrected via ocr/manual
     maxBoxSize: e.maxBoxSize ?? 16,
     boxSizeConfirmed: e.maxBoxSize != null,
     acceptedAt: e.acceptedAt,
@@ -132,40 +134,36 @@ interface StoreState {
   runId: string
   contracts: HaulingContract[]
   order: string[]
-  /** Latest computed pickup->delivery route (null when there's nothing to route). */
+  /** empty = solver picks cheapest start */
+  startLocation: string
+  /** null = live plan */
+  layout: CargoLayout | null
   route: RoutePlan | null
-  /** When true the stop order is sorted automatically; a manual drag sets it false. */
+  /** manual drag sets false */
   isRouteAuto: boolean
   history: HistoryEntry[]
   appVersion: string
   update: UpdateState | null
 
-  // ships (bundled snapshot, replaced by live UEXcorp sync)
+  // bundled snapshot, replaced by uex sync
   ships: Ship[]
   shipsSyncedAt: string
-  // freight delivery/pickup locations (UEXcorp terminals w/ freight elevator)
   locations: Location[]
   locationsSyncedAt: string
-  // commodities (UEXcorp) - manual-entry autocomplete + OCR fuzzy matching
   commodities: Commodity[]
-  uexSyncing: boolean
-  uexError: string | null
 
-  // OCR (Phase 2)
   ocrStatus: 'idle' | 'capturing' | 'recognizing'
   ocrResult: OcrResult | null
   ocrEngine: OcrEngineInfo | null
 
   // overlays
   captureOpen: boolean
-  /** When set, the capture modal adds objectives to this existing contract. */
+  /** capture adds to this existing contract */
   captureTargetId: string | null
   compactOpen: boolean
 
-  // lifecycle
   init: () => Promise<void>
 
-  // ui
   setView: (view: ViewId) => void
   setGroupBy: (g: 'destination' | 'contract') => void
   toggleBoxMath: () => void
@@ -174,7 +172,6 @@ interface StoreState {
   openCompact: () => void
   closeCompact: () => void
 
-  // settings
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
 
   // manifest mutations
@@ -185,43 +182,45 @@ interface StoreState {
     maxBoxSize: number
   ) => void
   removeContract: (id: string) => void
-  /** Archive a contract to history (as completed) and drop it from the manifest. */
   completeContract: (id: string) => void
-  /** Archive a contract to history (as abandoned) and drop it from the manifest. */
   abandonContract: (id: string) => void
   setContractStatus: (id: string, status: HaulingContract['status']) => void
-  /** Turn route ordering back to automatic (after a manual drag) and recompute. */
   resetRouteToAuto: () => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
-  /** Correct an objective's SCU (e.g. an OCR misread) and re-box it. */
+  lockLayout: () => void
+  unlockLayout: () => void
+  turnInDestination: (
+    entries: Array<{ contractId: string; objectiveId: string; deliveredScu: number }>
+  ) => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
-  /** Record how many SCU of an objective were turned in (drives partial payout).
-   *  Clamped to 0..required. */
+  /** changing maxBoxSize re-boxes every objective */
+  editContract: (
+    id: string,
+    patch: { title?: string; pickup?: string; rank?: string; reward?: number; maxBoxSize?: number }
+  ) => void
+  editObjective: (
+    contractId: string,
+    objectiveId: string,
+    patch: { commodity?: string; destination?: string }
+  ) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
-  /** Set a contract's full reward (the headline payout, before the partial factor). */
   setContractReward: (contractId: string, reward: number) => void
-  /** Set delivered on a batch of objectives (e.g. "mark this destination done"). */
   setObjectivesDelivered: (
     refs: Array<{ contractId: string; objectiveId: string }>,
     delivered: boolean
   ) => void
   reorderStops: (from: number, to: number) => void
-  /** Start a fresh run (generates a new run id). Also happens automatically when
-   *  the manifest empties and a new contract is accepted. */
+  setStartLocation: (loc: string) => void
   startNewRun: () => void
 
   // history
   updateHistoryReward: (id: string, reward: number) => void
   clearHistory: () => void
 
-  // update action
   checkForUpdates: () => Promise<void>
 
-  // UEXcorp sync + log scan
-  syncUex: () => Promise<void>
   scanSession: () => Promise<number>
 
-  // OCR actions
   runOcr: () => Promise<void>
   clearOcr: () => void
   refreshOcrEngine: () => Promise<void>
@@ -232,51 +231,37 @@ function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] 
 }
 
 export const useStore = create<StoreState>((set, get) => {
-  // Save the manifest part to disk whenever it changes.
   const persist = (): void => {
-    const { runId, contracts, order } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order })
+    const { runId, contracts, order, layout, startLocation } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, layout: layout ?? undefined, startLocation })
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
     const nextOrd = nextOrder(contracts, order ?? get().order)
-    set({ contracts, order: nextOrd })
+    // keep locked layout in sync without re-flowing
+    let layout = get().layout
+    if (!contracts.length) layout = null
+    else if (layout?.locked) layout = reconcileLayout(contracts, layout)
+    set({ contracts, order: nextOrd, layout })
     persist()
   }
 
-  // --- route ordering (debounced; log bursts fire many objective events) ---
-  // Only the main window owns route ordering. The compact overlay shares this
-  // store code but must not recompute or reorder (it would fight the main window).
+  // only main owns route ordering, compact would fight it
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
-  let rerouteSeq = 0
   const doReroute = async (): Promise<void> => {
-    const seq = ++rerouteSeq
-    const { contracts, locations, settings, ships } = get()
+    const { contracts, locations, settings, ships, startLocation } = get()
     const ship = ships.find((s) => s.name === settings.activeShip)
     const capacity = shipCapacity(ship, settings.installedModules[settings.activeShip])
-    // Skip contracts still held pending OCR. They aren't shown yet, so they
-    // shouldn't affect the sorted order until they surface.
-    const routable = contracts.filter((c) => !c.pendingOcr)
-    const ids = routeTerminalIds(routable, locations)
-    let matrix: Record<string, number> = {}
-    if (ids.length >= 2) {
-      try {
-        matrix = (await window.supercargo.routeDistances(ids)).matrix
-      } catch {
-        /* fall back to grouping cost */
-      }
-    }
-    if (seq !== rerouteSeq) return // a newer reroute replaced this one
+    // pending-ocr contracts aren't shown yet
     const plan = computeRoutePlan(
-      get().contracts.filter((c) => !c.pendingOcr),
-      get().locations,
+      contracts.filter((c) => !c.pendingOcr),
+      locations,
       capacity,
-      matrix
+      startLocation
     )
     set({ route: plan })
-    // Apply the sorted stop order automatically (unless the user dragged manually).
     if (plan && get().isRouteAuto) {
       const order = nextOrder(get().contracts, plan.destOrder)
       const cur = get().order
@@ -300,7 +285,7 @@ export const useStore = create<StoreState>((set, get) => {
     void window.supercargo.saveHistory({ entries })
   }
 
-  // Snapshot a finished contract into history (newest first, deduped by id).
+  // newest first, deduped by id
   const archive = (contract: HaulingContract, status: HistoryStatus): void => {
     const entry = toHistoryEntry(contract, status, get().runId, new Date().toISOString())
     const history = [entry, ...get().history.filter((h) => h.id !== entry.id)]
@@ -308,15 +293,8 @@ export const useStore = create<StoreState>((set, get) => {
     persistHistory(history)
   }
 
-  // --- abandon/fail coalescing -------------------------------------------------
-  // A deliberate in-game abandon logs `EndMission[Abandon] Reason[Player left]`
-  // for one contract. A force-close or disconnect logs the same signature for
-  // every active contract at once. We can't tell them apart from the line itself,
-  // so we coalesce: buffer ended contracts briefly, and only auto-archive when a
-  // single one ended in the window (a real abandon). If 2 or more ended together
-  // it's a session-leave, so keep them all (they survive a relog). A lone false
-  // positive (disconnect with exactly one active contract) heals itself: the
-  // contract re-emits Contract Accepted on relog and is re-added.
+  // disconnect ends every contract at once, looks like abandon;
+  // coalesce, only auto-archive a lone end (2+ = session leave, keep)
   let abandonTimer: ReturnType<typeof setTimeout> | null = null
   const pendingEnds = new Map<string, HistoryStatus>()
   const ABANDON_COALESCE_MS = 2500
@@ -346,10 +324,7 @@ export const useStore = create<StoreState>((set, get) => {
     abandonTimer = setTimeout(flushEnds, ABANDON_COALESCE_MS)
   }
 
-  // Un-hold a contract that was held pending OCR (see isHeld). `missionId`
-  // un-holds just that one; omit it to un-hold all. Called when the capture is
-  // submitted or dismissed, plus a safety timeout so nothing stays hidden if the
-  // capture never opens.
+  // un-hold pending-ocr; omit id = release all
   const resolvePending = (missionId?: string): void => {
     const { contracts } = get()
     let changed = false
@@ -376,6 +351,8 @@ export const useStore = create<StoreState>((set, get) => {
     runId: '',
     contracts: [],
     order: [],
+    startLocation: '',
+    layout: null,
     route: null,
     isRouteAuto: true,
     history: [],
@@ -386,8 +363,6 @@ export const useStore = create<StoreState>((set, get) => {
     locations: [],
     locationsSyncedAt: '',
     commodities: [],
-    uexSyncing: false,
-    uexError: null,
     ocrStatus: 'idle',
     ocrResult: null,
     ocrEngine: null,
@@ -408,10 +383,6 @@ export const useStore = create<StoreState>((set, get) => {
           window.supercargo.getUexCommodities()
         ])
 
-      // Move any finished contracts still sitting in the manifest (from before
-      // history existed) into the history log, leaving the manifest active-only.
-      // Clear any stale OCR hold from a previous run: no capture is in flight on
-      // a fresh launch, so a still-pending contract must surface, not stay hidden.
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
         .map((c) => (c.pendingOcr ? { ...c, pendingOcr: false } : c))
@@ -431,11 +402,16 @@ export const useStore = create<StoreState>((set, get) => {
         })
       }
 
+      const layout =
+        active.length && manifest.layout ? reconcileLayout(active, manifest.layout) : null
+
       set({
         settings,
         runId: manifest.runId,
         contracts: active,
         order: nextOrder(active, manifest.order),
+        startLocation: manifest.startLocation ?? '',
+        layout,
         history,
         watcher,
         appVersion,
@@ -446,49 +422,41 @@ export const useStore = create<StoreState>((set, get) => {
         commodities: comRoster?.commodities ?? [],
         ready: true
       })
-      scheduleReroute() // compute the initial order from the loaded manifest
+      scheduleReroute() // initial order from loaded manifest
 
       window.supercargo.onShips((r) => {
-        if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt, uexError: null })
+        if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt })
       })
       window.supercargo.onLocations((r) => {
         set({ locations: r.locations, locationsSyncedAt: r.syncedAt })
-        scheduleReroute() // new location data may resolve terminal ids / distances
+        scheduleReroute() // new coords can change the route
       })
       window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
       })
 
-      // Subscribe to push events from the main process.
       window.supercargo.onWatcherStatus((s) => set({ watcher: s }))
       window.supercargo.onUpdate((u) => set({ update: u }))
       window.supercargo.onContractAccepted((e: ContractAcceptedEvent) => {
         const { contracts } = get()
-        // Skip contracts we already have (e.g. relog re-emits the same missionId):
-        // no re-add and no OCR capture, so relog doesn't spam the capture modal.
+        // dedup relog re-emits, no dupe capture
         if (contracts.some((c) => c.id === e.missionId)) return
-        // One trip = one run: if the manifest is empty when a fresh contract
-        // arrives, roll to a new run id so each batch groups separately in
-        // History. (Relog re-emits are filtered above, so they never roll.)
+        // empty manifest = new trip, roll run id so batches group separately
         if (contracts.length === 0) {
           const { runId, history } = get()
           set({ runId: newRunId([runId, ...history.map((h) => h.runId)]) })
         }
         const contract = makeLogContract(e, contracts.length)
-        // Only fire OCR when the log left a gap we need, i.e. the box size is
-        // still unknown. If StarStrings already supplied it (boxSizeConfirmed),
-        // the log gave us everything and we skip the capture. Auto-capture is also
-        // opt-in, so check the same setting main uses before deciding to hold.
         const willOcr = get().settings.ocrAutoCapture && contractNeedsOcr(contract)
-        // Hold the contract until the capture is resolved, so its data isn't shown
-        // under the capture modal (which would look like an about-to-dupe).
+        // hold until capture resolves, else looks like a dupe
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
         set({ isRouteAuto: true })
         scheduleReroute()
         if (willOcr) {
+          // open the capture view now so the wait shows progress, not a dead ui
+          set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
           window.supercargo.requestOcrCapture(e.missionId)
-          // Safety net: never leave a contract hidden if the capture never opens
-          // (e.g. the engine is slow/unavailable). Reveal it after a grace period.
+          // safety net if capture never opens
           setTimeout(() => resolvePending(e.missionId), 20000)
         }
       })
@@ -497,10 +465,7 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // Match an existing objective by commodity+destination. The log is the
-        // source of truth for SCU, so if one already exists (e.g. an earlier
-        // OCR/manual read) we correct its SCU to the log's value and re-box,
-        // never duplicate it. A log replay with the same SCU is a no-op.
+        // match commodity+destination, fix scu in place not dupe
         const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}`
         const exIdx = c.objectives.findIndex(
           (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}` === ek
@@ -530,38 +495,37 @@ export const useStore = create<StoreState>((set, get) => {
         const contract = contracts.find((c) => c.id === e.missionId)
         if (!contract) return
         if (e.completion === 'Complete') {
-          // A real completion: archive to history and drop from the manifest now.
           archive(contract, 'completed')
           commit(contracts.filter((c) => c.id !== e.missionId))
           set({ isRouteAuto: true })
           scheduleReroute()
           return
         }
-        // Abandon / Fail: don't act immediately. Coalesce so a force-close or
-        // disconnect storm (same Abandon/"Player left" for every active contract)
-        // doesn't wipe the manifest. A lone end in the window = a real abandon =
-        // archived; 2 or more together = a session-leave = kept. See flushEnds.
+        // coalesce so a disconnect storm doesn't wipe the manifest
         if (e.completion === 'Abandon' || e.completion === 'Fail') {
           queueEnd(e.missionId, e.completion === 'Fail' ? 'failed' : 'abandoned')
         }
       })
       window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null }))
 
-      // Cross-window manifest sync (main <-> compact overlay window). Apply the
-      // incoming doc without re-persisting so the two windows don't ping-pong.
+      // apply without persisting, else the windows ping-pong
       window.supercargo.onManifestChanged((doc) => {
-        set({ runId: doc.runId, contracts: doc.contracts, order: doc.order })
+        set({
+          runId: doc.runId,
+          contracts: doc.contracts,
+          order: doc.order,
+          startLocation: doc.startLocation ?? '',
+          layout: doc.layout ?? null
+        })
         scheduleReroute()
       })
       window.supercargo.onCompactState((s) => set({ compactOpen: s.open }))
 
-      // OCR push events (global hotkey / auto-capture after a contract accept).
       window.supercargo.onOcrStatus((s) =>
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })
       )
       window.supercargo.onOcrResult((r) => {
-        // Auto-capture after a log accept tags the result with the contract's
-        // missionId, so merge into that contract instead of creating a duplicate.
+        // merge into the tagged contract, not a dupe
         const target =
           r.targetMissionId && get().contracts.some((c) => c.id === r.targetMissionId)
             ? r.targetMissionId
@@ -569,6 +533,8 @@ export const useStore = create<StoreState>((set, get) => {
         set({ ocrResult: r, ocrStatus: 'idle', captureOpen: true, captureTargetId: target })
       })
       void get().refreshOcrEngine()
+      // backfill contracts the live watcher missed
+      void get().scanSession()
     },
 
     setView: (view) => set({ view }),
@@ -576,13 +542,10 @@ export const useStore = create<StoreState>((set, get) => {
     toggleBoxMath: () => set((s) => ({ showBoxMath: !s.showBoxMath })),
     openCapture: (targetId) => set({ captureOpen: true, captureTargetId: targetId ?? null }),
     closeCapture: () => {
-      // Dismissing the capture (without submitting) releases any held contract so
-      // its log data shows; we just don't get the OCR'd box size for it.
+      // dismiss releases the held contract
       resolvePending()
       set({ captureOpen: false, captureTargetId: null })
     },
-    // Compact mode is now a separate always-on-top window pinned over the game's
-    // top-right corner (main process owns it); we just toggle it and track state.
     openCompact: () => {
       void window.supercargo.compactShow()
       set({ compactOpen: true })
@@ -624,11 +587,7 @@ export const useStore = create<StoreState>((set, get) => {
     addObjectivesToContract: (contractId, objectives, maxBoxSize) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
-        // Merge by commodity+destination (not SCU). If the contract already has an
-        // objective for this commodity+destination (e.g. the game log added it),
-        // we keep that objective's SCU (the log wins; OCR's SCU can be a misread)
-        // and only take the box size from this capture. Merging on SCU instead
-        // would let a misread land as a phantom duplicate.
+        // key on commodity+destination, not scu (ocr misread would dupe)
         const key = (commodity: string, destination: string): string =>
           `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}`
         const seen = new Set(c.objectives.map((o) => key(o.commodity, o.destination)))
@@ -636,13 +595,12 @@ export const useStore = create<StoreState>((set, get) => {
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
           .filter((o) => !seen.has(key(o.commodity, o.destination)))
           .map((o) => makeObjective(o, maxBoxSize))
-        // Re-box existing objectives too, in case the max box size changed.
+        // re-box existing in case maxBoxSize changed
         const existing = c.objectives.map((o) => ({
           ...o,
           boxes: calculateBoxes(o.scuAmount, maxBoxSize)
         }))
-        // The box size came from an OCR read / reviewed capture, so it's now known,
-        // and the hold is released so the contract shows with its real data.
+        // box size now confirmed, release the hold
         return {
           ...c,
           maxBoxSize,
@@ -680,8 +638,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     updateHistoryReward: (id, reward) => {
-      // Editing the full reward re-derives the actual payout from the stored
-      // completion %, so partial turn-ins stay correct.
+      // re-derive payout from stored completion % for partials
       const history = get().history.map((h) =>
         h.id === id ? { ...h, reward, payout: snapPayout(reward * payoutFactor(h.completionPct ?? 1)) } : h
       )
@@ -706,7 +663,7 @@ export const useStore = create<StoreState>((set, get) => {
 
     startNewRun: () => {
       const { runId, history } = get()
-      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]) })
+      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), layout: null, startLocation: '' })
       persist()
     },
 
@@ -718,6 +675,93 @@ export const useStore = create<StoreState>((set, get) => {
           objectives: c.objectives.map((o) =>
             o.id === objectiveId ? { ...o, delivered: !o.delivered } : o
           )
+        }
+      })
+      commit(contracts)
+      scheduleReroute()
+    },
+
+    lockLayout: () => {
+      const { contracts, order, layout } = get()
+      if (layout?.locked || !activeContracts(contracts).length) return
+      set({ layout: snapshotLayout(contracts, order) })
+      persist()
+    },
+
+    unlockLayout: () => {
+      if (!get().layout) return
+      set({ layout: null })
+      persist()
+    },
+
+    turnInDestination: (entries) => {
+      if (!entries.length) return
+      // lock first, before this stop's boxes drop out
+      if (!get().layout?.locked) {
+        const { contracts, order } = get()
+        if (activeContracts(contracts).length) set({ layout: snapshotLayout(contracts, order) })
+      }
+      const byContract = new Map<string, Map<string, number>>()
+      for (const e of entries) {
+        const m = byContract.get(e.contractId) ?? new Map<string, number>()
+        m.set(e.objectiveId, e.deliveredScu)
+        byContract.set(e.contractId, m)
+      }
+      const updated = get().contracts.map((c) => {
+        const m = byContract.get(c.id)
+        if (!m) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) =>
+            m.has(o.id)
+              ? {
+                  ...o,
+                  delivered: true,
+                  deliveredScu: Math.max(0, Math.min(o.scuAmount, Math.round(m.get(o.id) as number)))
+                }
+              : o
+          )
+        }
+      })
+      const finished = updated.filter((c) => byContract.has(c.id) && c.objectives.every((o) => o.delivered))
+      for (const c of finished) archive(c, 'completed')
+      const finishedIds = new Set(finished.map((c) => c.id))
+      commit(updated.filter((c) => !finishedIds.has(c.id)))
+      scheduleReroute()
+    },
+
+    editContract: (id, patch) => {
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== id) return c
+        const next = { ...c }
+        if (patch.title !== undefined) next.title = patch.title.trim()
+        if (patch.pickup !== undefined) next.pickup = patch.pickup.trim()
+        if (patch.rank !== undefined) next.rank = patch.rank.trim()
+        if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
+        if (patch.maxBoxSize !== undefined) {
+          const mbs = snapMaxBox(patch.maxBoxSize)
+          next.maxBoxSize = mbs
+          next.boxSizeConfirmed = true
+          next.objectives = next.objectives.map((o) => ({ ...o, boxes: calculateBoxes(o.scuAmount, mbs) }))
+        }
+        return next
+      })
+      commit(contracts)
+      scheduleReroute()
+    },
+
+    editObjective: (contractId, objectiveId, patch) => {
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== contractId) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) => {
+            if (o.id !== objectiveId) return o
+            const next = { ...o }
+            if (patch.commodity !== undefined) next.commodity = patch.commodity.trim()
+            if (patch.destination !== undefined) next.destination = patch.destination.trim()
+            return next
+          })
         }
       })
       commit(contracts)
@@ -788,9 +832,17 @@ export const useStore = create<StoreState>((set, get) => {
       if (from < 0 || from >= order.length || to < 0 || to >= order.length) return
       const [moved] = order.splice(from, 1)
       order.splice(to, 0, moved)
-      // Manual drag wins: stop auto-sorting until a contract is added or removed.
+      // manual drag wins until contracts change
       set({ order, isRouteAuto: false })
       persist()
+    },
+
+    setStartLocation: (loc) => {
+      if (loc === get().startLocation) return
+      // new start changes order, resume auto-sort
+      set({ startLocation: loc, isRouteAuto: true })
+      persist()
+      scheduleReroute()
     },
 
     checkForUpdates: async () => {
@@ -798,32 +850,35 @@ export const useStore = create<StoreState>((set, get) => {
       await window.supercargo.checkForUpdates()
     },
 
-    syncUex: async () => {
-      set({ uexSyncing: true, uexError: null })
-      const result = await window.supercargo.syncUex()
-      if (result.ok) {
-        const [roster, locRoster, comRoster] = await Promise.all([
-          window.supercargo.getUexShips(),
-          window.supercargo.getUexLocations(),
-          window.supercargo.getUexCommodities()
-        ])
-        set({
-          uexSyncing: false,
-          ships: roster && roster.ships.length ? roster.ships : get().ships,
-          shipsSyncedAt: roster?.syncedAt ?? get().shipsSyncedAt,
-          locations: locRoster?.locations ?? get().locations,
-          locationsSyncedAt: locRoster?.syncedAt ?? get().locationsSyncedAt,
-          commodities: comRoster?.commodities ?? get().commodities
-        })
-      } else {
-        set({ uexSyncing: false, uexError: result.error ?? 'Sync failed' })
-      }
-    },
-
     scanSession: async () => {
       const scanned = await window.supercargo.scanSession()
-      let contracts = get().contracts
-      let imported = 0
+      if (!scanned.length) return 0
+      const key = (o: { commodity: string; destination: string }): string =>
+        `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}`
+      const byId = new Map(scanned.map((s) => [s.accepted.missionId, s]))
+      let changed = 0
+      // backfill objectives a partial live capture missed
+      let contracts = get().contracts.map((c) => {
+        const s = byId.get(c.id)
+        if (!s) return c
+        const seen = new Set(c.objectives.map(key))
+        const missing = s.objectives.filter((o) => !seen.has(key(o)))
+        if (!missing.length) return c
+        changed += missing.length
+        return {
+          ...c,
+          objectives: [
+            ...c.objectives,
+            ...missing.map((o) =>
+              makeObjective(
+                { commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination },
+                c.maxBoxSize
+              )
+            )
+          ]
+        }
+      })
+      // add active contracts not in the manifest at all
       for (const s of scanned) {
         if (contracts.some((c) => c.id === s.accepted.missionId)) continue
         const contract = makeLogContract(s.accepted, contracts.length)
@@ -834,10 +889,13 @@ export const useStore = create<StoreState>((set, get) => {
           )
         )
         contracts = [...contracts, contract]
-        imported += 1
+        changed += 1
       }
-      if (imported > 0) commit(contracts)
-      return imported
+      if (changed > 0) {
+        commit(contracts)
+        scheduleReroute()
+      }
+      return changed
     },
 
     runOcr: async () => {

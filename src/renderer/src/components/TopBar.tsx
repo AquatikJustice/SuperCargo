@@ -1,9 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
+import { useNarrow } from '../state/useViewport'
 import { C, F, GLOW } from '../theme'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
 import { shipCapacity } from '@shared/shipModules'
+
+// close popover on outside click
+function useOutsideClose<T extends HTMLElement>(): {
+  open: boolean
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ref: React.MutableRefObject<T | null>
+} {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<T | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+  return { open, setOpen, ref }
+}
 
 const labelStyle: React.CSSProperties = {
   fontFamily: F.display,
@@ -16,6 +36,7 @@ export default function TopBar(): React.ReactElement {
   const openCapture = useStore((s) => s.openCapture)
   const openCompact = useStore((s) => s.openCompact)
   const appVersion = useStore((s) => s.appVersion)
+  const narrow = useNarrow()
 
   return (
     <div
@@ -27,11 +48,12 @@ export default function TopBar(): React.ReactElement {
         height: 54,
         padding: '0 18px 0 22px',
         borderBottom: `1px solid ${C.line}`,
-        flex: 'none'
+        flex: 'none',
+        gap: 12
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 'none' }}>
           <Logo />
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div
@@ -47,20 +69,20 @@ export default function TopBar(): React.ReactElement {
             >
               SUPER<span style={{ color: C.acc }}>CARGO</span>
             </div>
-            {appVersion && (
+            {appVersion && !narrow && (
               <div style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: '0.1em', color: C.faint, marginTop: 3 }}>
                 v{appVersion}
               </div>
             )}
           </div>
         </div>
-        <RunChip />
-        <ShipPicker />
+        {!narrow && <RunChip />}
+        <ShipPicker narrow={narrow} />
       </div>
 
-      <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" />
-        <ChromeButton onClick={openCompact} icon={<CompactIcon />} label="COMPACT" />
+      <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+        <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
+        <ChromeButton onClick={openCompact} icon={<CompactIcon />} label="COMPACT" compact={narrow} />
         <WindowControls />
       </div>
     </div>
@@ -71,17 +93,7 @@ function RunChip(): React.ReactElement {
   const runId = useStore((s) => s.runId)
   const startNewRun = useStore((s) => s.startNewRun)
   const activeCount = useStore((s) => s.contracts.length)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
+  const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
 
   return (
     <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26 }}>
@@ -173,28 +185,17 @@ function RunChip(): React.ReactElement {
   )
 }
 
-function ShipPicker(): React.ReactElement {
+function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const shipName = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const ships = useStore((s) => s.ships)
   const updateSettings = useStore((s) => s.updateSettings)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
+  const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
   const shipNames = useMemo(() => ships.map((s) => s.name), [ships])
   const ship = ships.find((s) => s.name === shipName)
   const scu = shipCapacity(ship, installedModules[shipName])
   const modules = ship?.modules ?? []
   const installed = installedModules[shipName] ?? modules.map((m) => m.id)
-
-  // Close the popover on any click outside it.
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
 
   const toggleModule = (id: string): void => {
     if (!ship?.modules) return
@@ -206,9 +207,9 @@ function ShipPicker(): React.ReactElement {
     <div
       ref={ref}
       className="no-drag"
-      style={{ display: 'flex', alignItems: 'center', gap: 9, marginLeft: 26, position: 'relative' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, marginLeft: narrow ? 14 : 26, position: 'relative', minWidth: 0 }}
     >
-      <span style={labelStyle}>SHIP</span>
+      {!narrow && <span style={labelStyle}>SHIP</span>}
       <Btn
         onClick={() => setOpen((o) => !o)}
         title="Change active ship / cargo modules"
@@ -256,15 +257,16 @@ function ShipPicker(): React.ReactElement {
             zIndex: 70
           }}
         >
-          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 8 }}>ACTIVE SHIP</div>
           <Typeahead
             value={shipName}
             options={shipNames}
             freeText={false}
             maxResults={12}
             autoFocus
+            clearOnFocus
+            search
             onSelect={(name) => void updateSettings({ activeShip: name })}
-            placeholder="Type to find a ship..."
+            placeholder="Search ships..."
           />
 
           {modules.length > 0 && (
@@ -329,15 +331,18 @@ function Switch({ on }: { on: boolean }): React.ReactElement {
 function ChromeButton({
   onClick,
   icon,
-  label
+  label,
+  compact
 }: {
   onClick: () => void
   icon: React.ReactNode
   label: string
+  compact?: boolean
 }): React.ReactElement {
   return (
     <Btn
       onClick={onClick}
+      title={compact ? label : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -349,13 +354,13 @@ function ChromeButton({
         fontSize: 12,
         fontWeight: 600,
         letterSpacing: '0.14em',
-        padding: '8px 14px',
+        padding: compact ? '8px 10px' : '8px 14px',
         cursor: 'pointer'
       }}
       hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text, textShadow: GLOW }}
     >
       {icon}
-      {label}
+      {!compact && label}
     </Btn>
   )
 }
@@ -396,7 +401,6 @@ function WindowControls(): React.ReactElement {
         title={maximized ? 'Restore' : 'Maximize'}
       >
         {maximized ? (
-          // Restore: two offset squares
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="8" y="3" width="13" height="13" />
             <path d="M3 8v11a2 2 0 0 0 2 2h11" />
@@ -439,9 +443,6 @@ function CompactIcon(): React.ReactElement {
 }
 
 function Logo(): React.ReactElement {
-  // Isometric stacked-cargo mark from the design comp: three solid SCU crates
-  // stacked into an L, with a translucent purple "ghost" crate (light outline,
-  // the snap target) filling the open top slot to complete the square.
   const scu = {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '26.1',

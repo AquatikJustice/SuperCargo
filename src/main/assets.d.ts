@@ -1,5 +1,4 @@
-// electron-vite rewrites `?asset` imports to a runtime file path (the source
-// path in dev, a copied path under resources/ when packaged).
+// electron-vite resolves `?asset` to a file path
 declare module '*?asset' {
   const path: string
   export default path

@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 
-// Bundled webfonts (offline-safe). Weights matched to the design system.
+// bundled fonts, offline-safe
 import '@fontsource/rajdhani/400.css'
 import '@fontsource/rajdhani/500.css'
 import '@fontsource/rajdhani/600.css'

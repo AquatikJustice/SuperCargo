@@ -12,9 +12,8 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  /* Transparent so the window's inset margin shows the bezel glow over the
-     desktop, not an opaque band. The app shell (App.tsx root) paints solid
-     black, so all actual content sits on black. */
+  /* Window is opaque black (main process backgroundColor); leave these
+     transparent so nothing paints over the app shell's rounded corners. */
   background: transparent;
 }
 

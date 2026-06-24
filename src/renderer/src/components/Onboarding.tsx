@@ -4,17 +4,12 @@ import { C, F, GLOW } from '../theme'
 import { Btn } from './ui'
 import PrivacyPolicy from './PrivacyPolicy'
 
-/** First-launch welcome and consent screen. Says what SuperCargo does, asks the
- *  user to opt in to screen capture (OCR) and, separately, the anonymous OCR
- *  training program, and links the full privacy policy. Shown once (settings
- *  `onboarded`). The user can change everything here later in Settings. */
+/** first-launch consent screen */
 export default function Onboarding(): React.ReactElement {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
 
-  // Capture defaults ON (it makes the box math accurate, and the owner wants
-  // people to enable it), but it's shown plainly and one tap turns it off.
-  // Uploading training data is more sensitive, so it defaults OFF.
+  // upload defaults off, more sensitive
   const [capture, setCapture] = useState(true)
   const [contribute, setContribute] = useState(settings.contributeTrainingData)
   const [showPolicy, setShowPolicy] = useState(false)
@@ -194,7 +189,6 @@ function ConsentCard({
   )
 }
 
-/** Yellow/black switch that matches the app's other toggles. */
 function Toggle({ on, onClick }: { on: boolean; onClick: () => void }): React.ReactElement {
   return (
     <div

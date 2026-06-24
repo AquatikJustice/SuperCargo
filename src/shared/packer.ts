@@ -1,55 +1,31 @@
-// 3D cargo packer - places every box at a real (x,y,z) cell in a ship's cargo
-// grids, the SuperCargo Phase 4 "Option B" exact placement.
-//
-// Coordinate convention (matches cargoGrids.ts + the three.js view):
-//   x = width axis, y = UP / height, z = length axis. A grid is w (x) x h (y) x
-//   l (z) cells. A placement's local (x,y,z) is relative to the grid's min corner;
-//   add the grid's own (x,y,z) to get the ship-space cell of the box.
-//
-// Rules (from the game, confirmed with the user):
-//   - A box occupies a wxl footprint x h height (see boxGeometry). It must lie
-//     FLAT: it can rotate 90 degrees in the horizontal plane (swap w/l) but never tip up.
-//   - Boxes rest on the floor or on top of other boxes - never float (support
-//     check), matching how you physically stack them.
-//   - Readability over density: each DESTINATION is packed as its own contiguous
-//     SECTION (delivery order, front to back) with a 1-cell gap before the next,
-//     so you can see where one stop's cargo ends and the next begins - the way you
-//     load by hand. The first drop-off sits nearest the front/ramp.
-//   - Reference-only grids (secure vaults, Ironclad lift pads) are never filled,
-//     and a grid's maxSize (largest SCU box it accepts) is honoured.
-//
-// Pure: no React/zustand, so it's trivially testable.
+// 3D cargo packer. coords: x = width, y = up, z = length. local (x,y,z) is
+// relative to the grid's min corner.
 
 import type { CargoGrid } from './cargoGrids'
 import { BOX_DIMS } from './boxGeometry'
 
 export interface PackBox {
-  /** stable id, unique within the pack run. */
   id: string
-  /** SCU size (1,2,4,8,16,24,32). */
   size: number
-  /** stop colour, carried through for the view. */
   color: string
-  /** destination label/code. */
   dest: string
-  /** commodity name, for the hover tooltip. */
   commodity?: string
-  /** 0-based delivery order (0 = first drop-off). Drives accessibility layering. */
+  /** 0-based delivery order (0 = first drop-off). */
   stopIdx: number
+  objectiveId?: string
 }
 
 export interface Placement {
   box: PackBox
   gridId: string
-  /** local min-corner cell within the grid (x=width, y=up, z=length). */
+  /** local min-corner cell. */
   x: number
   y: number
   z: number
-  /** occupied dims after any rotation (w=x extent, l=z extent, h=y extent). */
+  /** dims after rotation. */
   w: number
   l: number
   h: number
-  /** true if rotated 90 degrees from the box's natural w/l. */
   rotated: boolean
 }
 
@@ -65,27 +41,26 @@ export interface GridFill {
 
 export interface PackResult {
   placements: Placement[]
-  /** boxes that didn't fit anywhere (overflow). */
   unplaced: PackBox[]
   grids: GridFill[]
-  /** total loadable capacity across the filled grids. */
   capacity: number
   placedScu: number
-  /** true when every box was placed. */
   fits: boolean
+  /** true when we fell back to the tight pack. */
+  squeezed: boolean
 }
 
 interface GridState {
   grid: CargoGrid
-  /** occupancy bitmap, index = x + z*w + y*(w*l) - layered by height (y). */
   occ: Uint8Array
+  /** stop owning each filled cell (-1 = empty), so a box only stacks on its own. */
+  owner: Int16Array
   used: number
 }
 
 const idx = (g: CargoGrid, x: number, y: number, z: number): number =>
   x + z * g.w + y * (g.w * g.l)
 
-/** Can a footprint (fwxfl on the x/z plane, fh tall) sit at local (x,y,z)? */
 function canPlace(
   s: GridState,
   x: number,
@@ -93,52 +68,55 @@ function canPlace(
   z: number,
   fw: number,
   fl: number,
-  fh: number
+  fh: number,
+  stop: number
 ): boolean {
   const g = s.grid
   if (x + fw > g.w || z + fl > g.l || y + fh > g.h) return false
-  // every target cell has to be free
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) if (s.occ[idx(g, x + dx, y + dy, z + dz)]) return false
-  // support: on the floor, or every cell directly below is filled
+  // support: floor, or every cell below filled by this stop
   if (y > 0) {
     for (let dz = 0; dz < fl; dz++)
-      for (let dx = 0; dx < fw; dx++) if (!s.occ[idx(g, x + dx, y - 1, z + dz)]) return false
+      for (let dx = 0; dx < fw; dx++) {
+        const b = idx(g, x + dx, y - 1, z + dz)
+        if (!s.occ[b] || s.owner[b] !== stop) return false
+      }
   }
   return true
 }
 
-function fill(s: GridState, x: number, y: number, z: number, fw: number, fl: number, fh: number): void {
+function fill(s: GridState, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number): void {
   const g = s.grid
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
-      for (let dx = 0; dx < fw; dx++) s.occ[idx(g, x + dx, y + dy, z + dz)] = 1
+      for (let dx = 0; dx < fw; dx++) {
+        const i = idx(g, x + dx, y + dy, z + dz)
+        s.occ[i] = 1
+        s.owner[i] = stop
+      }
   s.used += fw * fl * fh
 }
 
-/**
- * First fitting position + orientation at or beyond z = `minZ`, scanned to build
- * COMPACT front-to-back walls: z ascending (front first), then y (bottom-up,
- * supported), then x. Filling a z-slice full-height before stepping back keeps
- * each destination's section tight in z so a gap can separate it from the next.
- */
+// first fit at/beyond minZ. scan z, then y bottom-up, then x.
 function findSpot(
   s: GridState,
   w: number,
   l: number,
   h: number,
-  minZ: number
+  minZ: number,
+  stop: number
 ): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
-  // a square footprint rotates onto itself, so only try the turned version when it differs
+  // skip the rotated orientation when square
   const orients: Array<[number, number, boolean]> =
     w === l ? [[w, l, false]] : [[w, l, false], [l, w, true]]
   for (let z = Math.max(0, minZ); z + 1 <= g.l; z++) {
     for (let y = 0; y + h <= g.h; y++) {
       for (let x = 0; x < g.w; x++) {
         for (const [fw, fl, rotated] of orients) {
-          if (canPlace(s, x, y, z, fw, fl, h)) return { x, y, z, fw, fl, rotated }
+          if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
         }
       }
     }
@@ -146,24 +124,23 @@ function findSpot(
   return null
 }
 
-/**
- * Pack `boxes` into a ship's `grids`, ONE DESTINATION AT A TIME so each stop gets
- * its own contiguous SECTION with a 1-cell gap before the next - easier to read
- * and load than colour-coding a single intermixed pile. Stops are laid in
- * delivery order from the front (first drop-off nearest the ramp); a section that
- * fills one bay spills into the next. Reference-only grids (autoLoad === false)
- * are skipped and grids reject boxes larger than their maxSize.
- */
-export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
+interface PackOpts {
+  /** 1-cell gap between sections. */
+  gap: boolean
+  /** each section after the previous one. false = denser backfill. */
+  contiguous: boolean
+}
+
+// one pass, one stop at a time, largest box first.
+function packPass(grids: CargoGrid[], boxes: PackBox[], opts: PackOpts): PackResult {
   const loadable = grids.filter((g) => g.autoLoad !== false)
   const states: GridState[] = loadable.map((grid) => ({
     grid,
     occ: new Uint8Array(grid.w * grid.l * grid.h),
+    owner: new Int16Array(grid.w * grid.l * grid.h).fill(-1),
     used: 0
   }))
 
-  // Group boxes by stop, stops ascending (first delivery first), largest first
-  // within a stop so big boxes anchor the bottom of their section.
   const byStop = new Map<number, PackBox[]>()
   for (const b of boxes) {
     const arr = byStop.get(b.stopIdx)
@@ -175,17 +152,17 @@ export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
   const placements: Placement[] = []
   const unplaced: PackBox[] = []
 
-  // Frontier: where the NEXT section starts (grid index + z within that grid).
+  // where the next section starts
   let frontGi = 0
   let frontZ = 0
 
   for (const stopIdx of stops) {
     const stopBoxes = (byStop.get(stopIdx) as PackBox[]).sort((a, b) => b.size - a.size)
-    const startGi = frontGi
-    const startZ = frontZ
-    // Furthest extent this section reached, to place the gap + next section.
-    let endGi = frontGi
-    let endZ = frontZ
+    const startGi = opts.contiguous ? frontGi : 0
+    const startZ = opts.contiguous ? frontZ : 0
+    // furthest this section reached, for the gap + next section
+    let endGi = startGi
+    let endZ = startZ
 
     for (const box of stopBoxes) {
       const dims = BOX_DIMS[box.size]
@@ -197,10 +174,10 @@ export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
       for (let gi = startGi; gi < states.length; gi++) {
         const s = states[gi]
         if (s.grid.maxSize && box.size > s.grid.maxSize) continue
-        const minZ = gi === startGi ? startZ : 0
-        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ)
+        const minZ = opts.contiguous && gi === startGi ? startZ : 0
+        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stopIdx)
         if (!spot) continue
-        fill(s, spot.x, spot.y, spot.z, spot.fw, spot.fl, dims.h)
+        fill(s, spot.x, spot.y, spot.z, spot.fw, spot.fl, dims.h, stopIdx)
         placements.push({
           box,
           gridId: s.grid.id,
@@ -223,14 +200,15 @@ export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
       if (!placed) unplaced.push(box)
     }
 
-    // Advance the frontier past this section, leaving a 1-cell gap. If the gap
-    // would run off the end of the bay, start the next section in the next bay.
-    if (endZ + 1 < states[endGi]?.grid.l) {
-      frontGi = endGi
-      frontZ = endZ + 1
-    } else {
-      frontGi = endGi + 1
-      frontZ = 0
+    if (opts.contiguous) {
+      const gapZ = opts.gap ? 1 : 0
+      if (endZ + gapZ < states[endGi]?.grid.l) {
+        frontGi = endGi
+        frontZ = endZ + gapZ
+      } else {
+        frontGi = endGi + 1
+        frontZ = 0
+      }
     }
   }
 
@@ -250,6 +228,17 @@ export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
     })),
     capacity,
     placedScu,
-    fits: unplaced.length === 0
+    fits: unplaced.length === 0,
+    squeezed: false
   }
+}
+
+// roomy sectioned layout first; if it overflows, repack tight so we only
+// report over-capacity when the cargo truly won't fit.
+export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
+  const readable = packPass(grids, boxes, { gap: true, contiguous: true })
+  if (readable.fits) return readable
+  const dense = packPass(grids, boxes, { gap: false, contiguous: false })
+  if (dense.placedScu > readable.placedScu) return { ...dense, squeezed: true }
+  return readable
 }

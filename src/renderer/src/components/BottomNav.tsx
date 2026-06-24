@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useStore, type ViewId } from '../state/store'
+import { useNarrow } from '../state/useViewport'
 import { C, F } from '../theme'
 import { Btn } from './ui'
 import { MADE_BY_COMMUNITY } from '@shared/legal'
@@ -15,6 +16,8 @@ const NAV: Array<{ id: ViewId; label: string }> = [
 export default function BottomNav(): React.ReactElement {
   const view = useStore((s) => s.view)
   const setView = useStore((s) => s.setView)
+  // below this, panels crowd out the tabs
+  const narrow = useNarrow(820)
 
   return (
     <div style={{ display: 'flex', height: 70, borderTop: `1px solid ${C.line}`, flex: 'none' }}>
@@ -44,8 +47,8 @@ export default function BottomNav(): React.ReactElement {
           </Btn>
         )
       })}
-      <WatcherStatusPanel />
-      <AttributionPanel />
+      {!narrow && <WatcherStatusPanel />}
+      {!narrow && <AttributionPanel />}
     </div>
   )
 }
@@ -53,9 +56,7 @@ export default function BottomNav(): React.ReactElement {
 const FOOTER_H = 70
 
 function AttributionPanel(): React.ReactElement {
-  // CIG Fankit rule: the "Made by the Community" badge fills the footer corner.
-  // On hover the stack slides up one row, so the badge exits the top and the
-  // trademark/unofficial line appears underneath. Full notice is also in Settings.
+  // hover slides badge up, reveals trademark
   const [logoOk, setLogoOk] = useState(true)
   const [hover, setHover] = useState(false)
   const row: React.CSSProperties = {

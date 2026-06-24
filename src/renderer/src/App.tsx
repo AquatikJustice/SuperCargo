@@ -13,8 +13,7 @@ import CompactWindowApp from './components/CompactWindowApp'
 import Onboarding from './components/Onboarding'
 import UpdateBanner from './components/UpdateBanner'
 
-// The compact overlay is a separate always-on-top window that loads this same
-// bundle with the URL hash #compact. There we render just the card, no app chrome.
+// overlay window loads this bundle at #compact
 const IS_COMPACT = typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
 
 export default function App(): React.ReactElement {
@@ -34,12 +33,10 @@ function MainApp(): React.ReactElement {
     void init()
   }, [init])
 
-  // Apply the saved zoom (text and layout scale) whenever it changes.
   useEffect(() => {
     window.supercargo.setZoom(uiZoom || 1)
   }, [uiZoom])
 
-  // Ctrl/Cmd with +, -, or 0 to grow, shrink, or reset the text size.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.ctrlKey || e.metaKey)) return
@@ -61,21 +58,17 @@ function MainApp(): React.ReactElement {
   return (
     <div
       style={{
-        // Floating in-game tablet bezel (from the design comp): a thick rounded
-        // accent outline with a soft glow. The window is transparent, so the
-        // inset margin shows the glow over the desktop. Keep the glow blur smaller
-        // than the inset so it fully fades before the window edge (no hard clip).
+        // no outer glow, it shifts the apparent edge inward
         position: 'fixed',
-        inset: 18,
+        inset: 0,
         display: 'flex',
         flexDirection: 'column',
         background: C.black,
         color: C.textBody,
         overflow: 'hidden',
-        border: '4px solid rgba(255,210,30,0.65)',
-        borderRadius: 20,
-        boxShadow:
-          '0 0 14px rgba(255,210,30,0.55), 0 0 6px rgba(255,210,30,0.65), inset 0 0 48px rgba(255,210,30,0.06)'
+        border: '2px solid rgba(255,210,30,0.6)',
+        borderRadius: 18,
+        boxShadow: 'inset 0 0 48px rgba(255,210,30,0.05)'
       }}
     >
       <TopBar />

@@ -2,29 +2,53 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
-import type { OcrObjective } from '@shared/types'
+import type { DeliveryObjective, MatchResult, OcrObjective } from '@shared/types'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
 import OcrCalibrator from './OcrCalibrator'
 
+type OcrHintInfo = { raw: string; score: number; matched: boolean; guess: boolean }
+
 interface ObjRow extends ManualObjectiveInput {
   key: number
-  /** Where the row came from, shown as a hint when it was filled by an OCR read. */
-  ocrCommodity?: { raw: string; score: number; matched: boolean }
-  ocrDestination?: { raw: string; score: number; matched: boolean }
+  /** hint shown when filled by ocr */
+  ocrCommodity?: OcrHintInfo
+  ocrDestination?: OcrHintInfo
 }
 
 let rowKey = 0
 const newRow = (): ObjRow => ({ key: rowKey++, commodity: '', scuAmount: 0, destination: '' })
 
+// seed closest candidate, not raw
+function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
+  const guess = !m.match && m.suggestions.length > 0
+  const value = m.match ?? (guess ? m.suggestions[0] : m.input)
+  return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
+}
+
 function rowFromOcr(o: OcrObjective): ObjRow {
+  const pickups = o.pickups?.map((p) => p.match ?? p.input).filter(Boolean)
+  const commodity = seedField(o.commodity)
+  const destination = seedField(o.destination)
   return {
     key: rowKey++,
-    commodity: o.commodity.match ?? o.commodity.input,
+    commodity: commodity.value,
     scuAmount: o.scuAmount,
-    destination: o.destination.match ?? o.destination.input,
-    ocrCommodity: { raw: o.commodity.input, score: o.commodity.score, matched: !!o.commodity.match },
-    ocrDestination: { raw: o.destination.input, score: o.destination.score, matched: !!o.destination.match }
+    destination: destination.value,
+    pickups: pickups && pickups.length ? pickups : undefined,
+    ocrCommodity: commodity.hint,
+    ocrDestination: destination.hint
+  }
+}
+
+// already captured from the log, no ocr hint
+function rowFromContract(o: DeliveryObjective): ObjRow {
+  return {
+    key: rowKey++,
+    commodity: o.commodity,
+    scuAmount: o.scuAmount,
+    destination: o.destination,
+    pickups: o.pickups && o.pickups.length ? o.pickups : undefined
   }
 }
 
@@ -61,15 +85,13 @@ export default function CaptureModal(): React.ReactElement | null {
   const locationNames = useMemo(() => locations.map((l) => l.name), [locations])
   const commodityNames = useMemo(() => commodities.map((c) => c.name), [commodities])
 
-  // OCR
   const ocrResult = useStore((s) => s.ocrResult)
   const ocrStatus = useStore((s) => s.ocrStatus)
   const ocrEngine = useStore((s) => s.ocrEngine)
   const runOcr = useStore((s) => s.runOcr)
   const clearOcr = useStore((s) => s.clearOcr)
   const saveSamples = useStore((s) => s.settings.ocrSaveSamples)
-  // True if the user opted into any training-data collection (local save or
-  // anonymous upload). Gates the non-hauling "contribute sample" path.
+  // gates the contribute button
   const collecting = useStore((s) => s.settings.ocrSaveSamples || s.settings.contributeTrainingData)
 
   const [tab, setTab] = useState<'manual' | 'ocr'>('manual')
@@ -79,18 +101,12 @@ export default function CaptureModal(): React.ReactElement | null {
   const [reward, setReward] = useState(0)
   const [rows, setRows] = useState<ObjRow[]>([newRow()])
   const [showRaw, setShowRaw] = useState(false)
-  // Editable raw transcription for the non-hauling contribute path.
   const [rawEdit, setRawEdit] = useState('')
   const [contributed, setContributed] = useState(false)
-  // In-modal crop calibration (so the user doesn't have to go to Settings).
+  // crop calibrate without a settings trip
   const [calibrating, setCalibrating] = useState(false)
 
-  // When opened against an existing contract, seed the box size and reward from it,
-  // but only once per open. This effect is keyed on `target`, whose object identity
-  // changes every time that contract updates in the store (objective events, the
-  // pending-OCR hold releasing, a re-route commit). Without this guard it would
-  // re-fire on each of those and reset a value the OCR (or the user) just filled in
-  // back to the contract's stored reward of 0 (the "reward disappears" bug).
+  // seed once per open or target churn clobbers reward
   const seededRef = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -105,17 +121,23 @@ export default function CaptureModal(): React.ReactElement | null {
     }
   }, [open, target])
 
-  // An OCR pass (button, hotkey, or auto-capture) finished: switch to the OCR
-  // tab and prefill the objective rows from the parsed and matched result.
+  // show the ocr tab while a capture runs so the spinner is visible
+  useEffect(() => {
+    if (ocrStatus === 'recognizing' || ocrStatus === 'capturing') setTab('ocr')
+  }, [ocrStatus])
+
   useEffect(() => {
     if (!ocrResult || !ocrResult.ok) return
     setTab('ocr')
     setContributed(false)
-    if (ocrResult.objectives.length > 0) {
+    // log already gave the objectives; ocr is only for reward + box size
+    const logObjectives = target?.objectives ?? []
+    if (logObjectives.length > 0) {
+      setRows(logObjectives.map(rowFromContract))
+    } else if (ocrResult.objectives.length > 0) {
       setRows(ocrResult.objectives.map(rowFromOcr))
     } else {
-      // No hauling objectives parsed, likely a non-hauling contract (or a parse
-      // miss). Seed the editable raw text so the user can contribute it.
+      // nothing logged or parsed, seed raw to contribute
       setRawEdit(ocrResult.rawText)
     }
     if (ocrResult.maxBoxSize) setMaxBox(ocrResult.maxBoxSize)
@@ -145,15 +167,27 @@ export default function CaptureModal(): React.ReactElement | null {
 
   const update = (key: number, patch: Partial<ObjRow>): void =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  const mutPickups = (key: number, fn: (ps: string[]) => string[]): void =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, pickups: fn(r.pickups ?? []) } : r)))
+  const addRowPickup = (key: number): void => mutPickups(key, (ps) => [...ps, ''])
+  const setRowPickup = (key: number, i: number, val: string): void =>
+    mutPickups(key, (ps) => ps.map((p, j) => (j === i ? val : p)))
+  const removeRowPickup = (key: number, i: number): void =>
+    mutPickups(key, (ps) => ps.filter((_, j) => j !== i))
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
   const canSubmit = validRows.length > 0
 
   const submit = (): void => {
     if (!canSubmit) return
-    const objectives = validRows.map(({ commodity, scuAmount, destination }) => ({ commodity, scuAmount, destination }))
+    const objectives = validRows.map(({ commodity, scuAmount, destination, pickups }) => ({
+      commodity,
+      scuAmount,
+      destination,
+      pickups: pickups?.map((p) => p.trim()).filter(Boolean)
+    }))
 
-    // Opt-in: save the confirmed read as a training sample for the future model.
+    // opt-in: keep read as a sample
     if (ocrResult?.ok && ocrResult.sampleId && saveSamples) {
       const text = validRows
         .map((r) => `Deliver ${r.scuAmount} SCU of ${r.commodity} to ${r.destination}`)
@@ -167,8 +201,6 @@ export default function CaptureModal(): React.ReactElement | null {
 
     if (targetId) {
       addObjectivesToContract(targetId, objectives, maxBox)
-      // The log never carries the reward; if we read or typed one, set it so the
-      // contract's payout math has the full value.
       if (reward > 0) setContractReward(targetId, reward)
     } else {
       addManualContract({
@@ -184,10 +216,7 @@ export default function CaptureModal(): React.ReactElement | null {
     reset()
   }
 
-  // Send the corrected raw text as a training sample without touching the
-  // manifest. This is the path for any non-hauling contract (bounty, merc,
-  // mining...), all valid SC-UI-font training data. The main process only keeps or
-  // uploads it if the user opted in, so this is safe to call either way.
+  // main drops it unless opted in, safe to call
   const contribute = (): void => {
     if (!ocrResult?.ok || !ocrResult.sampleId || !rawEdit.trim()) return
     void window.supercargo.ocrSaveSample({
@@ -200,20 +229,15 @@ export default function CaptureModal(): React.ReactElement | null {
 
   const recognizing = ocrStatus === 'recognizing' || ocrStatus === 'capturing'
   const hasOcr = !!ocrResult && ocrResult.ok
-  // No hauling objectives parsed but we have a read: offer the raw-text
-  // contribute path instead of the (empty) objective editor.
   const isContributeMode = tab === 'ocr' && hasOcr && ocrResult!.objectives.length === 0
-  // The shared objective editor shows for manual entry and for an OCR result we
-  // can review; the OCR tab with no result yet shows the capture pane instead.
+  const contributeDisabled = !collecting || !rawEdit.trim() || contributed
   const showEditor = tab === 'manual' || hasOcr
 
   return (
     <div
-      onClick={onClose}
       style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, zIndex: 50 }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{ width: hasOcr || calibrating ? 940 : 600, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto', background: C.black, border: `1px solid rgba(255,255,255,0.22)`, fontFamily: F.body }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.lineStrong}` }}>
@@ -377,46 +401,86 @@ export default function CaptureModal(): React.ReactElement | null {
 
             {rows.map((r) => {
               const boxes = r.scuAmount > 0 ? boxCount(calculateBoxes(r.scuAmount, maxBox)) : 0
+              const pickups = r.pickups ?? []
               return (
-                <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1.2fr 70px 28px', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
-                  <div>
-                    <Typeahead
-                      value={r.commodity}
-                      options={commodityNames}
-                      onChange={(v) => update(r.key, { commodity: v })}
-                      onSelect={(v) => update(r.key, { commodity: v })}
-                      placeholder="Hydrogen Fuel"
+                <div key={r.key} style={{ padding: '10px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 1.2fr 70px 28px', gap: 12, alignItems: 'start' }}>
+                    <div>
+                      <Typeahead
+                        value={r.commodity}
+                        options={commodityNames}
+                        onChange={(v) => update(r.key, { commodity: v })}
+                        onSelect={(v) => update(r.key, { commodity: v })}
+                        placeholder="Hydrogen Fuel"
+                      />
+                      {r.ocrCommodity && <OcrHint hint={r.ocrCommodity} />}
+                    </div>
+                    <input
+                      style={{ ...inputStyle, borderBottom: 0, fontFamily: F.mono, textAlign: 'right' }}
+                      placeholder="0"
+                      inputMode="numeric"
+                      value={r.scuAmount || ''}
+                      onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
                     />
-                    {r.ocrCommodity && <OcrHint hint={r.ocrCommodity} />}
+                    <div>
+                      <Typeahead
+                        value={r.destination}
+                        options={locationNames}
+                        onChange={(v) => update(r.key, { destination: v })}
+                        onSelect={(v) => update(r.key, { destination: v })}
+                        placeholder="HUR-L5 High Course Station"
+                      />
+                      {r.ocrDestination && <OcrHint hint={r.ocrDestination} />}
+                    </div>
+                    <span style={{ fontFamily: F.mono, fontSize: 13, color: boxes ? C.body : C.faint, textAlign: 'right', paddingTop: 7 }}>{boxes} box</span>
+                    <Btn
+                      onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.key !== r.key) : rs))}
+                      style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', justifyContent: 'center', padding: 2, marginTop: 6 }}
+                      hoverStyle={{ color: C.red }}
+                      title="Remove objective"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </Btn>
                   </div>
-                  <input
-                    style={{ ...inputStyle, borderBottom: 0, fontFamily: F.mono, textAlign: 'right' }}
-                    placeholder="0"
-                    inputMode="numeric"
-                    value={r.scuAmount || ''}
-                    onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
-                  />
-                  <div>
-                    <Typeahead
-                      value={r.destination}
-                      options={locationNames}
-                      onChange={(v) => update(r.key, { destination: v })}
-                      onSelect={(v) => update(r.key, { destination: v })}
-                      placeholder="HUR-L5 High Course Station"
-                    />
-                    {r.ocrDestination && <OcrHint hint={r.ocrDestination} />}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8, paddingLeft: 2 }}>
+                    <span style={{ fontFamily: F.display, fontSize: 9, letterSpacing: '0.18em', color: C.faint, flex: 'none' }}>PICKUP</span>
+                    {pickups.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 3, width: 188 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Typeahead
+                            value={p}
+                            options={locationNames}
+                            onChange={(v) => setRowPickup(r.key, i, v)}
+                            onSelect={(v) => setRowPickup(r.key, i, v)}
+                            placeholder="Pickup location"
+                          />
+                        </div>
+                        <Btn
+                          onClick={() => removeRowPickup(r.key, i)}
+                          title="Remove pickup"
+                          style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', padding: 1 }}
+                          hoverStyle={{ color: C.red }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </Btn>
+                      </div>
+                    ))}
+                    <Btn
+                      onClick={() => addRowPickup(r.key)}
+                      style={{ border: `1px dashed rgba(255,255,255,0.2)`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, letterSpacing: '0.12em', padding: '4px 9px', cursor: 'pointer' }}
+                      hoverStyle={{ border: `1px dashed ${C.acc}`, color: C.text }}
+                    >
+                      + PICKUP
+                    </Btn>
+                    {pickups.length === 0 && (
+                      <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint }}>uses contract pickup</span>
+                    )}
                   </div>
-                  <span style={{ fontFamily: F.mono, fontSize: 13, color: boxes ? C.body : C.faint, textAlign: 'right', paddingTop: 7 }}>{boxes} box</span>
-                  <Btn
-                    onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.key !== r.key) : rs))}
-                    style={{ border: 0, background: 'transparent', color: C.faint, cursor: 'pointer', display: 'flex', justifyContent: 'center', padding: 2, marginTop: 6 }}
-                    hoverStyle={{ color: C.red }}
-                    title="Remove objective"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </Btn>
                 </div>
               )
             })}
@@ -462,29 +526,24 @@ export default function CaptureModal(): React.ReactElement | null {
             {isContributeMode && contributed ? 'CLOSE' : 'CANCEL'}
           </Btn>
           {isContributeMode ? (
-            (() => {
-              const disabled = !collecting || !rawEdit.trim() || contributed
-              return (
-                <Btn
-                  onClick={contribute}
-                  disabled={disabled}
-                  style={{
-                    border: `1px solid ${disabled ? 'rgba(255,255,255,0.14)' : C.acc}`,
-                    background: disabled ? 'transparent' : C.accFillStrong,
-                    color: disabled ? C.faint : C.text,
-                    textShadow: disabled ? 'none' : GLOW,
-                    fontFamily: F.display,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: '0.14em',
-                    padding: '9px 18px',
-                    cursor: disabled ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {contributed ? 'CONTRIBUTED ✓' : 'CONTRIBUTE SAMPLE'}
-                </Btn>
-              )
-            })()
+            <Btn
+              onClick={contribute}
+              disabled={contributeDisabled}
+              style={{
+                border: `1px solid ${contributeDisabled ? 'rgba(255,255,255,0.14)' : C.acc}`,
+                background: contributeDisabled ? 'transparent' : C.accFillStrong,
+                color: contributeDisabled ? C.faint : C.text,
+                textShadow: contributeDisabled ? 'none' : GLOW,
+                fontFamily: F.display,
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: '0.14em',
+                padding: '9px 18px',
+                cursor: contributeDisabled ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {contributed ? 'CONTRIBUTED ✓' : 'CONTRIBUTE SAMPLE'}
+            </Btn>
           ) : (
             <Btn
               onClick={submit}
@@ -654,7 +713,6 @@ function ContributePane({
         help train the OCR by checking the capture and correcting the text below.
       </div>
 
-      {/* large capture so the user can verify the crop AND read it */}
       <div style={labelStyle}>CAPTURED PANEL</div>
       {imageDataUrl ? (
         <img
@@ -785,12 +843,13 @@ function OcrReviewBanner({
   )
 }
 
-function OcrHint({ hint }: { hint: { raw: string; score: number; matched: boolean } }): React.ReactElement {
+function OcrHint({ hint }: { hint: OcrHintInfo }): React.ReactElement {
   const pct = Math.round(hint.score * 100)
-  const color = hint.matched ? (pct >= 85 ? C.green : C.amber) : C.red
+  const color = hint.matched ? (pct >= 85 ? C.green : C.amber) : hint.guess ? C.amber : C.red
+  const label = hint.matched ? `~ ${pct}%` : hint.guess ? '≈ best guess' : '⚠ unmatched'
   return (
     <div style={{ fontFamily: F.mono, fontSize: 10, color, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`read: "${hint.raw}" · ${pct}% match`}>
-      {hint.matched ? `~ ${pct}%` : '⚠ unmatched'} · "{hint.raw}"
+      {label} · "{hint.raw}"
     </div>
   )
 }

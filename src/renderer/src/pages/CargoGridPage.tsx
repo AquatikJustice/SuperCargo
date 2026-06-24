@@ -5,16 +5,19 @@ import { OrbitControls } from '@react-three/drei'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { packBoxes, deriveStops } from '../state/manifest'
-import { buildLoadingPlan, type LoadStop } from '../state/loading'
+import { layoutStops } from '../state/layout'
+import { buildRouteLoadingPlan, type RouteLoadStop } from '../state/loading'
 import { gridsFor, type CargoGrid } from '@shared/cargoGrids'
-import { packCargo, type Placement } from '@shared/packer'
+import { packCargo, type Placement, type PackBox } from '@shared/packer'
 import { Btn } from '../components/ui'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
 
-// 1 grid cell (1.25 m / 1 SCU cube) = 1 three.js unit. A small gap keeps stacked
-// boxes apart so you can see each one.
+// keeps stacked boxes visible
 const GAP = 0.08
+
+// fixed so the grid doesn't jump per step
+const LOADING_PANEL_H = 268
 
 interface HoverInfo {
   x: number
@@ -25,13 +28,10 @@ interface HoverInfo {
   color: string
 }
 
-/** Center of a box covering cells [p, p+size), in scene space (minus origin). */
 function center(p: number, size: number, origin: number): number {
   return p + size / 2 - origin
 }
 
-// In Loading Mode: 'current' = the destination you're loading now (bright),
-// 'loaded' = already placed (dimmed), 'future' = not yet (ghosted).
 type BoxMode = 'normal' | 'current' | 'loaded' | 'future'
 
 function Box({
@@ -52,8 +52,11 @@ function Box({
   const wx = (grid.x || 0) + pl.x
   const wy = (grid.y || 0) + pl.y
   const wz = (grid.z || 0) + pl.z
-  const emissive = mode === 'current' ? 0.55 : mode === 'future' ? 0 : 0.18
-  const opacity = mode === 'future' ? 0.12 : mode === 'loaded' ? 0.5 : 1
+  // gray loaded so only this stop carries colour
+  const loaded = mode === 'loaded'
+  const color = loaded ? '#6a7176' : pl.box.color
+  const emissive = mode === 'current' ? 0.55 : loaded ? 0 : 0.18
+  const opacity = mode === 'future' ? 0.12 : loaded ? 0.82 : 1
   return (
     <mesh
       position={[
@@ -72,8 +75,8 @@ function Box({
     >
       <boxGeometry args={[pl.w - GAP, pl.h - GAP, pl.l - GAP]} />
       <meshStandardMaterial
-        color={pl.box.color}
-        emissive={pl.box.color}
+        color={color}
+        emissive={loaded ? '#000000' : pl.box.color}
         emissiveIntensity={emissive}
         roughness={0.55}
         metalness={0.1}
@@ -104,7 +107,7 @@ function GridShell({
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={refOnly ? C.amber : C.acc} transparent opacity={refOnly ? 0.5 : 0.32} />
       </lineSegments>
-      {/* faint floor fill so empty bays look like solid volumes */}
+      {/* faint fill so empty bays show */}
       <mesh geometry={geo}>
         <meshBasicMaterial
           color={refOnly ? C.amber : C.acc}
@@ -117,44 +120,65 @@ function GridShell({
   )
 }
 
-// small local alias for the fiber pointer event we use
 type ThreeEvent = { nativeEvent: PointerEvent; stopPropagation: () => void }
 
 export default function CargoGridPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
+  const layout = useStore((s) => s.layout)
+  const route = useStore((s) => s.route)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
-  const setObjectivesDelivered = useStore((s) => s.setObjectivesDelivered)
+  const lockLayout = useStore((s) => s.lockLayout)
+  const unlockLayout = useStore((s) => s.unlockLayout)
 
+  const locked = !!layout?.locked
   const installed = installedModules[activeShip]
   const grids = useMemo(() => gridsFor(activeShip, installed), [activeShip, installed])
-  const boxes = useMemo(() => packBoxes(contracts, order), [contracts, order])
-  const result = useMemo(() => packCargo(grids, boxes), [grids, boxes])
 
-  // Stops still carrying cargo (a destination drops out once it's marked done).
-  const liveStops = useMemo(
-    () => deriveStops(contracts, order).filter((s) => s.items.some((i) => !i.delivered)),
-    [contracts, order]
+  // locked keeps delivered boxes so nothing slides into their cell
+  const livePack = useMemo(() => packBoxes(contracts, order), [contracts, order])
+  const packInput: PackBox[] = locked ? layout!.boxes : livePack
+  const result = useMemo(() => packCargo(grids, packInput), [grids, packInput])
+  const deliveredIds = useMemo(
+    () => (locked ? new Set(layout!.boxes.filter((b) => b.delivered).map((b) => b.id)) : null),
+    [locked, layout]
   )
-  // Per-destination visibility (view only, lets you peek under a layer while loading).
+  const visiblePlacements = useMemo(
+    () => (deliveredIds ? result.placements.filter((p) => !deliveredIds.has(p.box.id)) : result.placements),
+    [result, deliveredIds]
+  )
+  const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
+  const visibleCount = locked ? layout!.boxes.filter((b) => !b.delivered).length : livePack.length
+
+  const sections = useMemo(() => {
+    if (locked) {
+      return layoutStops(layout!)
+        .filter((s) => s.undelivered > 0)
+        .map((s) => ({ idx: s.idx, code: s.code, name: s.name, color: s.color, refs: s.refs }))
+    }
+    return deriveStops(contracts, order)
+      .filter((s) => s.items.some((i) => !i.delivered))
+      .map((s) => ({
+        idx: s.idx,
+        code: s.code,
+        name: s.name,
+        color: s.color,
+        refs: s.items
+          .filter((i) => !i.delivered)
+          .map((i) => ({ contractId: i.contractId, objectiveId: i.objectiveId }))
+      }))
+  }, [locked, layout, contracts, order])
+
   const [hidden, setHidden] = useState<Set<number>>(new Set())
   const toggleHidden = (idx: number): void =>
     setHidden((prev) => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
-  const markDone = (stopIdx: number): void => {
-    const stop = liveStops.find((s) => s.idx === stopIdx)
-    if (!stop) return
-    setObjectivesDelivered(
-      stop.items.filter((i) => !i.delivered).map((i) => ({ contractId: i.contractId, objectiveId: i.objectiveId })),
-      true
-    )
-  }
-
-  // scene bounds across ALL grids (so reference-only bays are framed too)
+  // bounds over all grids so ref-only bays get framed
   const { origin, span } = useMemo(() => {
     if (!grids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10 }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -167,20 +191,20 @@ export default function CargoGridPage(): React.ReactElement {
     return { origin: o, span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6) }
   }, [grids])
 
-  // --- Loading Mode: step through loading one destination at a time ---
-  const loadPlan = useMemo(() => buildLoadingPlan(contracts, order), [contracts, order])
+  const loadPlan = useMemo(() => (route ? buildRouteLoadingPlan(contracts, route) : []), [contracts, route])
   const [loading, setLoading] = useState(false)
   const [loadIdx, setLoadIdx] = useState(0)
   const done = loading && loadIdx >= loadPlan.length
   const currentLoad = loading && !done ? loadPlan[loadIdx] : undefined
-  const loadedIdxs = useMemo(
-    () => new Set(loadPlan.slice(0, loadIdx).map((s) => s.idx)),
+  const currentObjIds = useMemo(() => new Set(currentLoad?.objectiveIds ?? []), [currentLoad])
+  const loadedObjIds = useMemo(
+    () => new Set(loadPlan.slice(0, loadIdx).flatMap((s) => s.objectiveIds)),
     [loadPlan, loadIdx]
   )
-  const boxMode = (stopIdx: number): BoxMode => {
+  const boxMode = (objectiveId?: string): BoxMode => {
     if (!loading) return 'normal'
-    if (currentLoad && stopIdx === currentLoad.idx) return 'current'
-    if (loadedIdxs.has(stopIdx)) return 'loaded'
+    if (objectiveId && currentObjIds.has(objectiveId)) return 'current'
+    if (objectiveId && loadedObjIds.has(objectiveId)) return 'loaded'
     return 'future'
   }
   const startLoading = (): void => {
@@ -197,7 +221,7 @@ export default function CargoGridPage(): React.ReactElement {
     setHover({ ...h, x: e.nativeEvent.clientX - (r?.left ?? 0), y: e.nativeEvent.clientY - (r?.top ?? 0) })
   }
 
-  if (boxes.length === 0) {
+  if (visibleCount === 0) {
     return (
       <div style={{ padding: PAGE_PADDING }}>
         <PageHeader title="CARGO GRID" subtitle={`${activeShip} · 3D load plan`} />
@@ -220,53 +244,90 @@ export default function CargoGridPage(): React.ReactElement {
       <PageHeader title="CARGO GRID" subtitle={`${activeShip} · 3D load plan`} />
 
       <div style={{ display: 'flex', gap: 18, alignItems: 'baseline', flexWrap: 'wrap', margin: '2px 0 10px' }}>
-        <Stat label="LOADED" value={`${fmt(result.placedScu)} / ${fmt(result.capacity)} SCU`} />
-        <Stat label="BOXES" value={`${fmt(result.placements.length)}${over ? ` (+${result.unplaced.length} won't fit)` : ''}`} color={over ? C.red : undefined} />
+        <Stat label="LOADED" value={`${fmt(shownScu)} / ${fmt(result.capacity)} SCU`} />
+        <Stat label="BOXES" value={`${fmt(visiblePlacements.length)}${over ? ` (+${result.unplaced.length} won't fit)` : ''}`} color={over ? C.red : undefined} />
         <Stat label="BAYS" value={String(grids.filter((g) => g.autoLoad !== false).length)} />
-        <span style={{ fontFamily: F.body, fontSize: 13, color: over ? C.red : C.green, textShadow: GLOW }}>
-          {over ? '▲ OVER CAPACITY (overflow not shown)' : '✓ EVERYTHING FITS'}
+        <span
+          style={{ fontFamily: F.body, fontSize: 13, color: over ? C.red : C.green, textShadow: GLOW }}
+          title={result.squeezed ? 'Everything fits, but the roomy per-stop spacing ran out, so the boxes are packed tight.' : undefined}
+        >
+          {over
+            ? '▲ OVER CAPACITY (overflow not shown)'
+            : result.squeezed
+              ? '✓ FITS · PACKED TIGHT'
+              : '✓ EVERYTHING FITS'}
         </span>
-        {loadPlan.length > 0 && (
-          <Btn
-            onClick={() => (loading ? setLoading(false) : startLoading())}
-            style={{
-              marginLeft: 'auto',
-              border: `1px solid ${loading ? C.acc : C.lineStrong}`,
-              background: loading ? C.accFill : 'transparent',
-              color: loading ? C.text : C.dim,
-              fontFamily: F.display,
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: '0.14em',
-              padding: '6px 12px',
-              cursor: 'pointer'
-            }}
-            hoverStyle={{ color: C.text, borderColor: C.acc }}
-          >
-            {loading ? '✕ EXIT LOADING' : '▶ LOADING MODE'}
-          </Btn>
-        )}
-        {!loading && (
-          <span style={{ fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-            drag to orbit · hover a box
-          </span>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {!loading && (
+            <Btn
+              onClick={() => (locked ? unlockLayout() : lockLayout())}
+              title={
+                locked
+                  ? 'Layout is frozen - positions stay put as you turn in. Click to go back to a live plan.'
+                  : 'Freeze the current layout so boxes stop moving as you deliver.'
+              }
+              style={{
+                border: `1px solid ${locked ? C.acc : C.lineStrong}`,
+                background: locked ? C.accFill : 'transparent',
+                color: locked ? C.text : C.dim,
+                fontFamily: F.display,
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.14em',
+                padding: '6px 12px',
+                cursor: 'pointer'
+              }}
+              hoverStyle={{ color: C.text, borderColor: C.acc }}
+            >
+              {locked ? '◆ LAYOUT LOCKED' : 'LOCK LAYOUT'}
+            </Btn>
+          )}
+          {!locked && loadPlan.length > 0 && (
+            <Btn
+              onClick={() => (loading ? setLoading(false) : startLoading())}
+              style={{
+                border: `1px solid ${loading ? C.acc : C.lineStrong}`,
+                background: loading ? C.accFill : 'transparent',
+                color: loading ? C.text : C.dim,
+                fontFamily: F.display,
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.14em',
+                padding: '6px 12px',
+                cursor: 'pointer'
+              }}
+              hoverStyle={{ color: C.text, borderColor: C.acc }}
+            >
+              {loading ? '✕ EXIT LOADING' : '▶ LOADING MODE'}
+            </Btn>
+          )}
+          {!loading && (
+            <span style={{ fontFamily: F.body, fontSize: 12, color: C.ghost }}>
+              drag to orbit · hover a box
+            </span>
+          )}
+        </div>
       </div>
 
       {loading ? (
-        <LoadingPanel
-          stop={currentLoad}
-          done={done}
-          idx={loadIdx}
-          total={loadPlan.length}
-          onLoaded={() => setLoadIdx((i) => i + 1)}
-          onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
-          onExit={() => setLoading(false)}
-        />
+        <div style={{ height: LOADING_PANEL_H, marginBottom: 8, flex: 'none' }}>
+          <LoadingPanel
+            stop={currentLoad}
+            done={done}
+            idx={loadIdx}
+            total={loadPlan.length}
+            onLoaded={() => setLoadIdx((i) => i + 1)}
+            onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
+            onExit={() => setLoading(false)}
+            onFinish={() => {
+              lockLayout()
+              setLoading(false)
+            }}
+          />
+        </div>
       ) : (
-        /* legend: click a swatch to show or hide that stop's boxes, click the check to mark it delivered */
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
-        {liveStops.map((s) => {
+        {sections.map((s) => {
           const off = hidden.has(s.idx)
           return (
             <span
@@ -292,19 +353,9 @@ export default function CargoGridPage(): React.ReactElement {
                 {s.idx + 1}. {s.code || s.name}
                 {off && <span style={{ color: C.ghost, fontSize: 11 }}>(hidden)</span>}
               </button>
-              <button
-                onClick={() => markDone(s.idx)}
-                title="Mark this destination delivered (removes its boxes)"
-                style={{ background: 'transparent', border: 0, cursor: 'pointer', color: C.green, padding: '0 2px', fontSize: 13, lineHeight: 1 }}
-              >
-                ✓
-              </button>
             </span>
           )
         })}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: F.body, fontSize: 12, color: C.amber }}>
-          <span style={{ width: 11, height: 11, border: `1px solid ${C.amber}`, borderRadius: 2 }} /> reference only
-        </span>
         </div>
       )}
 
@@ -319,17 +370,20 @@ export default function CargoGridPage(): React.ReactElement {
           {grids.map((g) => (
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
-          {result.placements.map((pl) => {
+          {visiblePlacements.map((pl) => {
             const g = gridById.get(pl.gridId)
             if (!g) return null
             if (!loading && hidden.has(pl.box.stopIdx)) return null
+            const mode = boxMode(pl.box.objectiveId)
+            // hide future cargo, keeps grid readable
+            if (loading && mode === 'future') return null
             return (
               <Box
                 key={pl.box.id}
                 pl={pl}
                 grid={g}
                 origin={origin}
-                mode={boxMode(pl.box.stopIdx)}
+                mode={mode}
                 onHover={onHover}
                 onLeave={() => setHover(null)}
               />
@@ -367,8 +421,6 @@ export default function CargoGridPage(): React.ReactElement {
   )
 }
 
-// One loading step for a destination: which boxes to pull from the FE (grouped by
-// contract, each labeled with its unique "tell") and load into the glowing section.
 function LoadingPanel({
   stop,
   done,
@@ -376,15 +428,17 @@ function LoadingPanel({
   total,
   onLoaded,
   onBack,
-  onExit
+  onExit,
+  onFinish
 }: {
-  stop: LoadStop | undefined
+  stop: RouteLoadStop | undefined
   done: boolean
   idx: number
   total: number
   onLoaded: () => void
   onBack: () => void
   onExit: () => void
+  onFinish: () => void
 }): React.ReactElement {
   const navBtn = (label: string, onClick: () => void, disabled?: boolean): React.ReactElement => (
     <Btn
@@ -399,75 +453,109 @@ function LoadingPanel({
 
   if (done || !stop) {
     return (
-      <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: C.green, textShadow: GLOW }}>
-          ✓ ALL {total} DESTINATIONS LOADED
+          ✓ ROUTE WALKED · {total} STOPS
         </span>
         <span style={{ fontFamily: F.body, fontSize: 12.5, color: C.dim }}>
-          Cargo is grouped by destination. At each stop, unload just that section.
+          You load at pickups and drop along the way. Lock the layout to freeze it.
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
           {navBtn('‹ BACK', onBack, idx === 0)}
-          {navBtn('DONE', onExit)}
+          {navBtn('DONE · LOCK LAYOUT', onFinish)}
         </span>
       </div>
     )
   }
 
+  const hasLoads = stop.loads.length > 0
+  const hasDrops = stop.drops.length > 0
   return (
-    <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, padding: '14px 16px', marginBottom: 8, background: C.accFill }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+    <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, background: C.accFill, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 16px 10px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
-          LOADING {idx + 1} / {total}
+          STOP {idx + 1} / {total}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
-          {stop.code ? `${stop.code} · ` : ''}{stop.name}
+          {stop.code ? `${stop.code} · ` : ''}{stop.label}
         </span>
-        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>
-          {stop.boxCount} boxes · {fmt(stop.scu)} SCU
-        </span>
+        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{fmt(stop.loadAfter)} SCU aboard after</span>
         <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-          load into the glowing section
+          the glowing cargo is this stop&apos;s
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {stop.groups.map((g) => (
-          <div key={g.contractId} style={{ borderTop: `1px solid ${C.lineFaint}`, paddingTop: 9 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{g.ref}</span>
-              {g.tell ? (
-                <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
-                  find the contract with <b style={{ color: C.text }}>{g.tell}</b>
-                </span>
-              ) : (
-                <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>
-                  ⚠ no unique tell, match by full box set
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', paddingLeft: 4 }}>
-              {g.stacks.map((s, k) => (
-                <span key={k} style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>
-                  <span style={{ fontFamily: F.mono, color: C.text }}>{s.breakdown}</span>{' '}
-                  <span style={{ color: C.dim }}>{s.commodity}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 16px' }}>
+        {hasLoads && (
+          <LoadSection title="LOAD HERE" color={C.green}>
+            {stop.loads.map((l) => (
+              <LoadLineRow key={`l-${l.objectiveId}`} line={l} verb="load" showDest />
+            ))}
+          </LoadSection>
+        )}
+        {hasDrops && (
+          <LoadSection title="DROP HERE" color={C.acc}>
+            {stop.drops.map((l) => (
+              <LoadLineRow key={`d-${l.objectiveId}`} line={l} verb="drop" />
+            ))}
+          </LoadSection>
+        )}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {navBtn('‹ BACK', onBack, idx === 0)}
         <Btn
           onClick={onLoaded}
           style={{ flex: 1, border: `1px solid ${C.acc}`, background: C.accFillStrong, color: C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: 'pointer' }}
           hoverStyle={{ background: 'rgba(255,210,30,0.26)' }}
         >
-          LOADED ✓ · NEXT DESTINATION
+          {hasLoads ? 'LOADED' : 'DROPPED'} ✓ · NEXT STOP
         </Btn>
         {navBtn('EXIT', onExit)}
+      </div>
+    </div>
+  )
+}
+
+function LoadSection({ title, color, children }: { title: string; color: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <div style={{ borderTop: `1px solid ${C.lineFaint}`, paddingTop: 9, marginTop: 4 }}>
+      <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color, marginBottom: 6 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+    </div>
+  )
+}
+
+function LoadLineRow({
+  line,
+  verb,
+  showDest
+}: {
+  line: RouteLoadStop['loads'][number]
+  verb: 'load' | 'drop'
+  showDest?: boolean
+}): React.ReactElement {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
+        {verb === 'load' && line.tell ? (
+          <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
+            find the contract with <b style={{ color: C.text }}>{line.tell}</b>
+          </span>
+        ) : verb === 'load' ? (
+          <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ no unique tell, match by full box set</span>
+        ) : null}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
+        <span style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>{line.breakdown}</span>
+        <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
+        {showDest && (
+          <span style={{ fontFamily: F.body, fontSize: 12, color: C.acc }}>→ {line.destination}</span>
+        )}
+        {showDest && line.multiPickup && (
+          <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup: load what&apos;s here)</span>
+        )}
       </div>
     </div>
   )

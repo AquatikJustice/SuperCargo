@@ -4,10 +4,7 @@ import { C, F, GLOW } from '../theme'
 import { deriveStops } from '../state/manifest'
 import { Btn } from './ui'
 
-// Root of the separate always-on-top compact window (URL hash #compact).
-// Shows a single "next stop" card that floats over the game's top-right
-// tracked-contract area. Shares the manifest with the main window through the
-// evt:manifest:changed broadcast wired up in the store.
+// compact always-on-top window (#compact)
 const DRAG = { WebkitAppRegion: 'drag' } as React.CSSProperties
 const NODRAG = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
@@ -37,7 +34,7 @@ export default function CompactWindowApp(): React.ReactElement {
       stop.items.filter((i) => !i.delivered).map((i) => ({ contractId: i.contractId, objectiveId: i.objectiveId })),
       true
     )
-    // The list shrinks (this stop drops out); keep idx so the next stop slides in.
+    // keep idx so next stop shows
   }
 
   return (

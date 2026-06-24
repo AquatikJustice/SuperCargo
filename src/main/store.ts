@@ -1,5 +1,3 @@
-// Small JSON storage for settings, manifest, and history, kept under userData.
-
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
@@ -16,7 +14,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gameChannel: 'LIVE',
   activeShip: DEFAULT_SHIP,
   installedModules: {},
-  uexApiKey: '',
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
   ocrEngine: 'tesseract',

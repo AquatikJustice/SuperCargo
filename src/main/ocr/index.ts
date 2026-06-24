@@ -1,12 +1,8 @@
-// OCR entry point. main/index.ts talks only to this module.
-//
-// Holds the one active engine and runs the full pass:
-//   capture display -> crop panel -> recognize -> parse -> fuzzy-match to UEX ->
-//   keep crop for opt-in training. The engine is chosen in settings.
+// ocr entry point
 
 import type { AppSettings, OcrEngineInfo, OcrResult } from '@shared/types'
-import { parseOcrText, matchObjectives } from '@shared/ocrParse'
-import { captureDisplay, cropImage, toPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
+import { parseOcrText, matchObjectives, reorderColumns } from '@shared/ocrParse'
+import { captureDisplay, cropImage, toUpscaledPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
 import { loadCachedCommodities, loadCachedLocations } from '../uex'
 import * as telemetry from '../telemetry'
 import type { OcrEngine } from './engine'
@@ -42,13 +38,11 @@ export async function engineInfo(settings: AppSettings): Promise<OcrEngineInfo> 
   }
 }
 
-/** Capture a full-display preview for the calibration UI. */
 export async function capturePreview(settings: AppSettings): Promise<string | null> {
   const img = await captureDisplay(settings.ocrDisplayId)
   return img ? toPreviewDataUrl(img) : null
 }
 
-/** Run a full OCR pass and return parsed, UEX-matched objectives. */
 export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   const engine = engineFor(settings.ocrEngine || 'tesseract')
   const base: OcrResult = { ok: false, engine: engine.id, ms: 0, confidence: 0, rawText: '', objectives: [] }
@@ -57,18 +51,18 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   if (!full) return { ...base, error: 'screen capture failed (no source available)' }
 
   const cropped = cropImage(full, settings.ocrCrop)
-  const png = toPng(cropped)
-  // Keep the preview near native size (up to 1280px). It is shown large in the
-  // contribute view where the user must read the panel to correct it.
+  // upscale to a fixed glyph size: 2x at 1080p, less above so recognition stays
+  // bounded on hi-res displays (tesseract time scales with pixel count)
+  const factor = Math.min(2, Math.max(1, 2160 / cropped.getSize().height))
+  const ocrImage = toUpscaledPng(cropped, factor)
+  // shown big in contribute view
   const imageDataUrl = toPreviewDataUrl(cropped, 1280)
-  // Keep a grayscale crop for samples/upload (about half the size, and OCR is
-  // grayscale anyway). Recognition still uses the full-color `png` above.
   const grayPng = toGrayscalePng(cropped)
 
   const started = Date.now()
   let recognition
   try {
-    recognition = await engine.recognize(png)
+    recognition = await engine.recognize(ocrImage)
   } catch (e) {
     return { ...base, imageDataUrl, error: e instanceof Error ? e.message : String(e) }
   }
@@ -77,9 +71,19 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   const parsed = parseOcrText(recognition.text)
   const commodities = loadCachedCommodities()?.commodities ?? []
   const locations = loadCachedLocations()?.locations ?? []
-  const objectives = matchObjectives(parsed.objectives, commodities, locations)
+  let objectives = matchObjectives(parsed.objectives, commodities, locations)
 
-  // Keep the crop so a confirmed read can become a training sample later.
+  // try a column-reordered parse and keep it only if more objectives resolve
+  if (recognition.words?.length) {
+    const reordered = reorderColumns(recognition.words)
+    if (reordered) {
+      const alt = matchObjectives(parseOcrText(reordered).objectives, commodities, locations)
+      const resolved = (os: typeof objectives): number =>
+        os.filter((o) => o.commodity.match && o.destination.match).length
+      if (resolved(alt) > resolved(objectives)) objectives = alt
+    }
+  }
+
   const sampleId = stashPending(grayPng)
 
   return {
@@ -96,7 +100,6 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   }
 }
 
-/** Promote a confirmed read into the training corpus (opt-in). */
 export function saveSample(
   settings: AppSettings,
   sampleId: string,
@@ -107,13 +110,12 @@ export function saveSample(
     engine: settings.ocrEngine || 'tesseract',
     savedAt: new Date().toISOString()
   }
-  // Read the crop before commit (commit renames pending -> data).
+  // read before commit renames it away
   const png = settings.contributeTrainingData ? readPending(sampleId) : null
 
   let kept = false
   if (settings.ocrSaveSamples) kept = commitSample(sampleId, full)
 
-  // Opt-in anonymous upload to the shared training bucket.
   if (settings.contributeTrainingData && png && settings.telemetryClientId) {
     telemetry.enqueue(settings.telemetryClientId, sampleId, png, {
       ...full,

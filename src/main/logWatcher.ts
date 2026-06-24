@@ -1,5 +1,4 @@
-// Tails Game.log and detects rotation. Based on watcher.py's LogTailer:
-// polls every ~200ms, and resets when the file shrinks or its inode changes.
+// tails Game.log, resets on rotation
 
 import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs'
@@ -94,7 +93,6 @@ export class LogWatcher extends EventEmitter {
     try {
       st = fs.statSync(this.path)
     } catch {
-      // File is gone: keep waiting and report disconnected.
       if (this.fd !== null) {
         this.closeFd()
         this.markers.clear()
@@ -110,7 +108,7 @@ export class LogWatcher extends EventEmitter {
 
     if (rotated) {
       if (this.fd !== null) {
-        // The file rotated mid-session, so reset the parser state.
+        // rotated mid-session, reset parser state
         this.closeFd()
         this.markers.clear()
       }
@@ -123,15 +121,11 @@ export class LogWatcher extends EventEmitter {
       this.lastIno = st.ino || null
       this.buffer = ''
       if (this.firstOpen) {
-        // First open against an existing log: tail from the END so we don't
-        // re-import a previous session's finished contracts. The saved manifest
-        // holds the old data; we update it from live events.
+        // skip existing content
         this.position = st.size
         this.lastSize = st.size
         this.firstOpen = false
       } else {
-        // The game restarted, so the new log is a fresh session. Read it from
-        // the start to capture this session's contract events.
         this.position = 0
         this.lastSize = 0
       }
@@ -179,7 +173,6 @@ export class LogWatcher extends EventEmitter {
       case 'ended':
         this.emit('ended', parsed.event)
         break
-      // markers are tracked internally; nothing is emitted
     }
   }
 }

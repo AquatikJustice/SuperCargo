@@ -1,16 +1,14 @@
 # electron-builder configuration.
 #
-# IMPORTANT - GitHub Actions are NOT used. Releases are built and published
-# LOCALLY (zero Actions minutes) with:
+# Windows is built and published LOCALLY (no Actions minutes):
 #
 #     set GH_TOKEN=<personal access token with repo scope>   (PowerShell: $env:GH_TOKEN="...")
-#     npm run publish
+#     npm run publish     # installer + portable + zip, uploaded to a draft release
+#     npm run dist        # same, without uploading
 #
-# That builds the NSIS installer and uploads it + latest.yml directly to a
-# GitHub Release as a draft. `electron-updater` in the app reads latest.yml
-# from the release assets. To produce an installer WITHOUT uploading:
-#
-#     npm run dist
+# Linux (AppImage) is built in CI on a version tag and uploaded to the same
+# draft release (.github/workflows/release-linux.yml). electron-updater reads
+# latest.yml / latest-linux.yml from the release assets to update both.
 #
 appId: space.supercargo.app
 productName: SuperCargo
@@ -27,6 +25,15 @@ files:
   # the live window/taskbar icon is loaded at runtime from ../../resources/icon.png
   # (relative to out/main); the exe + installer icon comes from build/icon.ico.
   - resources/icon.png
+
+# Bundled UEX lists (ships, freight locations, commodities). Shipped as an offline
+# seed; the app refreshes them from the repo at launch. Copied to resources/data/uex
+# so dataSync.ts can read them via process.resourcesPath.
+extraResources:
+  - from: data/uex
+    to: data/uex
+    filter:
+      - '*.json'
 
 # tesseract.js loads its worker script + wasm core from disk at runtime; they
 # must live outside the asar archive or recognition fails in the packaged app.
@@ -50,7 +57,13 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: ${productName}-Setup-${version}.${ext}
+    # portable: single self-contained exe, no install. zip: unpacked folder.
+    - target: portable
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
 
 nsis:
   oneClick: false
@@ -62,3 +75,16 @@ nsis:
   # it (default true), a silent auto-update's uninstall step removes the shortcut
   # and the reinstall declines to recreate it, so the icon vanishes after updating.
   createDesktopShortcut: always
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Game
+  synopsis: Star Citizen cargo hauling companion
+  artifactName: ${productName}-${version}.${ext}

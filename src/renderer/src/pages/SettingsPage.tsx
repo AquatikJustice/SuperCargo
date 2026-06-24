@@ -52,12 +52,8 @@ export default function SettingsPage(): React.ReactElement {
   const update = useStore((s) => s.update)
   const checkForUpdates = useStore((s) => s.checkForUpdates)
   const ships = useStore((s) => s.ships)
-  const shipsSyncedAt = useStore((s) => s.shipsSyncedAt)
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
-  const uexSyncing = useStore((s) => s.uexSyncing)
-  const uexError = useStore((s) => s.uexError)
-  const syncUex = useStore((s) => s.syncUex)
   const scanSession = useStore((s) => s.scanSession)
   const ocrEngine = useStore((s) => s.ocrEngine)
   const refreshOcrEngine = useStore((s) => s.refreshOcrEngine)
@@ -65,18 +61,12 @@ export default function SettingsPage(): React.ReactElement {
   const [detecting, setDetecting] = useState(false)
   const [installs, setInstalls] = useState<Record<string, string>>({})
   const [ordered, setOrdered] = useState<string[]>([])
-  const [token, setToken] = useState(settings.uexApiKey)
-  const [showToken, setShowToken] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [displays, setDisplays] = useState<DisplayInfo[]>([])
   const [hotkey, setHotkey] = useState(settings.ocrHotkey)
   const [contractData, setContractData] = useState<ContractDataStatus | null>(null)
   const [rescanning, setRescanning] = useState(false)
   const [telemetry, setTelemetry] = useState<{ uploaded: number; queued: number } | null>(null)
-
-  useEffect(() => {
-    setToken(settings.uexApiKey)
-  }, [settings.uexApiKey])
 
   useEffect(() => {
     setHotkey(settings.ocrHotkey)
@@ -223,69 +213,16 @@ export default function SettingsPage(): React.ReactElement {
         </div>
       </div>
 
-      <Section title="UEXCORP API" />
-      <div style={{ ...rowStyle, alignItems: 'start' }}>
-        <span style={{ ...keyStyle, paddingTop: 8 }}>App token</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input
-              type={showToken ? 'text' : 'password'}
-              value={token}
-              placeholder="Paste your UEXcorp app bearer token"
-              onChange={(e) => setToken(e.target.value)}
-              onBlur={() => {
-                if (token.trim() !== settings.uexApiKey) {
-                  void updateSettings({ uexApiKey: token.trim() }).then(() => {
-                    if (token.trim()) void syncUex()
-                  })
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: `1px solid rgba(255,255,255,0.16)`,
-                color: C.text,
-                fontFamily: F.mono,
-                fontSize: 12,
-                padding: '8px 12px',
-                outline: 'none'
-              }}
-            />
-            <SmallBtn onClick={() => setShowToken((v) => !v)}>{showToken ? 'HIDE' : 'SHOW'}</SmallBtn>
-            {settings.uexApiKey ? <Pill color={C.green} text="SET" /> : <Pill color={C.amber} text="NOT SET" />}
-          </div>
-          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Create one for free at{' '}
-            <a
-              href="https://uexcorp.space/api/apps"
-              style={{ color: C.acc, textDecoration: 'underline' }}
-              title="Opens UEXcorp in your browser - sign in, create an app, copy its bearer token"
-            >
-              uexcorp.space/api/apps
-            </a>{' '}
-            - sign in, create an app, then paste its bearer token here.
-          </span>
-        </div>
-      </div>
-      <div style={{ ...rowStyle, borderBottom: `1px solid ${C.lineSoft}` }}>
-        <span style={keyStyle}>Live data</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <Section title="DATA" />
+      <div style={{ ...rowStyle, borderBottom: `1px solid ${C.lineSoft}`, alignItems: 'start' }}>
+        <span style={{ ...keyStyle, paddingTop: 2 }}>Game data</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
           <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
             {ships.length} ships · {locations.length} locations · {commodities.length} commodities
           </span>
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            {uexSyncing
-              ? 'syncing...'
-              : uexError
-                ? `sync failed: ${uexError}`
-                : shipsSyncedAt
-                  ? `synced ${formatWhen(shipsSyncedAt)}`
-                  : 'bundled snapshot'}
+            Bundled with the app and kept current automatically. No account or token needed.
           </span>
-          <SmallBtn onClick={() => void syncUex()}>{uexSyncing ? 'SYNCING...' : 'SYNC NOW'}</SmallBtn>
         </div>
       </div>
 
@@ -307,8 +244,8 @@ export default function SettingsPage(): React.ReactElement {
         <span style={keyStyle}>Engine</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { id: 'tesseract', label: 'TESSERACT' },
-            { id: 'onnx', label: 'CUSTOM (ONNX)' }
+            { id: 'tesseract', label: 'TESSERACT' }
+            // onnx hidden until model ships
           ].map((e) => {
             const active = (settings.ocrEngine || 'tesseract') === e.id
             return (
@@ -547,9 +484,7 @@ export default function SettingsPage(): React.ReactElement {
 }
 
 function AboutBlock(): React.ReactElement {
-  // The "Made by the Community" badge is a Fankit asset. Show it if the PNG
-  // exists at renderer/public/made-by-community.png, otherwise hide the image
-  // and keep the text credit, which is always required.
+  // badge png optional, text credit not
   const [logoOk, setLogoOk] = useState(true)
   const [showPolicy, setShowPolicy] = useState(false)
   return (
@@ -633,17 +568,6 @@ function UpdateStatus(): React.ReactElement | null {
   const m = map[update.kind]
   if (!m) return null
   return <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color: m.color }}>{m.text}</span>
-}
-
-function formatWhen(iso: string): string {
-  const t = Date.parse(iso)
-  if (Number.isNaN(t)) return iso
-  const mins = Math.round((Date.now() - t) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.round(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return new Date(t).toLocaleDateString()
 }
 
 function Pill({ color, text }: { color: string; text: string }): React.ReactElement {
