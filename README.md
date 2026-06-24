@@ -1,4 +1,4 @@
-# <img src="assets/logo/SuperCargo-Logo.png" alt="SuperCargo logo" height="48" align="middle"> SuperCargo
+# <img src="assets/logo/SuperCargo-Logo.png" alt="SuperCargo logo" height="48" align="bottom"> SuperCargo
 
 A desktop app for Star Citizen haulers who stack a pile of contracts into one run.
 It pulls everything into a single manifest: box-size math, a route that orders your
