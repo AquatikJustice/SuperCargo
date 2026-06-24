@@ -36,10 +36,12 @@ export default function Typeahead({
   const [focused, setFocused] = useState(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // don't clobber input while focused
+  // sync an idle field to the external value, but a clearOnFocus search box
+  // owns its own text so the focus-clear is not overwritten
   useEffect(() => {
-    if (!focused) setQuery(value)
-  }, [value, focused])
+    if (clearOnFocus || focused) return
+    setQuery(value)
+  }, [value, focused, clearOnFocus])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
