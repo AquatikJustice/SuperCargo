@@ -2,6 +2,8 @@
 
 import type { HaulingContract, DeliveryObjective, CargoLayout, FrozenBox } from '@shared/types'
 import { boxList } from '@shared/box'
+import { packInto, type Occupied } from '@shared/packer'
+import type { CargoGrid } from '@shared/cargoGrids'
 import { splitDestination } from '../data/stations'
 import { stopColor } from '../theme'
 import { activeContracts, destinationsInOrder } from './manifest'
@@ -27,7 +29,27 @@ function boxesFor(
   }))
 }
 
-export function snapshotLayout(contracts: HaulingContract[], order: string[]): CargoLayout {
+// run the packer once and stamp each box's resting position onto it
+function stampPositions(boxes: FrozenBox[], occupied: Occupied[], grids: CargoGrid[]): void {
+  const fresh = occupied.length ? boxes.filter((b) => b.x == null) : boxes
+  const { placements } = packInto(grids, occupied, fresh)
+  const pos = new Map(placements.map((p) => [p.box.id, p]))
+  for (const b of fresh) {
+    const p = pos.get(b.id)
+    if (p) Object.assign(b, { gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated })
+  }
+}
+
+const occupiedFrom = (boxes: FrozenBox[]): Occupied[] =>
+  boxes
+    .filter((b) => b.gridId != null && b.x != null)
+    .map((b) => ({ gridId: b.gridId!, x: b.x!, y: b.y!, z: b.z!, w: b.w!, l: b.l!, h: b.h!, stopIdx: b.stopIdx }))
+
+export function snapshotLayout(
+  contracts: HaulingContract[],
+  order: string[],
+  grids: CargoGrid[]
+): CargoLayout {
   const dests = destinationsInOrder(contracts, order)
   const idxOf = new Map(dests.map((d, i) => [d, i]))
   const boxes: FrozenBox[] = []
@@ -39,11 +61,16 @@ export function snapshotLayout(contracts: HaulingContract[], order: string[]): C
       boxes.push(...boxesFor(c, o, stopIdx, stopColor(stopIdx)))
     }
   }
+  stampPositions(boxes, [], grids)
   return { locked: true, boxes }
 }
 
-// reflag + append, never move existing
-export function reconcileLayout(contracts: HaulingContract[], layout: CargoLayout): CargoLayout {
+// reflag + append, never move what's already placed
+export function reconcileLayout(
+  contracts: HaulingContract[],
+  layout: CargoLayout,
+  grids: CargoGrid[]
+): CargoLayout {
   const byId = new Map(activeContracts(contracts).map((c) => [c.id, c]))
 
   const boxes: FrozenBox[] = layout.boxes.map((b) => {
@@ -56,6 +83,7 @@ export function reconcileLayout(contracts: HaulingContract[], layout: CargoLayou
   const seen = new Set(boxes.map((b) => `${b.contractId}:${b.objectiveId}`))
   let maxStop = boxes.reduce((m, b) => Math.max(m, b.stopIdx), -1)
   const newStop = new Map<string, number>()
+  const fresh: FrozenBox[] = []
   for (const c of activeContracts(contracts)) {
     for (const o of c.objectives) {
       if (o.delivered || seen.has(`${c.id}:${o.id}`)) continue
@@ -64,8 +92,14 @@ export function reconcileLayout(contracts: HaulingContract[], layout: CargoLayou
         stopIdx = ++maxStop
         newStop.set(o.destination, stopIdx)
       }
-      boxes.push(...boxesFor(c, o, stopIdx, stopColor(stopIdx)))
+      fresh.push(...boxesFor(c, o, stopIdx, stopColor(stopIdx)))
     }
+  }
+  boxes.push(...fresh)
+  // slot late additions (and migrate any position-less legacy boxes) into the
+  // gaps, leaving already-placed cargo untouched
+  if (boxes.some((b) => b.x == null)) {
+    stampPositions(boxes, occupiedFrom(boxes), grids)
   }
 
   return { locked: layout.locked, boxes }

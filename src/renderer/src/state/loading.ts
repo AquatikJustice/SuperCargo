@@ -2,7 +2,7 @@
 
 import type { HaulingContract } from '@shared/types'
 import { boxBreakdown } from '@shared/box'
-import { activeContracts } from './manifest'
+import { activeContracts, destinationsInOrder } from './manifest'
 import type { RoutePlan } from './route'
 
 const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
@@ -61,6 +61,7 @@ export interface RouteLoadLine {
   destination: string
   multiPickup: boolean
   objectiveId: string
+  contractId: string
 }
 
 export interface RouteLoadStop {
@@ -72,6 +73,7 @@ export interface RouteLoadStop {
   drops: RouteLoadLine[]
   loadAfter: number
   objectiveIds: string[]
+  trip: number
 }
 
 export function buildRouteLoadingPlan(
@@ -94,7 +96,8 @@ export function buildRouteLoadingPlan(
       breakdown: boxBreakdown(o.boxes),
       destination: o.destination,
       multiPickup: (o.pickups?.length ?? 0) > 1,
-      objectiveId: o.id
+      objectiveId: o.id,
+      contractId: c.id
     }
   }
 
@@ -111,8 +114,149 @@ export function buildRouteLoadingPlan(
       loads,
       drops,
       loadAfter: s.loadAfter,
-      objectiveIds: [...new Set([...loads, ...drops].map((l) => l.objectiveId))]
+      objectiveIds: [...new Set([...loads, ...drops].map((l) => l.objectiveId))],
+      trip: s.trip
     })
   }
   return stops
+}
+
+// a single physical action while loading: drop a stop's cargo, or load one
+// destination's worth. a pickup stop fans out into one load step per
+// destination so you place boxes a layer at a time, not all at once.
+export interface LoadingStep {
+  nodeKey: string
+  label: string
+  code: string
+  region: string
+  trip: number
+  kind: 'load' | 'drop'
+  /** where this batch is bound (load), or the stop itself (drop) */
+  boundFor: string
+  /** layer hint, e.g. "bottom · load first" */
+  placement: string
+  /** 1-based among load groups at this stop; 0 for a drop */
+  groupPos: number
+  groupTotal: number
+  lines: RouteLoadLine[]
+  loadIds: string[]
+  dropIds: string[]
+}
+
+function layerHint(pos: number, total: number): string {
+  if (total <= 1) return ''
+  if (pos === 1) return 'bottom · load first'
+  if (pos === total) return 'top · load last'
+  return 'next layer up'
+}
+
+interface ObjPool {
+  contractId: string
+  commodity: string
+  boxes: Array<{ scuSize: number; count: number }>
+}
+
+// distinctive "find the contract with..." tell per contract, computed from a
+// pool of objectives still in the warehouse. recomputed each load step so a
+// stack you've already pulled stops being the identifier.
+function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
+  const tupleOwners = new Map<string, Set<string>>()
+  const commodityOwners = new Map<string, Set<string>>()
+  const add = (m: Map<string, Set<string>>, key: string, id: string): void => {
+    const s = m.get(key) ?? new Set<string>()
+    s.add(id)
+    m.set(key, s)
+  }
+  const byContract = new Map<string, ObjPool[]>()
+  for (const o of pool) {
+    add(commodityOwners, o.commodity, o.contractId)
+    for (const b of o.boxes) add(tupleOwners, `${o.commodity}|${b.scuSize}|${b.count}`, o.contractId)
+    const arr = byContract.get(o.contractId) ?? []
+    arr.push(o)
+    byContract.set(o.contractId, arr)
+  }
+
+  const tells = new Map<string, string | null>()
+  for (const [cid, objs] of byContract) {
+    let best: { size: number; count: number; commodity: string } | null = null
+    for (const o of objs) {
+      for (const b of o.boxes) {
+        const owners = tupleOwners.get(`${o.commodity}|${b.scuSize}|${b.count}`)
+        if (owners && owners.size === 1) {
+          if (!best || b.scuSize > best.size || (b.scuSize === best.size && b.count > best.count))
+            best = { size: b.scuSize, count: b.count, commodity: o.commodity }
+        }
+      }
+    }
+    if (best) {
+      tells.set(cid, tellLabel(best.commodity, best.size, best.count))
+      continue
+    }
+    const uniqueCommodity = objs.map((o) => o.commodity).find((cm) => commodityOwners.get(cm)?.size === 1)
+    tells.set(cid, uniqueCommodity ? `the only ${uniqueCommodity}` : null)
+  }
+  return tells
+}
+
+export function buildLoadingSteps(
+  contracts: HaulingContract[],
+  plan: RoutePlan,
+  order: string[]
+): LoadingStep[] {
+  const base = buildRouteLoadingPlan(contracts, plan)
+  const rank = new Map<string, number>()
+  destinationsInOrder(contracts, order).forEach((d, i) => rank.set(d, i))
+
+  const objInfo = new Map<string, ObjPool>()
+  for (const c of activeContracts(contracts)) {
+    for (const o of c.objectives) {
+      objInfo.set(o.id, { contractId: c.id, commodity: o.commodity, boxes: o.boxes })
+    }
+  }
+
+  const steps: LoadingStep[] = []
+  for (const stop of base) {
+    const common = { nodeKey: stop.nodeKey, label: stop.label, code: stop.code, region: stop.region, trip: stop.trip }
+    if (stop.drops.length) {
+      steps.push({
+        ...common,
+        kind: 'drop',
+        boundFor: stop.label,
+        placement: 'pull these off first',
+        groupPos: 0,
+        groupTotal: 0,
+        lines: stop.drops,
+        loadIds: [],
+        dropIds: stop.drops.map((l) => l.objectiveId)
+      })
+    }
+    const byDest = new Map<string, RouteLoadLine[]>()
+    for (const l of stop.loads) {
+      const arr = byDest.get(l.destination) ?? []
+      arr.push(l)
+      byDest.set(l.destination, arr)
+    }
+    // deepest (last delivered) first, matching the bottom-up 3D pack
+    const dests = [...byDest.keys()].sort((a, b) => (rank.get(b) ?? -1) - (rank.get(a) ?? -1))
+    const groups = dests.map((d) => byDest.get(d) as RouteLoadLine[])
+    groups.forEach((lines, i) => {
+      // tell from what's still in this terminal's warehouse: this group plus the
+      // later ones, so stacks pulled in earlier groups stop being the tell
+      const remaining = groups.slice(i).flat()
+      const tells = tellsForPool(remaining.map((l) => objInfo.get(l.objectiveId)).filter((x): x is ObjPool => !!x))
+      const lined = lines.map((l) => ({ ...l, tell: tells.get(l.contractId) ?? null }))
+      steps.push({
+        ...common,
+        kind: 'load',
+        boundFor: dests[i],
+        placement: layerHint(i + 1, groups.length),
+        groupPos: i + 1,
+        groupTotal: groups.length,
+        lines: lined,
+        loadIds: lined.map((l) => l.objectiveId),
+        dropIds: []
+      })
+    })
+  }
+  return steps
 }

@@ -62,8 +62,13 @@ const api = {
 
   compactShow: (): Promise<void> => ipcRenderer.invoke(IPC.compactShow),
   compactHide: (): Promise<void> => ipcRenderer.invoke(IPC.compactHide),
+  compactResize: (height: number): Promise<void> => ipcRenderer.invoke(IPC.compactResize, height),
   onCompactState: (cb: (s: { open: boolean }) => void): Unsubscribe =>
     on(IPC.evtCompactState, cb),
+  setLoadingState: (s: { active: boolean; idx: number }): void =>
+    ipcRenderer.send(IPC.loadingStateSet, s),
+  onLoadingState: (cb: (s: { active: boolean; idx: number }) => void): Unsubscribe =>
+    on(IPC.evtLoadingState, cb),
   onManifestChanged: (cb: (doc: ManifestDoc) => void): Unsubscribe =>
     on(IPC.evtManifestChanged, cb),
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
@@ -6,7 +6,9 @@ import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { packBoxes, deriveStops } from '../state/manifest'
 import { layoutStops } from '../state/layout'
-import { buildRouteLoadingPlan, type RouteLoadStop } from '../state/loading'
+import { buildLoadingSteps, type LoadingStep } from '../state/loading'
+import { firstTripFilter } from '../state/route'
+import { splitDestination } from '../data/stations'
 import { gridsFor, type CargoGrid } from '@shared/cargoGrids'
 import { packCargo, type Placement, type PackBox } from '@shared/packer'
 import { Btn } from '../components/ui'
@@ -16,8 +18,8 @@ import Placeholder from '../components/Placeholder'
 // keeps stacked boxes visible
 const GAP = 0.08
 
-// fixed so the grid doesn't jump per step
-const LOADING_PANEL_H = 268
+// loading walkthrough sits left of the grid
+const LOADING_PANEL_W = 360
 
 interface HoverInfo {
   x: number
@@ -131,15 +133,108 @@ export default function CargoGridPage(): React.ReactElement {
   const installedModules = useStore((s) => s.settings.installedModules)
   const lockLayout = useStore((s) => s.lockLayout)
   const unlockLayout = useStore((s) => s.unlockLayout)
+  const turnInDestination = useStore((s) => s.turnInDestination)
 
   const locked = !!layout?.locked
   const installed = installedModules[activeShip]
   const grids = useMemo(() => gridsFor(activeShip, installed), [activeShip, installed])
 
-  // locked keeps delivered boxes so nothing slides into their cell
-  const livePack = useMemo(() => packBoxes(contracts, order), [contracts, order])
-  const packInput: PackBox[] = locked ? layout!.boxes : livePack
-  const result = useMemo(() => packCargo(grids, packInput), [grids, packInput])
+  // loading-mode walkthrough state; also drives what the grid packs below. each
+  // pickup stop fans out into one step per destination, deepest first.
+  const liveSteps = useMemo(
+    () => (route ? buildLoadingSteps(contracts, route, order) : []),
+    [contracts, route, order]
+  )
+  const [loading, setLoading] = useState(false)
+  const [loadIdx, setLoadIdx] = useState(0)
+  // freeze the plan while walking it, so turning a stop in (which drops it from
+  // the live route) can't shift or skip the remaining steps
+  const [frozenSteps, setFrozenSteps] = useState<LoadingStep[] | null>(null)
+  useEffect(() => {
+    setFrozenSteps((prev) => (loading ? prev ?? liveSteps : null))
+  }, [loading, liveSteps])
+  const loadSteps = frozenSteps ?? liveSteps
+
+  // objectives still aboard and undelivered; anything not here is done (delivered
+  // or its contract archived), so a frozen drop step shows it as handed over
+  const pendingObjIds = useMemo(
+    () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => !o.delivered).map((o) => o.id))),
+    [contracts]
+  )
+
+  // portrait windows stack the walkthrough above the grid, landscape beside it
+  const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth)
+  useEffect(() => {
+    const onResize = (): void => setPortrait(window.innerHeight > window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // two-way sync with the overlay: we push our step, its PREV/NEXT push back.
+  // skip the mount push so opening this page doesn't reset an overlay mid-load.
+  const pushedOnce = useRef(false)
+  useEffect(() => {
+    if (!pushedOnce.current) {
+      pushedOnce.current = true
+      return
+    }
+    window.supercargo?.setLoadingState?.({ active: loading, idx: loadIdx })
+  }, [loading, loadIdx])
+  useEffect(
+    () =>
+      window.supercargo?.onLoadingState?.((s) => {
+        setLoading(s.active)
+        setLoadIdx(s.idx)
+      }),
+    []
+  )
+
+  // what the walkthrough has loaded so far. the grid packs exactly this set, so
+  // it builds up as you load and only ever shrinks as you deliver - never re-
+  // derived from the route, so re-planning can't make cargo vanish
+  const aboardLoading = useMemo(() => {
+    if (!loading || !loadSteps.length) return null
+    const last = Math.min(loadIdx, loadSteps.length - 1)
+    const ids = new Set<string>()
+    for (let k = 0; k <= last; k++) for (const id of loadSteps[k].loadIds) ids.add(id)
+    return ids
+  }, [loading, loadIdx, loadSteps])
+
+  // outside loading mode, scope the grid to the first trip so a multi-trip
+  // manifest doesn't pack everything at once and read as over capacity
+  const tripFilter = useMemo(() => (route ? firstTripFilter(route) : null), [route])
+  const livePack = useMemo(() => {
+    const all = packBoxes(contracts, order)
+    if (aboardLoading) return all.filter((b) => aboardLoading.has(b.objectiveId))
+    if (tripFilter) return all.filter((b) => tripFilter(b.objectiveId))
+    return all
+  }, [contracts, order, aboardLoading, tripFilter])
+  // locked renders the stored positions verbatim - never re-pack, so frozen
+  // cargo can't shuffle when a box drops out or a new one appears
+  const result = useMemo(() => {
+    if (locked) {
+      const placements: Placement[] = []
+      const unplaced: PackBox[] = []
+      for (const b of layout!.boxes) {
+        if (b.gridId != null && b.x != null) {
+          placements.push({ box: b, gridId: b.gridId, x: b.x, y: b.y!, z: b.z!, w: b.w!, l: b.l!, h: b.h!, rotated: !!b.rotated })
+        } else {
+          unplaced.push(b)
+        }
+      }
+      const capacity = grids.filter((g) => g.autoLoad !== false).reduce((a, g) => a + g.w * g.l * g.h, 0)
+      return {
+        placements,
+        unplaced,
+        grids: [],
+        capacity,
+        placedScu: placements.reduce((a, p) => a + p.box.size, 0),
+        fits: unplaced.length === 0,
+        squeezed: false
+      }
+    }
+    return packCargo(grids, livePack)
+  }, [locked, layout, grids, livePack])
   const deliveredIds = useMemo(
     () => (locked ? new Set(layout!.boxes.filter((b) => b.delivered).map((b) => b.id)) : null),
     [locked, layout]
@@ -157,8 +252,9 @@ export default function CargoGridPage(): React.ReactElement {
         .filter((s) => s.undelivered > 0)
         .map((s) => ({ idx: s.idx, code: s.code, name: s.name, color: s.color, refs: s.refs }))
     }
+    const shownStops = new Set(livePack.map((b) => b.stopIdx))
     return deriveStops(contracts, order)
-      .filter((s) => s.items.some((i) => !i.delivered))
+      .filter((s) => s.items.some((i) => !i.delivered) && shownStops.has(s.idx))
       .map((s) => ({
         idx: s.idx,
         code: s.code,
@@ -168,7 +264,7 @@ export default function CargoGridPage(): React.ReactElement {
           .filter((i) => !i.delivered)
           .map((i) => ({ contractId: i.contractId, objectiveId: i.objectiveId }))
       }))
-  }, [locked, layout, contracts, order])
+  }, [locked, layout, contracts, order, livePack])
 
   const [hidden, setHidden] = useState<Set<number>>(new Set())
   const toggleHidden = (idx: number): void =>
@@ -191,21 +287,18 @@ export default function CargoGridPage(): React.ReactElement {
     return { origin: o, span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6) }
   }, [grids])
 
-  const loadPlan = useMemo(() => (route ? buildRouteLoadingPlan(contracts, route) : []), [contracts, route])
-  const [loading, setLoading] = useState(false)
-  const [loadIdx, setLoadIdx] = useState(0)
-  const done = loading && loadIdx >= loadPlan.length
-  const currentLoad = loading && !done ? loadPlan[loadIdx] : undefined
-  const currentObjIds = useMemo(() => new Set(currentLoad?.objectiveIds ?? []), [currentLoad])
-  const loadedObjIds = useMemo(
-    () => new Set(loadPlan.slice(0, loadIdx).flatMap((s) => s.objectiveIds)),
-    [loadPlan, loadIdx]
+  const done = loading && loadIdx >= loadSteps.length
+  const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
+  const currentObjIds = useMemo(
+    () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
+    [currentLoad]
   )
+  // only the aboard set is packed while loading, so everything shown is either
+  // this stop's action (glowing) or already on board (gray) - never future
   const boxMode = (objectiveId?: string): BoxMode => {
     if (!loading) return 'normal'
     if (objectiveId && currentObjIds.has(objectiveId)) return 'current'
-    if (objectiveId && loadedObjIds.has(objectiveId)) return 'loaded'
-    return 'future'
+    return 'loaded'
   }
   const startLoading = (): void => {
     setLoadIdx(0)
@@ -241,7 +334,7 @@ export default function CargoGridPage(): React.ReactElement {
 
   return (
     <div style={{ padding: PAGE_PADDING, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <PageHeader title="CARGO GRID" subtitle={`${activeShip} · 3D load plan`} />
+      <PageHeader title="CARGO GRID" subtitle={`${activeShip} · current load`} />
 
       <div style={{ display: 'flex', gap: 18, alignItems: 'baseline', flexWrap: 'wrap', margin: '2px 0 10px' }}>
         <Stat label="LOADED" value={`${fmt(shownScu)} / ${fmt(result.capacity)} SCU`} />
@@ -282,7 +375,7 @@ export default function CargoGridPage(): React.ReactElement {
               {locked ? '◆ LAYOUT LOCKED' : 'LOCK LAYOUT'}
             </Btn>
           )}
-          {!locked && loadPlan.length > 0 && (
+          {!locked && loadSteps.length > 0 && (
             <Btn
               onClick={() => (loading ? setLoading(false) : startLoading())}
               style={{
@@ -309,23 +402,7 @@ export default function CargoGridPage(): React.ReactElement {
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ height: LOADING_PANEL_H, marginBottom: 8, flex: 'none' }}>
-          <LoadingPanel
-            stop={currentLoad}
-            done={done}
-            idx={loadIdx}
-            total={loadPlan.length}
-            onLoaded={() => setLoadIdx((i) => i + 1)}
-            onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
-            onExit={() => setLoading(false)}
-            onFinish={() => {
-              lockLayout()
-              setLoading(false)
-            }}
-          />
-        </div>
-      ) : (
+      {!loading && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
         {sections.map((s) => {
           const off = hidden.has(s.idx)
@@ -359,10 +436,38 @@ export default function CargoGridPage(): React.ReactElement {
         </div>
       )}
 
-      <div
-        ref={wrap}
-        style={{ position: 'relative', flex: 1, minHeight: 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
-      >
+      <div style={{ display: 'flex', flexDirection: portrait ? 'column' : 'row', gap: 10, flex: 1, minHeight: 0 }}>
+        {loading && (
+          <div
+            style={
+              portrait
+                ? { flex: 'none', height: 300, maxHeight: '45%', minHeight: 0 }
+                : { flex: 'none', width: LOADING_PANEL_W, minHeight: 0 }
+            }
+          >
+            <LoadingPanel
+              key={`${currentLoad?.kind ?? 'done'}-${loadIdx}`}
+              step={currentLoad}
+              aboardScu={shownScu}
+              done={done}
+              idx={loadIdx}
+              total={loadSteps.length}
+              pendingObjIds={pendingObjIds}
+              onTurnIn={(entries) => turnInDestination(entries)}
+              onLoaded={() => setLoadIdx((i) => i + 1)}
+              onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
+              onExit={() => setLoading(false)}
+              onFinish={() => {
+                lockLayout()
+                setLoading(false)
+              }}
+            />
+          </div>
+        )}
+        <div
+          ref={wrap}
+          style={{ position: 'relative', flex: 1, minHeight: portrait ? 200 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
+        >
         <Canvas key={activeShip} camera={{ position: [camDist, camDist * 0.8, camDist], fov: 45 }}>
           <ambientLight intensity={0.75} />
           <directionalLight position={[span, span * 1.5, span]} intensity={1.1} />
@@ -416,30 +521,56 @@ export default function CargoGridPage(): React.ReactElement {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
 }
 
+type TurnMode = 'full' | 'part' | 'none'
+type TurnInEntry = { contractId: string; objectiveId: string; deliveredScu: number }
+
 function LoadingPanel({
-  stop,
+  step,
+  aboardScu,
   done,
   idx,
   total,
+  pendingObjIds,
+  onTurnIn,
   onLoaded,
   onBack,
   onExit,
   onFinish
 }: {
-  stop: RouteLoadStop | undefined
+  step: LoadingStep | undefined
+  aboardScu: number
   done: boolean
   idx: number
   total: number
+  pendingObjIds: Set<string>
+  onTurnIn: (entries: TurnInEntry[]) => void
   onLoaded: () => void
   onBack: () => void
   onExit: () => void
   onFinish: () => void
 }): React.ReactElement {
+  const isDrop = step?.kind === 'drop'
+  // objectives at this drop that still need turning in
+  const pending = isDrop ? step!.lines.filter((l) => pendingObjIds.has(l.objectiveId)) : []
+  const [rows, setRows] = useState<Record<string, { mode: TurnMode; amount: number }>>(() =>
+    Object.fromEntries(pending.map((l) => [l.objectiveId, { mode: 'full' as TurnMode, amount: l.scu }]))
+  )
+  const setMode = (l: LoadingStep['lines'][number], mode: TurnMode): void =>
+    setRows((r) => {
+      const cur = r[l.objectiveId]?.amount ?? l.scu
+      const amount =
+        mode === 'full' ? l.scu : mode === 'none' ? 0 : cur > 0 && cur < l.scu ? cur : Math.max(1, Math.round(l.scu / 2))
+      return { ...r, [l.objectiveId]: { mode, amount } }
+    })
+  const setAmount = (l: LoadingStep['lines'][number], amount: number): void =>
+    setRows((r) => ({ ...r, [l.objectiveId]: { mode: 'part', amount: Math.max(0, Math.min(l.scu, amount)) } }))
+
   const navBtn = (label: string, onClick: () => void, disabled?: boolean): React.ReactElement => (
     <Btn
       onClick={onClick}
@@ -451,14 +582,14 @@ function LoadingPanel({
     </Btn>
   )
 
-  if (done || !stop) {
+  if (done || !step) {
     return (
       <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: C.green, textShadow: GLOW }}>
-          ✓ ROUTE WALKED · {total} STOPS
+          ✓ ROUTE WALKED · {total} STEPS
         </span>
         <span style={{ fontFamily: F.body, fontSize: 12.5, color: C.dim }}>
-          You load at pickups and drop along the way. Lock the layout to freeze it.
+          Load at pickups, deliver along the way. Lock the layout to freeze it.
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
           {navBtn('‹ BACK', onBack, idx === 0)}
@@ -468,48 +599,74 @@ function LoadingPanel({
     )
   }
 
-  const hasLoads = stop.loads.length > 0
-  const hasDrops = stop.drops.length > 0
+  const isLoad = step.kind === 'load'
+  const dest = splitDestination(step.boundFor)
+  const destLabel = dest.code ? `${dest.code} · ${dest.name}` : dest.name || step.boundFor
+  const title = isLoad ? `LOAD → ${destLabel}` : `DELIVER → ${destLabel}`
+
+  const submit = (): void => {
+    if (pending.length) {
+      onTurnIn(
+        pending.map((l) => {
+          const st = rows[l.objectiveId] ?? { mode: 'full' as TurnMode, amount: l.scu }
+          const deliveredScu =
+            st.mode === 'full' ? l.scu : st.mode === 'none' ? 0 : Math.max(0, Math.min(l.scu, Math.round(st.amount || 0)))
+          return { contractId: l.contractId, objectiveId: l.objectiveId, deliveredScu }
+        })
+      )
+    }
+    onLoaded()
+  }
+
+  const actionLabel = isLoad ? 'LOADED ✓ · NEXT' : pending.length ? 'TURN IN ✓ · NEXT' : 'DELIVERED ✓ · NEXT'
+
   return (
     <div style={{ border: `1px solid ${C.acc}`, borderRadius: 6, background: C.accFill, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 16px 10px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
-          STOP {idx + 1} / {total}
+          STEP {idx + 1} / {total}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
-          {stop.code ? `${stop.code} · ` : ''}{stop.label}
+          {step.code ? `${step.code} · ` : ''}{step.label}
         </span>
-        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{fmt(stop.loadAfter)} SCU aboard after</span>
+        {isLoad && step.groupTotal > 1 && (
+          <span style={{ fontFamily: F.body, fontSize: 12, color: C.amber }}>
+            group {step.groupPos}/{step.groupTotal} · {step.placement}
+          </span>
+        )}
+        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{fmt(aboardScu)} SCU aboard</span>
         <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-          the glowing cargo is this stop&apos;s
+          {isLoad ? "the glowing cargo is this step's" : 'mark what you handed over'}
         </span>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 16px' }}>
-        {hasLoads && (
-          <LoadSection title="LOAD HERE" color={C.green}>
-            {stop.loads.map((l) => (
-              <LoadLineRow key={`l-${l.objectiveId}`} line={l} verb="load" showDest />
-            ))}
-          </LoadSection>
-        )}
-        {hasDrops && (
-          <LoadSection title="DROP HERE" color={C.acc}>
-            {stop.drops.map((l) => (
-              <LoadLineRow key={`d-${l.objectiveId}`} line={l} verb="drop" />
-            ))}
-          </LoadSection>
-        )}
+        <LoadSection title={title} color={isLoad ? C.green : C.acc}>
+          {step.lines.map((l) =>
+            isLoad ? (
+              <LoadLineRow key={l.objectiveId} line={l} />
+            ) : (
+              <DropLineRow
+                key={l.objectiveId}
+                line={l}
+                delivered={!pendingObjIds.has(l.objectiveId)}
+                row={rows[l.objectiveId] ?? { mode: 'full', amount: l.scu }}
+                onMode={(m) => setMode(l, m)}
+                onAmount={(a) => setAmount(l, a)}
+              />
+            )
+          )}
+        </LoadSection>
       </div>
 
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {navBtn('‹ BACK', onBack, idx === 0)}
         <Btn
-          onClick={onLoaded}
+          onClick={isDrop ? submit : onLoaded}
           style={{ flex: 1, border: `1px solid ${C.acc}`, background: C.accFillStrong, color: C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: 'pointer' }}
           hoverStyle={{ background: 'rgba(255,210,30,0.26)' }}
         >
-          {hasLoads ? 'LOADED' : 'DROPPED'} ✓ · NEXT STOP
+          {actionLabel}
         </Btn>
         {navBtn('EXIT', onExit)}
       </div>
@@ -526,38 +683,87 @@ function LoadSection({ title, color, children }: { title: string; color: string;
   )
 }
 
-function LoadLineRow({
-  line,
-  verb,
-  showDest
-}: {
-  line: RouteLoadStop['loads'][number]
-  verb: 'load' | 'drop'
-  showDest?: boolean
-}): React.ReactElement {
+function LoadLineRow({ line }: { line: LoadingStep['lines'][number] }): React.ReactElement {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
-        {verb === 'load' && line.tell ? (
+        {line.tell ? (
           <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
             find the contract with <b style={{ color: C.text }}>{line.tell}</b>
           </span>
-        ) : verb === 'load' ? (
+        ) : (
           <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ no unique tell, match by full box set</span>
-        ) : null}
+        )}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
         <span style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>{line.breakdown}</span>
         <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
-        {showDest && (
-          <span style={{ fontFamily: F.body, fontSize: 12, color: C.acc }}>→ {line.destination}</span>
-        )}
-        {showDest && line.multiPickup && (
+        {line.multiPickup && (
           <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup: load what&apos;s here)</span>
         )}
       </div>
     </div>
+  )
+}
+
+function DropLineRow({
+  line,
+  delivered,
+  row,
+  onMode,
+  onAmount
+}: {
+  line: LoadingStep['lines'][number]
+  delivered: boolean
+  row: { mode: TurnMode; amount: number }
+  onMode: (mode: TurnMode) => void
+  onAmount: (amount: number) => void
+}): React.ReactElement {
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', alignItems: 'baseline' }}>
+        <span style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>{line.breakdown}</span>
+        <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
+        <span style={{ fontFamily: F.mono, fontSize: 11, color: C.ghost }}>[{line.ref}]</span>
+      </div>
+      {delivered ? (
+        <div style={{ fontFamily: F.body, fontSize: 12.5, color: C.green, marginTop: 3 }}>✓ delivered</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
+          <Seg label="FULL" color={C.green} active={row.mode === 'full'} onClick={() => onMode('full')} />
+          <Seg label="PARTIAL" color={C.amber} active={row.mode === 'part'} onClick={() => onMode('part')} />
+          <Seg label="NONE" color={C.red} active={row.mode === 'none'} onClick={() => onMode('none')} />
+          {row.mode === 'part' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+              <input
+                value={row.amount || ''}
+                onChange={(e) => onAmount(parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) || 0)}
+                inputMode="numeric"
+                style={{ width: 52, background: 'transparent', border: 0, borderBottom: `1px solid rgba(255,255,255,0.25)`, color: C.text, fontFamily: F.mono, fontSize: 13, textAlign: 'right', padding: '2px 0', outline: 'none' }}
+              />
+              <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>/ {line.scu} SCU</span>
+            </span>
+          ) : (
+            <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>
+              {row.mode === 'full' ? line.scu : 0} / {line.scu} SCU
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Seg({ label, color, active, onClick }: { label: string; color: string; active: boolean; onClick: () => void }): React.ReactElement {
+  return (
+    <Btn
+      onClick={onClick}
+      style={{ border: `1px solid ${active ? color : C.lineSoft}`, background: active ? 'rgba(255,255,255,0.05)' : 'transparent', color: active ? color : C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', padding: '4px 8px', cursor: 'pointer' }}
+      hoverStyle={{ border: `1px solid ${color}`, color }}
+    >
+      {label}
+    </Btn>
   )
 }
 

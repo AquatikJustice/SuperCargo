@@ -2,6 +2,8 @@
 
 import type { HaulingContract, Location } from '@shared/types'
 import { planRoute, type RouteJob, type RouteResult } from '@shared/route'
+import type { CargoGrid } from '@shared/cargoGrids'
+import { boxList, calculateBoxes } from '@shared/box'
 import { splitDestination } from '../data/stations'
 import { activeContracts } from './manifest'
 
@@ -56,16 +58,28 @@ export interface RouteStep {
   drops: RouteLegItem[]
   loadRefs: StepRef[]
   dropRefs: StepRef[]
+  /** cargo here left for a return pass because the hold was full */
+  deferRefs: StepRef[]
   loadAfter: number
+  /** which trip this stop belongs to (0-based) */
+  trip: number
 }
 
 export interface RoutePlan {
   steps: RouteStep[]
   destOrder: string[]
+  /** distinct stops in visit order (node keys), what the user reorders */
+  stopKeys: string[]
   totalDistance: number
   feasible: boolean
   peakLoad: number
   capacity: number
+  /** number of hold-fulls; > 1 means revisits to stay under capacity */
+  trips: number
+  /** scu aboard leaving the first stop, i.e. what you carry right now */
+  startLoad: number
+  /** name of that first stop */
+  startStop: string
   method: RouteResult['method']
   reason?: string
   /** real distance vs grouping fallback */
@@ -220,7 +234,10 @@ export function buildRouteModel(
         const pickupNode = nodeFor(pu || '(unknown pickup)', false)
         if (pickupNode === destNode) return
         const scu = base + (i < rem ? 1 : 0)
-        jobs.push({ pickup: pickupNode, dest: destNode, scu })
+        // a single pickup carries the objective's own boxes; a split recomputes
+        const boxes =
+          pickups.length === 1 ? boxList(o.boxes) : boxList(calculateBoxes(scu, c.maxBoxSize))
+        jobs.push({ pickup: pickupNode, dest: destNode, scu, boxes })
         jobInfo.push({ pickupNode, destNode, scu, commodity: o.commodity, contractId: c.id, objectiveId: o.id })
       })
     }
@@ -285,38 +302,80 @@ export function computeRoutePlan(
   contracts: HaulingContract[],
   locations: Location[],
   capacity: number,
-  startLocation?: string
+  startLocation?: string,
+  bays?: CargoGrid[],
+  manualOrder?: string[]
 ): RoutePlan | null {
   const model = buildRouteModel(contracts, locations, startLocation)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
-  const result = planRoute({ n: model.nodes.length, jobs: model.jobs, dist, capacity, start: model.depot })
 
-  const steps: RouteStep[] = result.order.map((nodeIdx, k) => {
-    const node = model.nodes[nodeIdx]
+  // turn the saved node-key order into a full node sequence; unknown/new stops
+  // fall in at the end so nothing is lost
+  let fixedOrder: number[] | undefined
+  if (manualOrder && manualOrder.length) {
+    const byKey = new Map(model.nodes.map((n, i) => [n.key, i]))
+    const seq: number[] = []
+    const used = new Set<number>()
+    for (const key of manualOrder) {
+      const idx = byKey.get(key)
+      if (idx !== undefined && !used.has(idx)) {
+        seq.push(idx)
+        used.add(idx)
+      }
+    }
+    for (let i = 0; i < model.nodes.length; i++) if (!used.has(i)) seq.push(i)
+    fixedOrder = seq
+  }
+
+  const result = planRoute({
+    n: model.nodes.length,
+    jobs: model.jobs,
+    dist,
+    capacity,
+    start: model.depot,
+    bays,
+    fixedOrder
+  })
+
+  const refOf = (ji: number): StepRef => ({
+    contractId: model.jobInfo[ji].contractId,
+    objectiveId: model.jobInfo[ji].objectiveId
+  })
+
+  const steps: RouteStep[] = result.stops.map((stop) => {
+    const node = model.nodes[stop.node]
     const pickups: RouteLegItem[] = []
     const drops: RouteLegItem[] = []
     const loadSeen = new Set<string>()
     const dropSeen = new Set<string>()
+    const deferSeen = new Set<string>()
     const loadRefs: StepRef[] = []
     const dropRefs: StepRef[] = []
-    model.jobInfo.forEach((j) => {
-      if (j.pickupNode === nodeIdx) {
-        pickups.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.destNode].label })
-        if (!loadSeen.has(j.objectiveId)) {
-          loadSeen.add(j.objectiveId)
-          loadRefs.push({ contractId: j.contractId, objectiveId: j.objectiveId })
-        }
+    const deferRefs: StepRef[] = []
+    for (const ji of stop.pickJobs) {
+      const j = model.jobInfo[ji]
+      pickups.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.destNode].label })
+      if (!loadSeen.has(j.objectiveId)) {
+        loadSeen.add(j.objectiveId)
+        loadRefs.push(refOf(ji))
       }
-      if (j.destNode === nodeIdx) {
-        drops.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.pickupNode].label })
-        // one job per pickup, all drop here; show once
-        if (!dropSeen.has(j.objectiveId)) {
-          dropSeen.add(j.objectiveId)
-          dropRefs.push({ contractId: j.contractId, objectiveId: j.objectiveId })
-        }
+    }
+    for (const ji of stop.dropJobs) {
+      const j = model.jobInfo[ji]
+      drops.push({ commodity: j.commodity, scu: j.scu, other: model.nodes[j.pickupNode].label })
+      if (!dropSeen.has(j.objectiveId)) {
+        dropSeen.add(j.objectiveId)
+        dropRefs.push(refOf(ji))
       }
-    })
+    }
+    for (const ji of stop.deferJobs ?? []) {
+      const j = model.jobInfo[ji]
+      if (!deferSeen.has(j.objectiveId)) {
+        deferSeen.add(j.objectiveId)
+        deferRefs.push(refOf(ji))
+      }
+    }
     return {
       nodeKey: node.key,
       label: node.label,
@@ -326,24 +385,77 @@ export function computeRoutePlan(
       drops,
       loadRefs,
       dropRefs,
-      loadAfter: result.loadAfter[k] ?? 0
+      deferRefs,
+      loadAfter: stop.loadAfter,
+      trip: stop.trip
     }
   })
 
+  // manifest delivery order follows where cargo actually drops
   const destOrder: string[] = []
-  for (const nodeIdx of result.order) {
-    for (const s of model.nodes[nodeIdx].destStrings) if (!destOrder.includes(s)) destOrder.push(s)
+  for (const stop of result.stops) {
+    if (!stop.dropJobs.length) continue
+    for (const s of model.nodes[stop.node].destStrings) if (!destOrder.includes(s)) destOrder.push(s)
   }
+  for (const node of model.nodes) {
+    for (const s of node.destStrings) if (!destOrder.includes(s)) destOrder.push(s)
+  }
+
+  // distinct stops in visit order - the sequence the user drags
+  const stopKeys: string[] = []
+  const keySeen = new Set<string>()
+  for (const stop of result.stops) {
+    const key = model.nodes[stop.node].key
+    if (!keySeen.has(key)) {
+      keySeen.add(key)
+      stopKeys.push(key)
+    }
+  }
+
+  const trips = result.stops.length ? Math.max(...result.stops.map((s) => s.trip)) + 1 : 0
+  const first = steps[0]
 
   return {
     steps,
     destOrder,
+    stopKeys,
     totalDistance: result.totalDistance,
     feasible: result.feasible,
     peakLoad: result.peakLoad,
     capacity,
+    trips,
+    startLoad: first?.loadAfter ?? 0,
+    startStop: first?.label ?? '',
     method: result.method,
     reason: result.reason,
     usedRealDistance: usedReal
   }
+}
+
+// the cargo in the hold at its fullest moment on the first trip - the snapshot
+// the grid should draw, since that peak load is what decides whether everything
+// fits. later trips and post-peak re-pickups fall away; cargo the route can't
+// place (unmatched location) still passes so nothing silently vanishes.
+export function firstTripFilter(plan: RoutePlan): (objectiveId: string) => boolean {
+  const known = new Set<string>()
+  for (const s of plan.steps) {
+    for (const r of s.loadRefs) known.add(r.objectiveId)
+    for (const r of s.dropRefs) known.add(r.objectiveId)
+    for (const r of s.deferRefs) known.add(r.objectiveId)
+  }
+  // walk trip 0, dropping then loading at each stop, and keep the aboard set at
+  // the heaviest moment. trips run in sequence, so stop at the first non-zero.
+  const aboard = new Set<string>()
+  let peak = new Set<string>()
+  let peakLoad = -1
+  for (const s of plan.steps) {
+    if (s.trip !== 0) break
+    for (const r of s.dropRefs) aboard.delete(r.objectiveId)
+    for (const r of s.loadRefs) aboard.add(r.objectiveId)
+    if (s.loadAfter >= peakLoad) {
+      peakLoad = s.loadAfter
+      peak = new Set(aboard)
+    }
+  }
+  return (id) => !known.has(id) || peak.has(id)
 }

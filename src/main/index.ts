@@ -107,17 +107,19 @@ function createWindow(): void {
 
 const COMPACT_W = 332
 const COMPACT_H = 432
+let compactHeight = COMPACT_H
 
 function positionCompact(): void {
   if (!compactWindow) return
   // bounds not workArea so it can sit over the taskbar region
   const { bounds } = screen.getPrimaryDisplay()
   const margin = 10
+  const height = Math.max(120, Math.min(compactHeight, bounds.height - margin * 2))
   compactWindow.setBounds({
     x: bounds.x + bounds.width - COMPACT_W - margin,
     y: bounds.y + margin,
     width: COMPACT_W,
-    height: COMPACT_H
+    height
   })
 }
 
@@ -129,10 +131,15 @@ function createCompactWindow(): void {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    resizable: false,
-    movable: true,
+    // resizable so setBounds can change height; width is locked below
+    resizable: true,
+    // locked in place; it's pinned top-right and shouldn't be draggable
+    movable: false,
     minimizable: false,
     maximizable: false,
+    minWidth: COMPACT_W,
+    maxWidth: COMPACT_W,
+    minHeight: 120,
     skipTaskbar: true,
     focusable: true,
     alwaysOnTop: true,
@@ -367,6 +374,14 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.compactShow, () => showCompact())
   ipcMain.handle(IPC.compactHide, () => hideCompact())
+  ipcMain.handle(IPC.compactResize, (_e, height: number) => {
+    compactHeight = Math.round(height)
+    positionCompact()
+  })
+  // mirror the main window's loading walkthrough to the overlay
+  ipcMain.on(IPC.loadingStateSet, (e, s: { active: boolean; idx: number }) => {
+    broadcast(IPC.evtLoadingState, s, e.sender.id)
+  })
 
   ipcMain.handle(IPC.historyLoad, () => loadHistory())
   ipcMain.handle(IPC.historySave, (_e, doc: HistoryDoc) => {

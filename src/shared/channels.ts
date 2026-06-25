@@ -26,6 +26,8 @@ export const IPC = {
 
   compactShow: 'compact:show',
   compactHide: 'compact:hide',
+  compactResize: 'compact:resize',
+  loadingStateSet: 'loading:set',
 
   ocrListDisplays: 'ocr:listDisplays',
   ocrEngineInfo: 'ocr:engineInfo',
@@ -58,5 +60,6 @@ export const IPC = {
   evtOcrResult: 'evt:ocr:result',
   evtOcrStatus: 'evt:ocr:status',
   evtManifestChanged: 'evt:manifest:changed', // saved by another window
-  evtCompactState: 'evt:compact:state'
+  evtCompactState: 'evt:compact:state',
+  evtLoadingState: 'evt:loading:state' // main window's loading-mode step
 } as const

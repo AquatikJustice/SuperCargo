@@ -22,7 +22,8 @@ import { newRunId } from '@shared/run'
 import { payoutFactor, snapPayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
-import { withModules, shipCapacity } from '@shared/shipModules'
+import { withModules } from '@shared/shipModules'
+import { gridCapacity, gridsFor, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
 import { snapshotLayout, reconcileLayout } from './layout'
@@ -134,6 +135,8 @@ interface StoreState {
   runId: string
   contracts: HaulingContract[]
   order: string[]
+  /** visit sequence (node keys) the user drags; empty = use the suggestion */
+  stopOrder: string[]
   /** empty = solver picks cheapest start */
   startLocation: string
   /** null = live plan */
@@ -230,10 +233,19 @@ function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] 
   return destinationsInOrder(contracts, prevOrder)
 }
 
+// guards against re-binding IPC listeners when init runs more than once
+let listenersBound = false
+
 export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
-    const { runId, contracts, order, layout, startLocation } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, layout: layout ?? undefined, startLocation })
+    const { runId, contracts, order, stopOrder, layout, startLocation } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation })
+  }
+
+  // grids for the active ship, used to pack and freeze the hold
+  const holdGrids = (): CargoGrid[] => {
+    const { settings } = get()
+    return gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
@@ -241,39 +253,53 @@ export const useStore = create<StoreState>((set, get) => {
     // keep locked layout in sync without re-flowing
     let layout = get().layout
     if (!contracts.length) layout = null
-    else if (layout?.locked) layout = reconcileLayout(contracts, layout)
+    else if (layout?.locked) layout = reconcileLayout(contracts, layout, holdGrids())
     set({ contracts, order: nextOrd, layout })
     persist()
   }
+
+  // freeze the whole hold that's aboard, with real positions, so delivering
+  // only removes boxes and never re-packs the rest
+  const freezeHold = (): CargoLayout => snapshotLayout(get().contracts, get().order, holdGrids())
 
   // only main owns route ordering, compact would fight it
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
   const doReroute = async (): Promise<void> => {
-    const { contracts, locations, settings, ships, startLocation } = get()
-    const ship = ships.find((s) => s.name === settings.activeShip)
-    const capacity = shipCapacity(ship, settings.installedModules[settings.activeShip])
-    // pending-ocr contracts aren't shown yet
+    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder } = get()
+    const installed = settings.installedModules[settings.activeShip]
+    // route against what auto-loads (grid bays), not the nominal hold
+    const capacity = gridCapacity(settings.activeShip, installed)
+    const bays = loadableGrids(settings.activeShip, installed)
+    // manual mode follows the user's stop order; auto lets the solver choose
     const plan = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
       locations,
       capacity,
-      startLocation
+      startLocation,
+      bays,
+      isRouteAuto ? undefined : stopOrder
     )
     set({ route: plan })
-    if (plan && get().isRouteAuto) {
-      const order = nextOrder(get().contracts, plan.destOrder)
-      const cur = get().order
-      const changed = order.length !== cur.length || order.some((d, i) => d !== cur[i])
-      if (changed) {
-        set({ order })
-        persist()
-      }
+    // compact computes the route only to display it; main owns the ordering
+    if (!plan || isCompactWindow) return
+    const cur = get()
+    const patch: Partial<StoreState> = {}
+    const order = nextOrder(cur.contracts, plan.destOrder)
+    if (order.length !== cur.order.length || order.some((d, i) => d !== cur.order[i])) patch.order = order
+    // while auto, adopt the suggested visit order so a drag starts from it
+    if (
+      isRouteAuto &&
+      (plan.stopKeys.length !== cur.stopOrder.length || plan.stopKeys.some((k, i) => k !== cur.stopOrder[i]))
+    )
+      patch.stopOrder = plan.stopKeys
+    if (Object.keys(patch).length) {
+      set(patch)
+      persist()
     }
   }
   const scheduleReroute = (): void => {
-    if (isCompactWindow) return
     if (rerouteTimer) clearTimeout(rerouteTimer)
     rerouteTimer = setTimeout(() => {
       rerouteTimer = null
@@ -351,6 +377,7 @@ export const useStore = create<StoreState>((set, get) => {
     runId: '',
     contracts: [],
     order: [],
+    stopOrder: [],
     startLocation: '',
     layout: null,
     route: null,
@@ -402,14 +429,16 @@ export const useStore = create<StoreState>((set, get) => {
         })
       }
 
+      const grids = gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
       const layout =
-        active.length && manifest.layout ? reconcileLayout(active, manifest.layout) : null
+        active.length && manifest.layout ? reconcileLayout(active, manifest.layout, grids) : null
 
       set({
         settings,
         runId: manifest.runId,
         contracts: active,
         order: nextOrder(active, manifest.order),
+        stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
         layout,
         history,
@@ -423,6 +452,11 @@ export const useStore = create<StoreState>((set, get) => {
         ready: true
       })
       scheduleReroute() // initial order from loaded manifest
+
+      // bind push listeners once; a StrictMode/HMR remount calls init again and
+      // would otherwise stack a fresh set every time (the EventEmitter warning)
+      if (listenersBound) return
+      listenersBound = true
 
       window.supercargo.onShips((r) => {
         if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt })
@@ -514,6 +548,7 @@ export const useStore = create<StoreState>((set, get) => {
           runId: doc.runId,
           contracts: doc.contracts,
           order: doc.order,
+          stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
           layout: doc.layout ?? null
         })
@@ -663,7 +698,13 @@ export const useStore = create<StoreState>((set, get) => {
 
     startNewRun: () => {
       const { runId, history } = get()
-      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), layout: null, startLocation: '' })
+      set({
+        runId: newRunId([runId, ...history.map((h) => h.runId)]),
+        layout: null,
+        startLocation: '',
+        stopOrder: [],
+        isRouteAuto: true
+      })
       persist()
     },
 
@@ -682,9 +723,9 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     lockLayout: () => {
-      const { contracts, order, layout } = get()
+      const { contracts, layout } = get()
       if (layout?.locked || !activeContracts(contracts).length) return
-      set({ layout: snapshotLayout(contracts, order) })
+      set({ layout: freezeHold() })
       persist()
     },
 
@@ -696,11 +737,6 @@ export const useStore = create<StoreState>((set, get) => {
 
     turnInDestination: (entries) => {
       if (!entries.length) return
-      // lock first, before this stop's boxes drop out
-      if (!get().layout?.locked) {
-        const { contracts, order } = get()
-        if (activeContracts(contracts).length) set({ layout: snapshotLayout(contracts, order) })
-      }
       const byContract = new Map<string, Map<string, number>>()
       for (const e of entries) {
         const m = byContract.get(e.contractId) ?? new Map<string, number>()
@@ -828,13 +864,14 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     reorderStops: (from, to) => {
-      const order = [...get().order]
-      if (from < 0 || from >= order.length || to < 0 || to >= order.length) return
-      const [moved] = order.splice(from, 1)
-      order.splice(to, 0, moved)
-      // manual drag wins until contracts change
-      set({ order, isRouteAuto: false })
+      const stopOrder = [...get().stopOrder]
+      if (from < 0 || from >= stopOrder.length || to < 0 || to >= stopOrder.length) return
+      const [moved] = stopOrder.splice(from, 1)
+      stopOrder.splice(to, 0, moved)
+      // manual order wins until you ask for a fresh suggestion
+      set({ stopOrder, isRouteAuto: false })
       persist()
+      scheduleReroute()
     },
 
     setStartLocation: (loc) => {

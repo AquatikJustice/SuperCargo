@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { deriveStopsWithPickups, deriveContracts, deriveTotals, activeContracts, type Stop, type PickupItem } from '../state/manifest'
-import { shipCapacity } from '@shared/shipModules'
+import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
 import Typeahead from '../components/Typeahead'
@@ -19,7 +19,7 @@ export default function ManifestPage(): React.ReactElement {
   const showBoxMath = useStore((s) => s.showBoxMath)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
-  const ships = useStore((s) => s.ships)
+  const route = useStore((s) => s.route)
   const openCapture = useStore((s) => s.openCapture)
   const turnInDestination = useStore((s) => s.turnInDestination)
 
@@ -36,10 +36,15 @@ export default function ManifestPage(): React.ReactElement {
   // activeContracts drops finished + held-pending-ocr
   const derivedContracts = useMemo(() => deriveContracts(activeContracts(contracts)), [contracts])
 
-  const capMax = shipCapacity(ships.find((s) => s.name === activeShip), installedModules[activeShip])
-  const capPct = capMax > 0 ? Math.min(999, Math.round((totals.scu / capMax) * 100)) : 0
-  const over = capMax > 0 && totals.scu > capMax
-  const capColor = capPct <= 50 ? C.green : capPct <= 75 ? C.amber : C.red
+  // usable bays only (no elevators/secure storage), so the Ironclad reads ~2160
+  const capMax = gridCapacity(activeShip, installedModules[activeShip])
+  // what you're carrying leaving your current stop, not the run-wide peak
+  const currentLoad = route?.startLoad ?? 0
+  const here = route?.startStop || startLocation || activeShip
+  const trips = route?.trips ?? 0
+  const capPct = capMax > 0 ? Math.min(100, Math.round((currentLoad / capMax) * 100)) : 0
+  const room = Math.max(0, capMax - currentLoad)
+  const capColor = capPct <= 50 ? C.green : capPct <= 80 ? C.amber : C.red
 
   if (totals.contracts === 0) {
     return (
@@ -74,11 +79,12 @@ export default function ManifestPage(): React.ReactElement {
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim }}>
-              HOLD CAPACITY · {activeShip}
+              LOADED · {here}
+              {trips > 1 && <span style={{ color: C.amber }}>{'  '}· TRIP 1 / {trips}</span>}
             </span>
-            <span style={{ fontFamily: F.mono, fontSize: 13, color: over ? C.red : C.body }}>
-              {fmt(totals.scu)} / {fmt(capMax)} SCU
-              <span style={{ color: C.dim }}> · {capPct}%</span>
+            <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
+              {fmt(currentLoad)} / {fmt(capMax)} SCU
+              <span style={{ color: C.dim }}> · room for {fmt(room)}</span>
             </span>
           </div>
           <div style={{ height: 4, background: 'rgba(255,255,255,0.10)', width: '100%' }}>
@@ -331,7 +337,7 @@ function ByDestination({
             setOverIdx(null)
           }}
           style={{
-            marginBottom: 26,
+            marginBottom: 16,
             opacity: dragIdx === stop.idx ? 0.45 : 1,
             outline: overIdx === stop.idx && dragIdx !== stop.idx ? `1px solid ${C.accBorder}` : 'none',
             outlineOffset: 6
@@ -346,7 +352,7 @@ function ByDestination({
                 gridTemplateColumns: ITEM_GRID,
                 alignItems: 'center',
                 gap: 18,
-                padding: '13px 0 13px 39px',
+                padding: '7px 0 7px 39px',
                 borderBottom: `1px solid ${C.lineSoft}`,
                 opacity: item.delivered ? 0.45 : 1
               }}
@@ -396,7 +402,7 @@ function ByDestination({
             </div>
           ))}
           {!stop.pickupOnly && (
-            <div style={{ display: 'grid', gridTemplateColumns: ITEM_GRID, alignItems: 'center', gap: 18, padding: '11px 0 0 39px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: ITEM_GRID, alignItems: 'center', gap: 18, padding: '7px 0 0 39px' }}>
               <div style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textAlign: 'right' }}>
                 {stop.totSCU}
                 <span style={{ fontSize: 11, color: C.accDeep }}> SCU</span>
@@ -418,7 +424,7 @@ function ByDestination({
 function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMath: boolean }): React.ReactElement {
   return (
     <div style={{ marginTop: 6 }}>
-      <div style={{ padding: '12px 0 2px 39px', fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.green }}>
+      <div style={{ padding: '8px 0 2px 39px', fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.green }}>
         ↑ PICK UP HERE
       </div>
       {items.map((it) => {
@@ -431,7 +437,7 @@ function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMat
               gridTemplateColumns: ITEM_GRID,
               alignItems: 'center',
               gap: 18,
-              padding: '11px 0 11px 39px',
+              padding: '6px 0 6px 39px',
               borderBottom: `1px solid ${C.lineSoft}`
             }}
           >

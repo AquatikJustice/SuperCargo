@@ -76,12 +76,14 @@ function canPlace(
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) if (s.occ[idx(g, x + dx, y + dy, z + dz)]) return false
-  // support: floor, or every cell below filled by this stop
+  // support: floor, or a full platform below with no holes. and the platform
+  // must be cargo delivered no earlier than this box (owner stop >= stop), so
+  // an earlier drop-off never ends up buried under a later one
   if (y > 0) {
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) {
         const b = idx(g, x + dx, y - 1, z + dz)
-        if (!s.occ[b] || s.owner[b] !== stop) return false
+        if (!s.occ[b] || s.owner[b] < stop) return false
       }
   }
   return true
@@ -99,21 +101,21 @@ function fill(s: GridState, x: number, y: number, z: number, fw: number, fl: num
   s.used += fw * fl * fh
 }
 
-// first fit at/beyond minZ. scan z, then y bottom-up, then x.
+// lowest free spot: fill the floor first (y bottom-up), front to back, so the
+// hold builds in flat layers
 function findSpot(
   s: GridState,
   w: number,
   l: number,
   h: number,
-  minZ: number,
   stop: number
 ): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
   // skip the rotated orientation when square
   const orients: Array<[number, number, boolean]> =
     w === l ? [[w, l, false]] : [[w, l, false], [l, w, true]]
-  for (let z = Math.max(0, minZ); z + 1 <= g.l; z++) {
-    for (let y = 0; y + h <= g.h; y++) {
+  for (let y = 0; y + h <= g.h; y++) {
+    for (let z = 0; z + 1 <= g.l; z++) {
       for (let x = 0; x < g.w; x++) {
         for (const [fw, fl, rotated] of orients) {
           if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
@@ -124,15 +126,74 @@ function findSpot(
   return null
 }
 
-interface PackOpts {
-  /** 1-cell gap between sections. */
-  gap: boolean
-  /** each section after the previous one. false = denser backfill. */
-  contiguous: boolean
+export interface Occupied {
+  gridId: string
+  x: number
+  y: number
+  z: number
+  w: number
+  l: number
+  h: number
+  stopIdx: number
 }
 
-// one pass, one stop at a time, largest box first.
-function packPass(grids: CargoGrid[], boxes: PackBox[], opts: PackOpts): PackResult {
+// place `boxes` into the space left by already-placed cargo, never moving it.
+// used to slot late additions into a frozen hold.
+export function packInto(
+  grids: CargoGrid[],
+  occupied: Occupied[],
+  boxes: PackBox[]
+): { placements: Placement[]; unplaced: PackBox[] } {
+  const loadable = grids.filter((g) => g.autoLoad !== false)
+  const states: GridState[] = loadable.map((grid) => ({
+    grid,
+    occ: new Uint8Array(grid.w * grid.l * grid.h),
+    owner: new Int16Array(grid.w * grid.l * grid.h).fill(-1),
+    used: 0
+  }))
+  const byId = new Map(states.map((s) => [s.grid.id, s]))
+  for (const o of occupied) {
+    const s = byId.get(o.gridId)
+    if (s) fill(s, o.x, o.y, o.z, o.w, o.l, o.h, o.stopIdx)
+  }
+
+  const ordered = [...boxes].sort((a, b) => b.stopIdx - a.stopIdx || b.size - a.size)
+  const placements: Placement[] = []
+  const unplaced: PackBox[] = []
+  for (const box of ordered) {
+    const dims = BOX_DIMS[box.size]
+    if (!dims) {
+      unplaced.push(box)
+      continue
+    }
+    let placed = false
+    for (const s of states) {
+      if (s.grid.maxSize && box.size > s.grid.maxSize) continue
+      const spot = findSpot(s, dims.w, dims.l, dims.h, box.stopIdx)
+      if (!spot) continue
+      fill(s, spot.x, spot.y, spot.z, spot.fw, spot.fl, dims.h, box.stopIdx)
+      placements.push({
+        box,
+        gridId: s.grid.id,
+        x: spot.x,
+        y: spot.y,
+        z: spot.z,
+        w: spot.fw,
+        l: spot.fl,
+        h: dims.h,
+        rotated: spot.rotated
+      })
+      placed = true
+      break
+    }
+    if (!placed) unplaced.push(box)
+  }
+  return { placements, unplaced }
+}
+
+// one dense pass. later drop-offs go down first so they end up on the bottom
+// and the earlier ones ride on top, reachable. bigger boxes first to pack tight.
+export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
   const loadable = grids.filter((g) => g.autoLoad !== false)
   const states: GridState[] = loadable.map((grid) => ({
     grid,
@@ -141,75 +202,38 @@ function packPass(grids: CargoGrid[], boxes: PackBox[], opts: PackOpts): PackRes
     used: 0
   }))
 
-  const byStop = new Map<number, PackBox[]>()
-  for (const b of boxes) {
-    const arr = byStop.get(b.stopIdx)
-    if (arr) arr.push(b)
-    else byStop.set(b.stopIdx, [b])
-  }
-  const stops = [...byStop.keys()].sort((a, b) => a - b)
-
+  const ordered = [...boxes].sort((a, b) => b.stopIdx - a.stopIdx || b.size - a.size)
   const placements: Placement[] = []
   const unplaced: PackBox[] = []
 
-  // where the next section starts
-  let frontGi = 0
-  let frontZ = 0
-
-  for (const stopIdx of stops) {
-    const stopBoxes = (byStop.get(stopIdx) as PackBox[]).sort((a, b) => b.size - a.size)
-    const startGi = opts.contiguous ? frontGi : 0
-    const startZ = opts.contiguous ? frontZ : 0
-    // furthest this section reached, for the gap + next section
-    let endGi = startGi
-    let endZ = startZ
-
-    for (const box of stopBoxes) {
-      const dims = BOX_DIMS[box.size]
-      if (!dims) {
-        unplaced.push(box)
-        continue
-      }
-      let placed = false
-      for (let gi = startGi; gi < states.length; gi++) {
-        const s = states[gi]
-        if (s.grid.maxSize && box.size > s.grid.maxSize) continue
-        const minZ = opts.contiguous && gi === startGi ? startZ : 0
-        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stopIdx)
-        if (!spot) continue
-        fill(s, spot.x, spot.y, spot.z, spot.fw, spot.fl, dims.h, stopIdx)
-        placements.push({
-          box,
-          gridId: s.grid.id,
-          x: spot.x,
-          y: spot.y,
-          z: spot.z,
-          w: spot.fw,
-          l: spot.fl,
-          h: dims.h,
-          rotated: spot.rotated
-        })
-        const reach = spot.z + spot.fl
-        if (gi > endGi || (gi === endGi && reach > endZ)) {
-          endGi = gi
-          endZ = reach
-        }
-        placed = true
-        break
-      }
-      if (!placed) unplaced.push(box)
+  for (const box of ordered) {
+    const dims = BOX_DIMS[box.size]
+    if (!dims) {
+      unplaced.push(box)
+      continue
     }
-
-    if (opts.contiguous) {
-      const gapZ = opts.gap ? 1 : 0
-      if (endZ + gapZ < states[endGi]?.grid.l) {
-        frontGi = endGi
-        frontZ = endZ + gapZ
-      } else {
-        frontGi = endGi + 1
-        frontZ = 0
-      }
+    let placed = false
+    for (let gi = 0; gi < states.length; gi++) {
+      const s = states[gi]
+      if (s.grid.maxSize && box.size > s.grid.maxSize) continue
+      const spot = findSpot(s, dims.w, dims.l, dims.h, box.stopIdx)
+      if (!spot) continue
+      fill(s, spot.x, spot.y, spot.z, spot.fw, spot.fl, dims.h, box.stopIdx)
+      placements.push({
+        box,
+        gridId: s.grid.id,
+        x: spot.x,
+        y: spot.y,
+        z: spot.z,
+        w: spot.fw,
+        l: spot.fl,
+        h: dims.h,
+        rotated: spot.rotated
+      })
+      placed = true
+      break
     }
+    if (!placed) unplaced.push(box)
   }
 
   const capacity = loadable.reduce((a, g) => a + g.w * g.l * g.h, 0)
@@ -231,14 +255,4 @@ function packPass(grids: CargoGrid[], boxes: PackBox[], opts: PackOpts): PackRes
     fits: unplaced.length === 0,
     squeezed: false
   }
-}
-
-// roomy sectioned layout first; if it overflows, repack tight so we only
-// report over-capacity when the cargo truly won't fit.
-export function packCargo(grids: CargoGrid[], boxes: PackBox[]): PackResult {
-  const readable = packPass(grids, boxes, { gap: true, contiguous: true })
-  if (readable.fits) return readable
-  const dense = packPass(grids, boxes, { gap: false, contiguous: false })
-  if (dense.placedScu > readable.placedScu) return { ...dense, squeezed: true }
-  return readable
 }

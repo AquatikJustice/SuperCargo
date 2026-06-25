@@ -152,3 +152,9 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
 export function loadableGrids(ship: string, installed?: string[]): CargoGrid[] {
   return gridsFor(ship, installed).filter((g) => g.autoLoad !== false)
 }
+
+// what actually fits on the run: auto-load bays only, no elevators or secure
+// storage. for the Ironclad this is ~2160, not the 2200 nominal hold.
+export function gridCapacity(ship: string, installed?: string[]): number {
+  return loadableGrids(ship, installed).reduce((a, g) => a + g.w * g.l * g.h, 0)
+}

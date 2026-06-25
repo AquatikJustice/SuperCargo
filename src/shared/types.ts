@@ -114,6 +114,15 @@ export interface FrozenBox {
   objectiveId: string
   destination: string
   delivered: boolean
+  // packed position, stamped when frozen; absent = didn't fit
+  gridId?: string
+  x?: number
+  y?: number
+  z?: number
+  w?: number
+  l?: number
+  h?: number
+  rotated?: boolean
 }
 
 /** unlocked = re-flows with route; locked = positions frozen */
@@ -127,6 +136,8 @@ export interface ManifestDoc {
   contracts: HaulingContract[]
   /** destination names, in delivery order */
   order: string[]
+  /** visit sequence (node keys) the user set by reordering stops */
+  stopOrder?: string[]
   /** present once the load is locked */
   layout?: CargoLayout
   /** empty = let the solver pick the start */
