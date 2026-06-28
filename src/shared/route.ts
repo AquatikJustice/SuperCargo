@@ -1,7 +1,4 @@
-// capacitated pickup-and-delivery planner. when the whole haul can be ordered
-// to stay under the hold, it returns the exact optimal single pass; when it
-// can't, it splits into multiple trips so the load never tops the limit. with
-// bays supplied it also checks each load physically packs, deferring the rest.
+// capacitated pickup-and-delivery planner
 
 import { packCargo, type PackBox } from './packer'
 import type { CargoGrid } from './cargoGrids'
@@ -10,38 +7,39 @@ export interface RouteJob {
   pickup: number
   dest: number
   scu: number
-  /** box sizes making up this cargo, for the physical pack check */
+  /** box sizes for the pack check */
   boxes?: number[]
 }
 
 export interface RouteInput {
-  /** unique location count, node ids 0..n-1 */
+  /** node ids 0..n-1 */
   n: number
   jobs: RouteJob[]
-  /** nxn travel cost, finite large value for unknown legs */
+  /** nxn travel cost */
   dist: number[][]
-  /** <= 0 disables capacity constraint */
+  /** <= 0 disables capacity */
   capacity: number
-  /** pin start node, else solver picks cheapest */
+  /** pin start node */
   start?: number
-  /** auto-load bays; when set, loads are checked to physically fit */
+  /** auto-load bays */
   bays?: CargoGrid[]
-  /** user-chosen visit order (node ids); when set the solver follows it as-is */
+  /** user-chosen visit order */
   fixedOrder?: number[]
+  /** city node to LEO overhead */
+  cityToLeo?: Map<number, number>
 }
 
-/** one physical stop; a location can appear more than once across trips */
 export interface PlannedStop {
   node: number
-  /** original job indices loaded here */
+  /** job indices loaded here */
   pickJobs: number[]
-  /** original job indices dropped here */
+  /** job indices dropped here */
   dropJobs: number[]
-  /** scu aboard leaving this stop */
+  /** scu aboard leaving here */
   loadAfter: number
-  /** 0-based trip number, bumps each time the hold empties for a fresh run */
+  /** 0-based trip number */
   trip: number
-  /** cargo here that wouldn't fit this pass, left for a return trip */
+  /** cargo left for a return trip */
   deferJobs?: number[]
 }
 
@@ -53,26 +51,29 @@ export interface RouteResult {
   peakLoad: number
   feasible: boolean
   method: 'exact' | 'heuristic' | 'multitrip' | 'manual'
-  /** job indices too big for the hold to carry in one piece */
+  /** jobs too big for the hold */
   unfittable: number[]
-  /** set when something couldn't be planned cleanly */
   reason?: string
 }
 
-// bitmasks are 32-bit; beyond this the exact search can't run
+// detour budget to avoid a revisit
+const REVISIT_DETOUR_GM = 20
+
+// hold a city until orbitals done
+const CITY_DESCENT_GM = 15
+// never take a LEO over a busy city
+const LEO_DEFER_GM = 10000
+
+// 32-bit bitmask limit
 const EXACT_NODE_MAX = 30
-// cap exact-search transitions so a pathological instance can't jank the UI.
-// tight cargo capacity keeps real runs far under this; only loose-capacity
-// instances with many stops approach it, and those fall to the polished
-// local search instead.
+// cap exact-search transitions
 const EXACT_WORK_BUDGET = 2_500_000
 
-/** drop same-location jobs */
 function realJobs(jobs: RouteJob[]): RouteJob[] {
   return jobs.filter((j) => j.pickup !== j.dest && j.scu > 0)
 }
 
-/** scu picked up but not yet delivered in mask */
+/** scu aboard for this mask */
 function loadForMask(mask: number, jobs: RouteJob[]): number {
   let load = 0
   for (const j of jobs) {
@@ -83,7 +84,7 @@ function loadForMask(mask: number, jobs: RouteJob[]): number {
   return load
 }
 
-/** can't visit a dest until its pickup is aboard */
+/** dest needs its pickup aboard first */
 function canVisit(mask: number, v: number, jobs: RouteJob[]): boolean {
   if ((mask >> v) & 1) return false
   for (const j of jobs) {
@@ -101,10 +102,7 @@ const popcount = (m: number): number => {
   return c
 }
 
-// exact min-distance route, kept feasible on capacity + pickup-before-delivery.
-// held-karp over only the states tight cargo capacity actually allows, so the
-// reachable set stays small for real runs. returns 'too-big' if the search
-// would exceed the work budget, null if no capacity-feasible order exists.
+// held-karp over capacity-feasible states
 function solveExact(input: RouteInput): number[] | null | 'too-big' {
   const { n, dist, capacity } = input
   if (n > EXACT_NODE_MAX) return 'too-big'
@@ -203,7 +201,7 @@ function orderFeasible(order: number[], jobs: RouteJob[], cap: number): boolean 
   return true
 }
 
-/** greedy nearest-feasible order from one start, or null if it dead-ends */
+/** nearest-feasible order from one start */
 function greedyFrom(input: RouteInput, cap: number, start: number): number[] | null {
   const { n, dist } = input
   const jobs = realJobs(input.jobs)
@@ -229,7 +227,7 @@ function greedyFrom(input: RouteInput, cap: number, start: number): number[] | n
   return order
 }
 
-/** greedy nearest-feasible seed, best over all allowed starts */
+/** best greedy seed over all starts */
 function greedySeed(input: RouteInput, cap: number): number[] | null {
   const { n } = input
   const jobs = realJobs(input.jobs)
@@ -249,9 +247,7 @@ function greedySeed(input: RouteInput, cap: number): number[] | null {
   return bestOrder
 }
 
-// or-opt (relocate a run of 1-3 stops) + 2-opt (reverse a segment), every
-// candidate kept feasible. used only when the exact search is out of budget,
-// so the fallback stays near optimal rather than raw nearest-neighbour.
+// or-opt + 2-opt, feasibility-checked
 function localSearch(seed: number[], input: RouteInput, cap: number): number[] {
   const jobs = realJobs(input.jobs)
   const dist = input.dist
@@ -294,8 +290,7 @@ function localSearch(seed: number[], input: RouteInput, cap: number): number[] {
   return best
 }
 
-// best of every allowed start, each polished, so one unlucky seed can't
-// trap the fallback in a bad local minimum
+// best of every start, each polished
 function solveHeuristic(input: RouteInput, cap: number): number[] | null {
   const { n } = input
   const jobs = realJobs(input.jobs)
@@ -314,12 +309,12 @@ function solveHeuristic(input: RouteInput, cap: number): number[] | null {
     }
   }
   if (best) return best
-  // no per-start seed completed; fall back to the global greedy
+  // fall back to the global greedy
   const seed = greedySeed(input, cap)
   return seed ? localSearch(seed, input, cap) : null
 }
 
-/** best single-pass order keeping load under cap, or null if none exists */
+/** best single-pass order under cap */
 function bestOrder(input: RouteInput): { order: number[]; method: 'exact' | 'heuristic' } | null {
   const exact = solveExact(input)
   if (exact === 'too-big') {
@@ -347,11 +342,7 @@ function indexedJobs(jobs: RouteJob[]): IJob[] {
   return out
 }
 
-// does this cargo physically pack into the bays? the grid stacks in delivery
-// order (later drops on the bottom, earlier ones reachable on top), and that
-// accessibility rule costs space, so the check has to use the same ranking or
-// it'll green-light loads the grid can't actually place. rankOf gives each
-// job's dest its delivery position; without it we fall back to a flat pack.
+// rankOf must match the grid's delivery-order stacking
 function loadFits(jobs: IJob[], bays: CargoGrid[], rankOf?: (dest: number) => number): boolean {
   const boxes: PackBox[] = []
   let n = 0
@@ -371,7 +362,7 @@ const distinctNodes = (stops: PlannedStop[]): number[] => {
   return out
 }
 
-// walk a single-pass node order, dropping then loading at each node
+// walk a single pass, drop then load per node
 function materialize(
   order: number[],
   jobs: IJob[],
@@ -407,11 +398,7 @@ function materialize(
   return { stops, totalDistance: total, peakLoad: peak }
 }
 
-// over-capacity hauls: drive stop to stop, dropping everything destined where
-// we are and loading what fits, revisiting as needed. load can't top the hold
-// (loads are bounded by free space) and nothing strands (every aboard item's
-// dest stays on the worklist until visited). nodes may repeat; a fresh trip
-// begins whenever the hold empties and we load again.
+// over-capacity hauls: split into revisiting trips
 function planMultiTrip(input: RouteInput): RouteResult {
   const { dist } = input
   const cap = input.capacity
@@ -430,13 +417,21 @@ function planMultiTrip(input: RouteInput): RouteResult {
   let started = false
 
   const bays = input.bays
-  let guard = all.length * 20 + 200 // termination backstop
+  const cityToLeo = input.cityToLeo
+  // LEO to the cities below it
+  const leoCities = new Map<number, number[]>()
+  if (cityToLeo)
+    for (const [c, leo] of cityToLeo) leoCities.set(leo, [...(leoCities.get(leo) ?? []), c])
+  const cityBusy = (c: number): boolean =>
+    aboard.some((j) => j.dest === c) || [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
+
+  let guard = all.length * 20 + 200
   while ((pending.size || aboard.length) && guard-- > 0) {
     const locs = new Set<number>()
     for (const j of aboard) locs.add(j.dest)
     for (const idx of pending) locs.add((byIdx.get(idx) as IJob).pickup)
 
-    // pick the nearest location where we can drop or load something
+    // nearest stop where something happens
     let best: { L: number; drops: IJob[]; loads: IJob[] } | null = null
     let bestD = Infinity
     for (const L of locs) {
@@ -454,7 +449,23 @@ function planMultiTrip(input: RouteInput): RouteResult {
         }
       }
       if (!drops.length && !loads.length) continue
-      const d = dist[cur][L]
+      // defer drops with cargo still inbound
+      let penalty = 0
+      if (drops.length) {
+        const free = cap - load
+        for (const idx of pending) {
+          const j = byIdx.get(idx) as IJob
+          if (j.dest !== L || j.scu > free) continue
+          if (dist[cur][j.pickup] + dist[j.pickup][L] - dist[cur][L] < REVISIT_DETOUR_GM) {
+            penalty += REVISIT_DETOUR_GM
+            break
+          }
+        }
+      }
+      // defer descents and busy LEOs
+      if (cityToLeo && cityToLeo.has(L) && cur !== cityToLeo.get(L)) penalty += CITY_DESCENT_GM
+      if ((leoCities.get(L) ?? []).some(cityBusy)) penalty += LEO_DEFER_GM
+      const d = dist[cur][L] + penalty
       if (d < bestD) {
         bestD = d
         best = { L, drops, loads }
@@ -462,11 +473,10 @@ function planMultiTrip(input: RouteInput): RouteResult {
     }
     if (!best) break
 
-    // keep only what physically packs alongside what stays aboard; the biggest
-    // boxes (sorted first) get bumped to a return trip when they won't fit
+    // bump the biggest loads until the rest pack
     if (bays && best.loads.length) {
       const remain = aboard.filter((j) => !best!.drops.some((d) => d.idx === j.idx))
-      // nearest dest is delivered first, so rank by distance to match the grid
+      // rank by distance, like the grid
       const ranked = [...new Set([...remain, ...best.loads].map((j) => j.dest))].sort(
         (a, b) => dist[best!.L][a] - dist[best!.L][b]
       )
@@ -474,8 +484,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       const rankOf = (dest: number): number => rankMap.get(dest) ?? ranked.length
       const keep = best.loads.slice()
       while (keep.length && !loadFits([...remain, ...keep], bays, rankOf)) keep.shift()
-      // nothing new fits here: if a single box won't fit an empty hold it can
-      // never be carried; otherwise deliver first to free room
+      // nothing fits: drop unfittable, else deliver first
       if (!keep.length && !best.drops.length) {
         if (!aboard.length) {
           const small = best.loads[best.loads.length - 1]
@@ -539,15 +548,12 @@ function planMultiTrip(input: RouteInput): RouteResult {
   }
 }
 
-// follow the user's stop order exactly, but never overload: at each stop drop
-// what's destined there, then load only what fits and physically packs. cargo
-// that won't fit is left behind and picked up on a later pass once deliveries
-// free room. nodes can repeat across passes, just like a real return trip.
+// follow the user's order, never overloading
 function planManual(input: RouteInput): RouteResult {
   const order = (input.fixedOrder ?? []).filter((v, i, a) => a.indexOf(v) === i)
   const dist = input.dist
   const cap = input.capacity > 0 ? input.capacity : Infinity
-  // deliveries happen in the visit order, so that's the grid's stacking order
+  // visit order is the grid's stacking order
   const rankOf = (dest: number): number => {
     const i = order.indexOf(dest)
     return i < 0 ? order.length : i
@@ -583,7 +589,7 @@ function planManual(input: RouteInput): RouteResult {
           free -= j.scu
         }
       }
-      // biggest-first sort means shift() bumps the largest until the rest pack
+      // bump the biggest until the rest pack
       if (bays && loads.length) {
         const remain = aboard.filter((j) => !drops.some((d) => d.idx === j.idx))
         while (loads.length && !loadFits([...remain, ...loads], bays, rankOf)) loads.shift()
@@ -648,8 +654,7 @@ const empty = (): RouteResult => ({
   unfittable: []
 })
 
-// the fullest moment of a single pass; true if that load physically packs in
-// delivery order, the same way the grid lays it out
+// does the pass's peak load physically pack?
 function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
   const byIdx = new Map(jobs.map((j) => [j.idx, j]))
   const rank = new Map<number, number>()
@@ -675,12 +680,9 @@ export function planRoute(input: RouteInput): RouteResult {
   const jobs = indexedJobs(input.jobs)
   if (jobs.length === 0) return { ...empty(), order: input.fixedOrder ?? Array.from({ length: n }, (_, i) => i) }
 
-  // user set the order: follow it, capping loads to the hold and deferring the
-  // overflow to a return pass
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
 
-  // single pass first: if some order keeps us under the hold AND that load
-  // physically packs, that's optimal
+  // a single pass that fits is optimal
   const single = bestOrder(input)
   if (single) {
     const mat = materialize(single.order, jobs, input.dist)

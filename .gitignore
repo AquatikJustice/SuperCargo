@@ -32,8 +32,4 @@ scripts/train/auto/runs/
 
 .scunpacked-cache/
 
-docs/
 *~lock~
-
-# local screenshot source (committed copies live in assets/screens)
-README screens/

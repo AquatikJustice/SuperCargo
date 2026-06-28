@@ -1,12 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, screen } from 'electron'
 import * as path from 'node:path'
+import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
 import type { AppSettings, ManifestDoc, HistoryDoc } from '@shared/types'
-import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory } from './store'
+import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
 import { initUpdater, checkForUpdates, quitAndInstall } from './updater'
-import { loadCachedRoster, loadCachedLocations, loadCachedCommodities } from './uex'
+import { loadCachedRoster, loadCachedLocations, loadCachedCommodities, loadCachedGridFaces, workingTreeData } from './uex'
 import { seedCacheIfNeeded, refreshFromRepo } from './dataSync'
 import { scanActiveContracts } from './scanLog'
 import { randomUUID } from 'node:crypto'
@@ -15,7 +16,6 @@ import { engineInfo, capturePreview, runOcr, saveSample } from './ocr'
 import { prunePending } from './ocr/samples'
 import * as contractData from './contractData'
 import * as telemetry from './telemetry'
-// live window icon; packaged exe icon comes from build/icon.ico
 import appIcon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | null = null
@@ -31,19 +31,20 @@ function isExternalUrl(url: string): boolean {
 
 function applyAlwaysOnTop(value: boolean): void {
   if (!mainWindow) return
-  // screen-saver is the highest level
   mainWindow.setAlwaysOnTop(value, 'screen-saver')
 }
 
 function createWindow(): void {
+  const ws = loadWindowState()
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    width: ws.width,
+    height: ws.height,
+    x: ws.x,
+    y: ws.y,
     minWidth: 520,
     minHeight: 560,
     show: false,
     frame: false,
-    // opaque keeps frameless resize smooth on windows
     backgroundColor: '#000000',
     icon: appIcon,
     alwaysOnTop: settings.alwaysOnTop,
@@ -55,6 +56,22 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  if (ws.maximized) mainWindow.maximize()
+
+  // restored bounds even while maximized
+  const rememberBounds = (): void => {
+    if (!mainWindow) return
+    const b = mainWindow.getNormalBounds()
+    saveWindowState({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: mainWindow.isMaximized() })
+  }
+  let saveTimer: NodeJS.Timeout | null = null
+  const queueSave = (): void => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(rememberBounds, 400)
+  }
+  mainWindow.on('resize', queueSave)
+  mainWindow.on('move', queueSave)
+  mainWindow.on('close', rememberBounds)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -65,14 +82,14 @@ function createWindow(): void {
   mainWindow.on('maximize', sendMaxState)
   mainWindow.on('unmaximize', sendMaxState)
 
-  // tear down overlay too, else window-all-closed never fires
+  // else window-all-closed never fires
   mainWindow.on('closed', () => {
     if (compactWindow && !compactWindow.isDestroyed()) compactWindow.destroy()
     compactWindow = null
     mainWindow = null
   })
 
-  // off in dev so vite HMR can run
+  // off in dev, vite HMR
   if (app.isPackaged) {
     session.defaultSession.webRequest.onHeadersReceived((details, done) => {
       done({
@@ -90,7 +107,6 @@ function createWindow(): void {
     shell.openExternal(url)
     return { action: 'deny' }
   })
-  // catch <a href> nav that would otherwise replace the app
   mainWindow.webContents.on('will-navigate', (e, url) => {
     if (isExternalUrl(url)) {
       e.preventDefault()
@@ -111,7 +127,7 @@ let compactHeight = COMPACT_H
 
 function positionCompact(): void {
   if (!compactWindow) return
-  // bounds not workArea so it can sit over the taskbar region
+  // bounds not workArea, overlaps taskbar
   const { bounds } = screen.getPrimaryDisplay()
   const margin = 10
   const height = Math.max(120, Math.min(compactHeight, bounds.height - margin * 2))
@@ -131,9 +147,8 @@ function createCompactWindow(): void {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    // resizable so setBounds can change height; width is locked below
+    // resizable so setBounds sets height
     resizable: true,
-    // locked in place; it's pinned top-right and shouldn't be draggable
     movable: false,
     minimizable: false,
     maximizable: false,
@@ -167,7 +182,7 @@ function createCompactWindow(): void {
     compactWindow = null
     broadcast(IPC.evtCompactState, { open: false })
   })
-  // same renderer, routed to the compact card via url hash
+  // compact card via url hash
   if (process.env['ELECTRON_RENDERER_URL']) {
     compactWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#compact`)
   } else {
@@ -178,7 +193,7 @@ function createCompactWindow(): void {
 function showCompact(): void {
   if (!compactWindow || compactWindow.isDestroyed()) createCompactWindow()
   positionCompact()
-  compactWindow?.showInactive() // don't steal focus
+  compactWindow?.showInactive()
   compactWindow?.setAlwaysOnTop(true, 'screen-saver')
   broadcast(IPC.evtCompactState, { open: true })
 }
@@ -209,28 +224,57 @@ function pushRosters(): void {
   if (locations) send(IPC.evtLocations, locations)
   const commodities = loadCachedCommodities()
   if (commodities) send(IPC.evtCommodities, commodities)
+  const gridFaces = loadCachedGridFaces()
+  if (gridFaces) send(IPC.evtGridFaces, gridFaces)
+}
+
+// watch dir, survives atomic rewrite
+let facesWatcher: fs.FSWatcher | null = null
+function watchGridFacesDev(): void {
+  if (app.isPackaged || facesWatcher) return
+  const file = workingTreeData('grid-faces.json')
+  if (!file) return
+  const name = path.basename(file)
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    facesWatcher = fs.watch(path.dirname(file), (_e, changed) => {
+      if (changed && changed !== name) return
+      if (timer) clearTimeout(timer)
+      // a save fires several events
+      timer = setTimeout(() => {
+        const faces = loadCachedGridFaces()
+        if (faces) {
+          send(IPC.evtGridFaces, faces)
+          console.info('[dev] grid-faces saved, pushed live')
+        }
+      }, 150)
+    })
+    console.info('[dev] watching grid-faces.json for live markup updates')
+  } catch (e) {
+    console.warn('[dev] grid-faces watch failed:', (e as Error).message)
+  }
 }
 
 let ocrBusy = false
 
-// hide overlay so it stays out of the screenshot
+// keep overlay out of screenshot
 async function withCompactHidden<T>(fn: () => Promise<T>): Promise<T> {
   const wasVisible =
     !!compactWindow && !compactWindow.isDestroyed() && compactWindow.isVisible()
   if (!wasVisible) return fn()
   compactWindow!.hide()
-  await new Promise((r) => setTimeout(r, 150)) // let compositor drop the frame first
+  await new Promise((r) => setTimeout(r, 150)) // let compositor drop the frame
   try {
     return await fn()
   } finally {
     if (compactWindow && !compactWindow.isDestroyed()) {
-      compactWindow.showInactive() // restore without stealing focus
+      compactWindow.showInactive()
       compactWindow.setAlwaysOnTop(true, 'screen-saver')
     }
   }
 }
 
-// targetMissionId threaded back so renderer merges instead of dup'ing
+// threaded back so renderer merges
 async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   if (ocrBusy) return
   ocrBusy = true
@@ -255,7 +299,7 @@ async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   }
 }
 
-// delay lets the contract panel render before capture
+// let contract panel render first
 function scheduleAutoCapture(targetMissionId?: string): void {
   if (!settings.ocrAutoCapture) return
   const delayMs = Math.max(0, settings.ocrCaptureDelay) * 1000
@@ -297,9 +341,8 @@ function startWatcher(): void {
   watcher.on('accepted', (e, isHauling) => {
     if (isHauling) send(IPC.evtContractAccepted, contractData.enrichAccepted(e))
 
-    // hauling captures fire from the renderer instead, which dedups relog re-emits.
-    // non-hauling only matters as training data, so auto-pop those here.
-    if (!isHauling && (settings.ocrSaveSamples || settings.contributeTrainingData)) {
+    // hauling fires from renderer instead
+    if (!isHauling && settings.contributeTrainingData) {
       scheduleAutoCapture(undefined)
     }
   })
@@ -364,10 +407,22 @@ function registerIpc(): void {
     return picked.filePaths[0]
   })
 
+  ipcMain.handle(IPC.exportRunFile, async (_e, payload: { defaultName: string; json: string }) => {
+    if (!mainWindow) return null
+    const picked = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export run',
+      defaultPath: payload.defaultName,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (picked.canceled || !picked.filePath) return null
+    fs.writeFileSync(picked.filePath, payload.json, 'utf8')
+    return picked.filePath
+  })
+
   ipcMain.handle(IPC.manifestLoad, () => loadManifest())
   ipcMain.handle(IPC.manifestSave, (e, doc: ManifestDoc) => {
     saveManifest(doc)
-    // sync the other window without looping the save back
+    // sync without looping save back
     broadcast(IPC.evtManifestChanged, doc, e.sender.id)
     return true
   })
@@ -378,7 +433,7 @@ function registerIpc(): void {
     compactHeight = Math.round(height)
     positionCompact()
   })
-  // mirror the main window's loading walkthrough to the overlay
+  // mirror loading walkthrough to overlay
   ipcMain.on(IPC.loadingStateSet, (e, s: { active: boolean; idx: number }) => {
     broadcast(IPC.evtLoadingState, s, e.sender.id)
   })
@@ -392,6 +447,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.uexGetShips, () => loadCachedRoster())
   ipcMain.handle(IPC.uexGetLocations, () => loadCachedLocations())
   ipcMain.handle(IPC.uexGetCommodities, () => loadCachedCommodities())
+  ipcMain.handle(IPC.uexGetGridFaces, () => loadCachedGridFaces())
 
   ipcMain.handle(IPC.scanSession, () => {
     if (!settings.gameLogPath) return []
@@ -403,6 +459,13 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.contractDataStatus, () => contractData.status())
   ipcMain.handle(IPC.contractDataRescan, () => contractData.rebuild(settings))
+
+  ipcMain.handle(IPC.dataRefresh, async () => {
+    seedCacheIfNeeded()
+    const res = await refreshFromRepo()
+    pushRosters()
+    return res
+  })
 
   ipcMain.handle(IPC.telemetryStatus, () => telemetry.status())
 
@@ -441,7 +504,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ocrEngineInfo, () => engineInfo(settings))
   ipcMain.handle(IPC.ocrPreview, () => capturePreview(settings))
   ipcMain.handle(IPC.ocrRun, () => runOcr(settings))
-  // renderer requests this only for genuinely-new hauling contracts
+  // only for genuinely-new hauling contracts
   ipcMain.on(IPC.ocrRequestCapture, (_e, missionId: unknown) => {
     scheduleAutoCapture(typeof missionId === 'string' ? missionId : undefined)
   })
@@ -479,9 +542,9 @@ if (!gotLock) {
     createWindow()
     startWatcher()
     registerHotkey()
-    prunePending() // drop stale crops from prior sessions
+    prunePending()
 
-    // stable id to group this client's opt-in uploads
+    // stable id grouping uploads
     if (!settings.telemetryClientId) {
       settings = { ...settings, telemetryClientId: randomUUID() }
       saveSettings(settings)
@@ -494,16 +557,17 @@ if (!gotLock) {
       console.warn('[contractData] index build failed:', e)
     }
 
-    // seed bundled data first, then refresh changed lists in the background
+    // seed bundled, refresh in background
     seedCacheIfNeeded()
     pushRosters()
-    void refreshFromRepo().then((changed) => {
-      if (changed) pushRosters()
+    watchGridFacesDev()
+    void refreshFromRepo().then((res) => {
+      if (res.changed) pushRosters()
     })
 
     initUpdater(() => mainWindow)
     if (app.isPackaged) {
-      // recheck hourly so long sessions notice releases
+      // recheck hourly during long sessions
       const RECHECK_MS = 1000 * 60 * 60
       if (settings.autoCheckUpdates) setTimeout(() => void checkForUpdates(), 4000)
       setInterval(() => {

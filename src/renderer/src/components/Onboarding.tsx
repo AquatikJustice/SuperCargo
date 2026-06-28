@@ -76,8 +76,8 @@ export default function Onboarding(): React.ReactElement {
           on={contribute}
           onToggle={() => setContribute((v) => !v)}
         >
-          Share an anonymous, grayscale crop of the contract panel plus the text you confirm, to help train a
-          better reader. Tagged with a random ID only. No account, no personal info. Off by default; you can
+          Share an anonymous picture of the contract panel plus the text you confirm, to help the app read
+          contracts better. Tagged with a random ID only. No account, no personal info. Off by default; you can
           stop anytime.
         </ConsentCard>
 

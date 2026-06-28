@@ -4,7 +4,9 @@
 // Coords are in CELLS (1 cell = 1.25 m = one 1 SCU cube): x = width axis,
 // y = up/height, z = length axis. Render a grid box at (x, y, z) sized wxhxl.
 // Regenerate: npm run gen:grids
-// Generated: 2026-06-20
+// Generated: 2026-06-26
+
+import type { ShipMarkup, BayDir, BayFaceKind } from './types'
 
 export interface CargoGrid {
   id: string
@@ -28,6 +30,11 @@ export interface CargoGrid {
   /** false = reference-only: shown in the view but the packer must never auto-fill it
    *  (secure vaults you can't fit haul boxes into; lift pads that drop cargo on a QT jump). */
   autoLoad?: boolean
+  /** the face cargo peels out toward (the ramp/exit); DERIVED from `faces`. when
+   *  set, the packer fills the deep end first so earlier drops sit nearest it. */
+  exit?: { axis: 'x' | 'z'; dir: -1 | 1 }
+  /** authored per-face markup (wall/exit/aisle), from synced grid-faces. */
+  faces?: Partial<Record<BayDir, BayFaceKind>>
   source: 'sccargo' | 'datamine' | 'override' | 'curated'
 }
 
@@ -99,7 +106,7 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
   "MISC Freelancer DUR": {"ship":"MISC Freelancer DUR","baseScu":36,"totalScu":36,"loadableScu":36,"layout":"sccargo","grids":[{"id":"mid-1","name":"Mid 1","x":0,"y":0,"z":0,"w":1,"l":2,"h":3,"scu":6,"group":0,"source":"sccargo"},{"id":"mid-2","name":"Mid 2","x":3,"y":0,"z":0,"w":1,"l":2,"h":3,"scu":6,"group":0,"source":"sccargo"},{"id":"dur-rear","name":"DUR Rear","x":1,"y":0,"z":5,"w":2,"l":4,"h":3,"scu":24,"group":1,"source":"sccargo"}]},
   "MISC Freelancer MAX": {"ship":"MISC Freelancer MAX","baseScu":120,"totalScu":120,"loadableScu":120,"layout":"datamine","grids":[{"id":"max-rear","name":"MAX Rear","x":0,"y":0,"z":0,"w":4,"l":9,"h":3,"scu":108,"group":0,"source":"datamine"},{"id":"mid-1","name":"Mid 1","x":5,"y":0,"z":0,"w":2,"l":1,"h":3,"scu":6,"group":1,"source":"datamine"},{"id":"mid-2","name":"Mid 2","x":8,"y":0,"z":0,"w":2,"l":1,"h":3,"scu":6,"group":2,"source":"datamine"}]},
   "MISC Freelancer MIS": {"ship":"MISC Freelancer MIS","baseScu":36,"totalScu":36,"loadableScu":36,"layout":"sccargo","grids":[{"id":"mid-1","name":"Mid 1","x":0,"y":0,"z":0,"w":1,"l":2,"h":3,"scu":6,"group":0,"source":"sccargo"},{"id":"mid-2","name":"Mid 2","x":3,"y":0,"z":0,"w":1,"l":2,"h":3,"scu":6,"group":0,"source":"sccargo"},{"id":"dur-rear","name":"DUR Rear","x":1,"y":0,"z":5,"w":2,"l":4,"h":3,"scu":24,"group":1,"source":"sccargo"}]},
-  "MISC Hull A": {"ship":"MISC Hull A","baseScu":64,"totalScu":64,"loadableScu":64,"layout":"sccargo","grids":[{"id":"bay-1-1","name":"Bay 1.1","x":0,"y":0,"z":0,"w":2,"l":4,"h":4,"scu":32,"group":0,"source":"sccargo"},{"id":"bay-1-2","name":"Bay 1.2","x":4,"y":0,"z":0,"w":2,"l":4,"h":4,"scu":32,"group":0,"source":"sccargo"}]},
+  "MISC Hull A": {"ship":"MISC Hull A","baseScu":64,"totalScu":64,"loadableScu":64,"layout":"datamine","grids":[{"id":"hold-1","name":"Hold 1","x":0,"y":0,"z":0,"w":2,"l":4,"h":2,"scu":16,"group":0,"source":"datamine"},{"id":"hold-2","name":"Hold 2","x":3,"y":0,"z":0,"w":2,"l":4,"h":2,"scu":16,"group":1,"source":"datamine"},{"id":"hold-3","name":"Hold 3","x":6,"y":0,"z":0,"w":2,"l":4,"h":2,"scu":16,"group":2,"source":"datamine"},{"id":"hold-4","name":"Hold 4","x":9,"y":0,"z":0,"w":2,"l":4,"h":2,"scu":16,"group":3,"source":"datamine"}]},
   "MISC Hull B": {"ship":"MISC Hull B","baseScu":512,"totalScu":512,"loadableScu":512,"layout":"sccargo","grids":[{"id":"hold-1","name":"Hold 1","x":0,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-2","name":"Hold 2","x":2,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-3","name":"Hold 3","x":6,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-4","name":"Hold 4","x":8,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-5","name":"Hold 5","x":12,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-6","name":"Hold 6","x":14,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-7","name":"Hold 7","x":18,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-8","name":"Hold 8","x":20,"y":0,"z":0,"w":2,"l":8,"h":2,"scu":32,"group":0,"source":"sccargo"},{"id":"hold-9","name":"Hold 9","x":0,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-10","name":"Hold 10","x":2,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-11","name":"Hold 11","x":6,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-12","name":"Hold 12","x":8,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-13","name":"Hold 13","x":12,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-14","name":"Hold 14","x":14,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-15","name":"Hold 15","x":18,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"},{"id":"hold-16","name":"Hold 16","x":20,"y":0,"z":11,"w":2,"l":8,"h":2,"scu":32,"group":1,"source":"sccargo"}]},
   "MISC Hull C": {"ship":"MISC Hull C","baseScu":4608,"totalScu":4608,"loadableScu":4608,"layout":"sccargo","grids":[{"id":"bay-1-1","name":"Bay 1.1","x":0,"y":0,"z":0,"w":12,"l":8,"h":6,"scu":576,"group":0,"source":"sccargo"},{"id":"bay-1-2","name":"Bay 1.2","x":14,"y":0,"z":0,"w":12,"l":8,"h":6,"scu":576,"group":0,"source":"sccargo"},{"id":"bay-1-3","name":"Bay 1.3","x":28,"y":0,"z":0,"w":12,"l":8,"h":6,"scu":576,"group":0,"source":"sccargo"},{"id":"bay-1-4","name":"Bay 1.4","x":42,"y":0,"z":0,"w":12,"l":8,"h":6,"scu":576,"group":0,"source":"sccargo"},{"id":"bay-2-1","name":"Bay 2.1","x":0,"y":0,"z":11,"w":12,"l":8,"h":6,"scu":576,"group":1,"source":"sccargo"},{"id":"bay-2-2","name":"Bay 2.2","x":14,"y":0,"z":11,"w":12,"l":8,"h":6,"scu":576,"group":1,"source":"sccargo"},{"id":"bay-2-3","name":"Bay 2.3","x":28,"y":0,"z":11,"w":12,"l":8,"h":6,"scu":576,"group":1,"source":"sccargo"},{"id":"bay-2-4","name":"Bay 2.4","x":42,"y":0,"z":11,"w":12,"l":8,"h":6,"scu":576,"group":1,"source":"sccargo"}]},
   "MISC Reliant Kore": {"ship":"MISC Reliant Kore","baseScu":6,"totalScu":6,"loadableScu":6,"layout":"sccargo","grids":[{"id":"kore-1","name":"KORE 1","x":0,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo"},{"id":"kore-2","name":"KORE 2","x":2,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo"}]},
@@ -141,16 +148,95 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
   "RSI Zeus Mk II ES": {"ship":"RSI Zeus Mk II ES","baseScu":32,"totalScu":32,"loadableScu":32,"layout":"sccargo","grids":[{"id":"base-main","name":"Base Main","x":0,"y":0,"z":0,"w":4,"l":4,"h":2,"scu":32,"group":0,"source":"sccargo"}]}
 }
 
+// authored markup (per-bay faces + layout fixes), synced from the repo like the
+// uex lists (markup tool -> data/uex/grid-faces.json). setGridFaces is called
+// once the roster loads; until then bays have no markup and the packer falls
+// back to a dense pack.
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h'>>
+let MARKUP: Record<string, Record<string, BayInfo>> = {}
+let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+
+export function setGridFaces(ships: ShipMarkup[]): void {
+  const map: Record<string, Record<string, BayInfo>> = {}
+  const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+  for (const s of ships) {
+    const bays: Record<string, BayInfo> = {}
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h }
+    map[s.ship] = bays
+    if (s.frame) frames[s.ship] = s.frame
+  }
+  MARKUP = map
+  FRAMES = frames
+}
+
+/** authored bow/starboard, or undefined (the view defaults bow to z-). */
+export function shipFrame(ship: string): NonNullable<ShipMarkup['frame']> | undefined {
+  return FRAMES[ship]
+}
+
+/** true once a ship's bays have been marked up (exit faces authored) for the
+ * delivery-aware packer; false ships still fall back to a dense pack. */
+export function hasGridMarkup(ship: string): boolean {
+  if (FRAMES[ship]) return true
+  const bays = MARKUP[ship]
+  return !!bays && Object.values(bays).some((b) => b.faces && Object.keys(b.faces).length > 0)
+}
+
+const DIR_TO_EXIT: Record<BayDir, { axis: 'x' | 'z'; dir: -1 | 1 }> = {
+  'x+': { axis: 'x', dir: 1 },
+  'x-': { axis: 'x', dir: -1 },
+  'z+': { axis: 'z', dir: 1 },
+  'z-': { axis: 'z', dir: -1 },
+  'y+': { axis: 'z', dir: -1 }, // roof: not a horizontal peel direction
+  'y-': { axis: 'z', dir: -1 }
+}
+
+// the packer peels toward a horizontal exit/aisle; the roof (y) is a bonus, not
+// a peel axis. prefer an EXIT face, else an AISLE face.
+function deriveExit(faces?: Partial<Record<BayDir, BayFaceKind>>): CargoGrid['exit'] {
+  if (!faces) return undefined
+  const horiz: BayDir[] = ['x+', 'x-', 'z+', 'z-']
+  const exit = horiz.find((d) => faces[d] === 'exit')
+  if (exit) return DIR_TO_EXIT[exit]
+  const aisle = horiz.find((d) => faces[d] === 'aisle')
+  return aisle ? DIR_TO_EXIT[aisle] : undefined
+}
+
 /** All grids for a ship (for the view), optionally limited to installed modules. */
 export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const rec = CARGO_GRIDS[ship]
   if (!rec) return []
-  return rec.grids.filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+  const bays = MARKUP[ship]
+  return rec.grids
+    .filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+    .map((g) => {
+      const m = bays && bays[g.id]
+      if (!m) return g
+      // apply any layout override, attach faces, derive the peel exit
+      return {
+        ...g,
+        ...(m.x !== undefined ? { x: m.x } : {}),
+        ...(m.y !== undefined ? { y: m.y } : {}),
+        ...(m.z !== undefined ? { z: m.z } : {}),
+        ...(m.w !== undefined ? { w: m.w } : {}),
+        ...(m.l !== undefined ? { l: m.l } : {}),
+        ...(m.h !== undefined ? { h: m.h } : {}),
+        ...(m.group !== undefined ? { group: m.group } : {}),
+        faces: m.faces,
+        exit: deriveExit(m.faces)
+      }
+    })
 }
 
 /** Grids the packer may fill - gridsFor minus reference-only (secure/lift) bays. */
 export function loadableGrids(ship: string, installed?: string[]): CargoGrid[] {
   return gridsFor(ship, installed).filter((g) => g.autoLoad !== false)
+}
+
+/** The small locked secure-storage vaults (Ironclad), as opposed to the lift pads.
+ *  Both are autoLoad:false, but only these get hidden from the grid view. */
+export function isSecureBay(g: CargoGrid): boolean {
+  return g.autoLoad === false && (/secure/i.test(g.id) || /secure/i.test(g.name))
 }
 
 // what actually fits on the run: auto-load bays only, no elevators or secure

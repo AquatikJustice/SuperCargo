@@ -1,21 +1,5 @@
-// Regenerate the bundled UEX data the app ships and serves from the repo.
-//
-// On a game/UEX update: set a UEX token and run `npm run gen:uex`. It fetches
-// the live vehicle/terminal/commodity feeds, runs them through the SAME mapping
-// the app uses (src/shared/uexMap.ts, bundled here with esbuild so there's no
-// duplicated logic to drift), and writes:
-//
-//   data/uex/ships.json        { source, syncedAt, ships: [...] }
-//   data/uex/locations.json    { source, syncedAt, locations: [...] }
-//   data/uex/commodities.json  { source, syncedAt, commodities: [...] }
-//   data/uex/hashes.json       { ships: <sha256>, locations: ..., commodities: ... }
-//
-// These are committed to the repo. The app serves them over raw.githubusercontent
-// at launch (no token needed) and ships the same files as an offline seed. The
-// hashes are how the app decides what changed, so it only pulls the lists that
-// actually moved.
-//
-// Token: env UEX_TOKEN, else settings.json (the dev's own app token).
+// Rebuilds the bundled UEX data in data/uex (needs a UEX token).
+// npm run gen:uex
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -34,7 +18,7 @@ function readToken() {
     const t = JSON.parse(fs.readFileSync(p, 'utf8')).uexApiKey
     if (t) return t
   } catch {
-    /* fall through */
+    // no settings file
   }
   return null
 }
@@ -64,15 +48,10 @@ async function fetchData(endpoint, token) {
   return json.data
 }
 
-// Game files (datamined by scunpacked). starmap carries x/y/z for every location
-// (UEX exposes none); trade_locations is every place that trades cargo - the DCs,
-// mining outposts, gateways and rest stops UEX is missing. We take the union and
-// pull coordinates from the starmap.
+// scunpacked: starmap for coords, trade_locations for the stops UEX misses
 const RAW = 'https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master'
 const STARMAP_URL = `${RAW}/starmap_positions.json`
 const TRADE_URL = `${RAW}/trade_locations.json`
-// Celestial bodies aren't deliverable - you haul to a facility, not a planet's core.
-const BODY_TYPE = /^(star|planet|moon)$/i
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const stripCode = (s) => s.replace(/^[A-Z]{2,4}-[A-Z0-9]{1,4}\s+/, '')
@@ -93,14 +72,10 @@ async function fetchStarmap() {
   return { byName, entities }
 }
 
-// --- Game-data enrichment ---------------------------------------------------
-// The game builds contract location phrases ("the Rayari, Inc. outpost on Cellin")
-// from a facility's ClassName, e.g. Outpost_Rayari_Stanton2a_HickesResearchOutpost:
-//   operator = Rayari, body = Stanton2a = Crusader's first moon, Cellin.
-// We parse that out and bake operator + body onto each location so the app can
-// resolve those phrases instead of guessing by name.
+// contract phrases come from a facility's ClassName; parse operator + body off it
+// so the app resolves them instead of guessing by name
 
-// body code (planet digit + optional moon letter) -> display name, by system.
+// body code to display name, per system
 const STANTON_BODIES = {
   '1': 'Hurston', '1a': 'Arial', '1b': 'Aberdeen', '1c': 'Magda', '1d': 'Ita',
   '2': 'Crusader', '2a': 'Cellin', '2b': 'Daymar', '2c': 'Yela',
@@ -111,10 +86,9 @@ const PYRO_BODIES = {
   '1': 'Pyro I', '2': 'Pyro II', '3': 'Pyro III', '4': 'Pyro IV', '5': 'Pyro V', '6': 'Pyro VI',
   '3a': 'Bloom', '5a': 'Ignis', '5b': 'Vatra', '5c': 'Adir', '5d': 'Fairo', '5e': 'Fuego'
 }
-// ClassName tokens that are facility-type words, not operator brands.
+// facility-type words, not operator brands
 const NON_OPERATOR = /^(Col|Colonial|Mining|MiningFacility|IndyMining|IndyFarmer|Abandoned|Aban|Admin|EMShelter|DrugLab|Stash|Derelict)$/i
 
-/** Parse operator + parent body out of a facility ClassName. */
 function classInfo(className) {
   if (!className) return {}
   const parts = className.split('_')
@@ -143,7 +117,7 @@ function classInfo(className) {
   return { operator, body }
 }
 
-// Generic interior rooms shared across distribution centres - not haulable places.
+// interior rooms, not haulable stops
 const INTERIOR_ROOM = new Set([
   'lobby', 'inventory center', 'security checkpoint', 'shipping area', 'storehouse',
   'on-call area', 'staging point', 'security compound', 'exterior zone 2',
@@ -152,9 +126,7 @@ const INTERIOR_ROOM = new Set([
 const SHIP_CLASS = /^(DRAK|MISC|RSI|AEGS|ANVL|ORIG|CRUS|BANU|GRIN|XIAN|XNAA|ARGO|GAMA|VNCL|KRIG|ESPR|TMBL)_/i
 const DC_SUBZONE = /^DC_\w+_.+_(Lobby|Warehouse|Cargo\w*|Int|Transition|Security\w*|Refinery\w*|Shipping\w*|Storage|FOB|SideRoad|CombinedMarkupWing|CargoShop|Storehouse|Markup\w*)$/i
 
-// Manually reviewed removals: mission-flavor strings, interior rooms, Lagrange-
-// suffixed duplicates, aid shelters and abandoned-outpost templates that aren't
-// real haulable freight stops. Kept here so a regenerate stays clean.
+// hand-reviewed removals: rooms, dupes, templates, non-freight stops
 const DENYLIST = new Set(
   `"The Orphanage"
 Abandoned Section
@@ -243,9 +215,7 @@ the refinery inside Orbituary above Pyro III
 the refinery inside Ruin Station above Pyro VI`.split('\n')
 )
 
-/** True for a trade_locations row that's a real haulable facility (not a room,
- *  template name, ship, planet, raw jump point or clinic). Gateways are added
- *  separately from the starmap. */
+// real haulable facility (gateways added separately)
 function isHaulableFacility(t) {
   const name = String(t.DisplayName || '').trim()
   const cn = String(t.ClassName || '')
@@ -257,10 +227,7 @@ function isHaulableFacility(t) {
   return true
 }
 
-/** The in-game gateway stations, identified by name + system (where trade_locations
- *  leaves several blank and UEX mis-tags the system). Coordinates come from the
- *  starmap "Manmade" entity when present; a name-only fallback (e.g. Magnus) routes
- *  via the grouping cost until it gets coords. */
+// gateway stations keyed by name + system; coords from the starmap when present
 function buildGateways(trade, entities) {
   const byKey = new Map()
   for (const e of entities) {
@@ -276,8 +243,7 @@ function buildGateways(trade, entities) {
     if (!byKey.has(key)) byKey.set(key, { name, system })
   }
   return [...byKey.values()].map((g) => ({
-    // Label the system the gateway sits in - "Nyx Gateway" exists in both Stanton
-    // and Pyro, so the bare name is ambiguous in a picker.
+    // "Nyx Gateway" exists in two systems, so qualify it
     name: `${g.name} (${g.system.charAt(0).toUpperCase()}${g.system.slice(1)})`,
     code: '',
     maxContainerSize: 0,
@@ -288,13 +254,19 @@ function buildGateways(trade, entities) {
   }))
 }
 
-/** Build the full location list: UEX terminals (codes/elevator) enriched with
- *  operator + body, unioned with every haulable game-file facility, plus the
- *  gateway stations. Coordinates come from the starmap. */
+// spaceports have no starmap entity; they borrow their city's coords
+const SPACEPORT_CITY = {
+  rikermemorialspaceport: 'Area18',
+  teasaspaceport: 'Lorville',
+  nbintspaceport: 'New Babbage',
+  newbabbageinterstellarspaceport: 'New Babbage',
+  augustdunlowspaceport: 'Orison'
+}
+
+// UEX terminals + game-file facilities + gateways, coords from the starmap
 function buildLocations(locations, starmap, trade) {
   const { byName, entities } = starmap
-  // Base ClassName per display name: the shortest is the top-level facility, not a
-  // sub-wing, so it carries the right operator/body.
+  // shortest ClassName per name is the top-level facility
   const classByName = new Map()
   for (const t of trade) {
     const nm = norm(t.DisplayName)
@@ -321,8 +293,7 @@ function buildLocations(locations, starmap, trade) {
     }
   }
 
-  // Drop UEX's gateway rows (incomplete + wrong systems); re-added from the starmap.
-  // Also drop the manually-curated removals.
+  // drop UEX gateways (re-added from starmap) and the curated removals
   const out = locations.filter((l) => !/ Gateway$/.test(l.name) && !DENYLIST.has(l.name))
   for (const l of out) {
     attachCoords(l)
@@ -360,6 +331,19 @@ function buildLocations(locations, starmap, trade) {
   const gateways = buildGateways(trade, entities)
   out.push(...gateways)
 
+  // spaceports inherit their city's coords
+  const byNorm = new Map(out.map((l) => [norm(l.name), l]))
+  for (const l of out) {
+    if (typeof l.x === 'number') continue
+    const city = byNorm.get(norm(SPACEPORT_CITY[norm(l.name)] || ''))
+    if (city && typeof city.x === 'number') {
+      l.x = city.x
+      l.y = city.y
+      l.z = city.z
+      l.system = city.system
+    }
+  }
+
   out.sort((a, b) => a.name.localeCompare(b.name) || String(a.system).localeCompare(String(b.system)))
   const located = out.filter((l) => typeof l.x === 'number').length
   return { list: out, located, added, gateways: gateways.length }
@@ -396,13 +380,22 @@ async function main() {
         `  locations: ${data.length} total, ${built.located} with coords, +${built.added} game-file facilities, +${built.gateways} gateways`
       )
     }
-    // No timestamp: keep the file a pure function of the data so re-running only
-    // produces a diff (and a new hash) when the lists actually change.
+    // no timestamp, so reruns only diff on real changes
     const doc = { source, [s.key]: data }
     const json = JSON.stringify(doc, null, 2) + '\n'
     fs.writeFileSync(path.join(OUT_DIR, `${s.file}.json`), json)
     hashes[s.file] = crypto.createHash('sha256').update(json).digest('hex')
     console.log(`  ${s.file}.json  ${data.length} entries`)
+  }
+  // keep the authored grid-faces hash in the manifest
+  try {
+    const gfPath = path.join(OUT_DIR, 'grid-faces.json')
+    if (fs.existsSync(gfPath)) {
+      hashes.gridFaces = crypto.createHash('sha256').update(fs.readFileSync(gfPath)).digest('hex')
+      console.log('  grid-faces.json  (authored, hash preserved)')
+    }
+  } catch (e) {
+    console.warn('  grid-faces hash skipped:', e.message)
   }
   fs.writeFileSync(path.join(OUT_DIR, 'hashes.json'), JSON.stringify(hashes, null, 2) + '\n')
   console.log(`wrote ${OUT_DIR}`)

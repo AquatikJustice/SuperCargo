@@ -1,5 +1,3 @@
-// ocr entry point
-
 import type { AppSettings, OcrEngineInfo, OcrResult } from '@shared/types'
 import { parseOcrText, matchObjectives, reorderColumns } from '@shared/ocrParse'
 import { captureDisplay, cropImage, toUpscaledPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
@@ -51,11 +49,9 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   if (!full) return { ...base, error: 'screen capture failed (no source available)' }
 
   const cropped = cropImage(full, settings.ocrCrop)
-  // upscale to a fixed glyph size: 2x at 1080p, less above so recognition stays
-  // bounded on hi-res displays (tesseract time scales with pixel count)
+  // 2x at 1080p, less above
   const factor = Math.min(2, Math.max(1, 2160 / cropped.getSize().height))
   const ocrImage = toUpscaledPng(cropped, factor)
-  // shown big in contribute view
   const imageDataUrl = toPreviewDataUrl(cropped, 1280)
   const grayPng = toGrayscalePng(cropped)
 
@@ -73,7 +69,7 @@ export async function runOcr(settings: AppSettings): Promise<OcrResult> {
   const locations = loadCachedLocations()?.locations ?? []
   let objectives = matchObjectives(parsed.objectives, commodities, locations)
 
-  // try a column-reordered parse and keep it only if more objectives resolve
+  // keep reordered parse if better
   if (recognition.words?.length) {
     const reordered = reorderColumns(recognition.words)
     if (reordered) {
@@ -110,11 +106,11 @@ export function saveSample(
     engine: settings.ocrEngine || 'tesseract',
     savedAt: new Date().toISOString()
   }
-  // read before commit renames it away
+  // read before commit renames it
   const png = settings.contributeTrainingData ? readPending(sampleId) : null
 
   let kept = false
-  if (settings.ocrSaveSamples) kept = commitSample(sampleId, full)
+  if (settings.contributeTrainingData) kept = commitSample(sampleId, full)
 
   if (settings.contributeTrainingData && png && settings.telemetryClientId) {
     telemetry.enqueue(settings.telemetryClientId, sampleId, png, {

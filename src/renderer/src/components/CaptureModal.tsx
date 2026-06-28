@@ -11,7 +11,7 @@ type OcrHintInfo = { raw: string; score: number; matched: boolean; guess: boolea
 
 interface ObjRow extends ManualObjectiveInput {
   key: number
-  /** hint shown when filled by ocr */
+  /** set when ocr-filled */
   ocrCommodity?: OcrHintInfo
   ocrDestination?: OcrHintInfo
 }
@@ -19,7 +19,6 @@ interface ObjRow extends ManualObjectiveInput {
 let rowKey = 0
 const newRow = (): ObjRow => ({ key: rowKey++, commodity: '', scuAmount: 0, destination: '' })
 
-// seed closest candidate, not raw
 function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   const guess = !m.match && m.suggestions.length > 0
   const value = m.match ?? (guess ? m.suggestions[0] : m.input)
@@ -41,7 +40,6 @@ function rowFromOcr(o: OcrObjective): ObjRow {
   }
 }
 
-// already captured from the log, no ocr hint
 function rowFromContract(o: DeliveryObjective): ObjRow {
   return {
     key: rowKey++,
@@ -90,9 +88,7 @@ export default function CaptureModal(): React.ReactElement | null {
   const ocrEngine = useStore((s) => s.ocrEngine)
   const runOcr = useStore((s) => s.runOcr)
   const clearOcr = useStore((s) => s.clearOcr)
-  const saveSamples = useStore((s) => s.settings.ocrSaveSamples)
-  // gates the contribute button
-  const collecting = useStore((s) => s.settings.ocrSaveSamples || s.settings.contributeTrainingData)
+  const collecting = useStore((s) => s.settings.contributeTrainingData)
 
   const [tab, setTab] = useState<'manual' | 'ocr'>('manual')
   const [title, setTitle] = useState('')
@@ -103,10 +99,9 @@ export default function CaptureModal(): React.ReactElement | null {
   const [showRaw, setShowRaw] = useState(false)
   const [rawEdit, setRawEdit] = useState('')
   const [contributed, setContributed] = useState(false)
-  // crop calibrate without a settings trip
   const [calibrating, setCalibrating] = useState(false)
 
-  // seed once per open or target churn clobbers reward
+  // seed once, else clobbers reward
   const seededRef = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -121,7 +116,6 @@ export default function CaptureModal(): React.ReactElement | null {
     }
   }, [open, target])
 
-  // show the ocr tab while a capture runs so the spinner is visible
   useEffect(() => {
     if (ocrStatus === 'recognizing' || ocrStatus === 'capturing') setTab('ocr')
   }, [ocrStatus])
@@ -130,14 +124,12 @@ export default function CaptureModal(): React.ReactElement | null {
     if (!ocrResult || !ocrResult.ok) return
     setTab('ocr')
     setContributed(false)
-    // log already gave the objectives; ocr is only for reward + box size
-    const logObjectives = target?.objectives ?? []
-    if (logObjectives.length > 0) {
-      setRows(logObjectives.map(rowFromContract))
+    const logged = target?.objectives ?? []
+    if (logged.length > 0) {
+      setRows(logged.map(rowFromContract))
     } else if (ocrResult.objectives.length > 0) {
       setRows(ocrResult.objectives.map(rowFromOcr))
     } else {
-      // nothing logged or parsed, seed raw to contribute
       setRawEdit(ocrResult.rawText)
     }
     if (ocrResult.maxBoxSize) setMaxBox(ocrResult.maxBoxSize)
@@ -187,8 +179,7 @@ export default function CaptureModal(): React.ReactElement | null {
       pickups: pickups?.map((p) => p.trim()).filter(Boolean)
     }))
 
-    // opt-in: keep read as a sample
-    if (ocrResult?.ok && ocrResult.sampleId && saveSamples) {
+    if (ocrResult?.ok && ocrResult.sampleId && collecting) {
       const text = validRows
         .map((r) => `Deliver ${r.scuAmount} SCU of ${r.commodity} to ${r.destination}`)
         .join('\n')
@@ -216,7 +207,6 @@ export default function CaptureModal(): React.ReactElement | null {
     reset()
   }
 
-  // main drops it unless opted in, safe to call
   const contribute = (): void => {
     if (!ocrResult?.ok || !ocrResult.sampleId || !rawEdit.trim()) return
     void window.supercargo.ocrSaveSample({
@@ -762,7 +752,7 @@ function ContributePane({
       <div style={{ fontFamily: F.body, fontSize: 11, color: collecting ? C.dim : C.amber, marginTop: 8, lineHeight: 1.5 }}>
         {collecting
           ? 'Fix any misreads so the label matches the panel exactly, then contribute. Only this cropped panel image and your text are saved - nothing else.'
-          : 'Turn on "Save training samples" or "Contribute training data" in Settings -> OCR to keep this. Without it, contributing does nothing.'}
+          : 'Turn on "Contribute training data" in Settings -> OCR to keep this. Without it, contributing does nothing.'}
       </div>
     </div>
   )
@@ -811,7 +801,7 @@ function OcrReviewBanner({
           <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>{ms} ms</span>
         </div>
         <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, margin: '7px 0 10px', lineHeight: 1.5 }}>
-          Review and correct below. Typeahead values were fuzzy-matched to UEX. Then confirm.
+          Review and correct below. Names are our best match to the live data. Then confirm.
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <MiniBtn onClick={onRecapture} disabled={recognizing}>

@@ -15,6 +15,8 @@ export interface TypeaheadProps {
   autoFocus?: boolean
   clearOnFocus?: boolean
   search?: boolean
+  warn?: (opt: string) => boolean
+  warnTitle?: string
 }
 
 export default function Typeahead({
@@ -28,7 +30,9 @@ export default function Typeahead({
   mono = false,
   autoFocus = false,
   clearOnFocus = false,
-  search = false
+  search = false,
+  warn,
+  warnTitle
 }: TypeaheadProps): React.ReactElement {
   const [query, setQuery] = useState(value)
   const [open, setOpen] = useState(false)
@@ -36,8 +40,7 @@ export default function Typeahead({
   const [focused, setFocused] = useState(false)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // sync an idle field to the external value, but a clearOnFocus search box
-  // owns its own text so the focus-clear is not overwritten
+  // idle field tracks value
   useEffect(() => {
     if (clearOnFocus || focused) return
     setQuery(value)
@@ -168,18 +171,24 @@ export default function Typeahead({
               }}
               onMouseEnter={() => setHighlight(i)}
               style={{
+                display: 'grid',
+                gridTemplateColumns: warn ? '16px 1fr' : '1fr',
+                alignItems: 'center',
+                gap: 8,
                 padding: '8px 11px',
                 fontFamily: mono ? F.mono : F.body,
                 fontSize: 13,
                 color: i === highlight ? C.text : C.body,
                 background: i === highlight ? C.accFill : 'transparent',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                cursor: 'pointer'
               }}
             >
-              {opt}
+              {warn && (
+                <span title={warn(opt) ? warnTitle : undefined} style={{ color: '#e8b13a', fontSize: 12, textAlign: 'center', lineHeight: 1 }}>
+                  {warn(opt) ? '⚠' : ''}
+                </span>
+              )}
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt}</span>
             </div>
           ))}
         </div>

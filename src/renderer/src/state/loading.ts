@@ -1,9 +1,7 @@
-// per-stop load/unload walkthrough
-
 import type { HaulingContract } from '@shared/types'
-import { boxBreakdown } from '@shared/box'
+import { boxBreakdown, calculateBoxes, boxList, listBreakdown } from '@shared/box'
 import { activeContracts, destinationsInOrder } from './manifest'
-import type { RoutePlan } from './route'
+import type { RoutePlan, StepRef } from './route'
 
 const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
   c.objectives.filter((o) => !o.delivered)
@@ -11,7 +9,7 @@ const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
 const tellLabel = (commodity: string, size: number, count: number): string =>
   `${count}× ${size} SCU ${commodity}`
 
-// distinctive tell per contract, else null
+// distinctive tell per contract
 function distinctiveTells(contracts: HaulingContract[]): Map<string, string | null> {
   const live = activeContracts(contracts)
   const tupleOwners = new Map<string, Set<string>>()
@@ -56,12 +54,22 @@ export interface RouteLoadLine {
   ref: string
   tell: string | null
   commodity: string
+  /** scu moved this step */
   scu: number
+  /** full objective scu */
+  totalScu: number
   breakdown: string
+  /** box sizes loaded this step */
+  loadBoxes: number[]
+  /** breakdown of the whole objective */
+  totalBreakdown: string
   destination: string
   multiPickup: boolean
   objectiveId: string
   contractId: string
+  /** 1-based trip for this objective */
+  tripPos: number
+  tripTotal: number
 }
 
 export interface RouteLoadStop {
@@ -84,27 +92,47 @@ export function buildRouteLoadingPlan(
   const byObjective = new Map(
     activeContracts(contracts).flatMap((c) => c.objectives.map((o) => [o.id, { c, o }] as const))
   )
-  const lineFor = (objectiveId: string): RouteLoadLine | null => {
-    const found = byObjective.get(objectiveId)
+  // trips each objective rides on
+  const tripSpan = new Map<string, number[]>()
+  for (const s of plan.steps) {
+    for (const r of s.loadRefs) {
+      const arr = tripSpan.get(r.objectiveId) ?? []
+      if (!arr.includes(s.trip)) {
+        arr.push(s.trip)
+        arr.sort((a, b) => a - b)
+        tripSpan.set(r.objectiveId, arr)
+      }
+    }
+  }
+  const lineFor = (ref: StepRef, trip: number): RouteLoadLine | null => {
+    const found = byObjective.get(ref.objectiveId)
     if (!found) return null
     const { c, o } = found
+    const span = tripSpan.get(o.id) ?? [trip]
+    // reconstruct boxes for older models
+    const loadBoxes = ref.boxes ?? boxList(calculateBoxes(ref.scu, c.maxBoxSize))
     return {
       ref: c.ref,
       tell: tells.get(c.id) ?? null,
       commodity: o.commodity,
-      scu: o.scuAmount,
-      breakdown: boxBreakdown(o.boxes),
+      scu: ref.scu,
+      totalScu: o.scuAmount,
+      breakdown: listBreakdown(loadBoxes),
+      loadBoxes,
+      totalBreakdown: boxBreakdown(o.boxes),
       destination: o.destination,
       multiPickup: (o.pickups?.length ?? 0) > 1,
       objectiveId: o.id,
-      contractId: c.id
+      contractId: c.id,
+      tripPos: Math.max(1, span.indexOf(trip) + 1),
+      tripTotal: span.length
     }
   }
 
   const stops: RouteLoadStop[] = []
   for (const s of plan.steps) {
-    const loads = s.loadRefs.map((r) => lineFor(r.objectiveId)).filter((l): l is RouteLoadLine => !!l)
-    const drops = s.dropRefs.map((r) => lineFor(r.objectiveId)).filter((l): l is RouteLoadLine => !!l)
+    const loads = s.loadRefs.map((r) => lineFor(r, s.trip)).filter((l): l is RouteLoadLine => !!l)
+    const drops = s.dropRefs.map((r) => lineFor(r, s.trip)).filter((l): l is RouteLoadLine => !!l)
     if (!loads.length && !drops.length) continue
     stops.push({
       nodeKey: s.nodeKey,
@@ -121,9 +149,7 @@ export function buildRouteLoadingPlan(
   return stops
 }
 
-// a single physical action while loading: drop a stop's cargo, or load one
-// destination's worth. a pickup stop fans out into one load step per
-// destination so you place boxes a layer at a time, not all at once.
+// one drop or destination load
 export interface LoadingStep {
   nodeKey: string
   label: string
@@ -131,23 +157,14 @@ export interface LoadingStep {
   region: string
   trip: number
   kind: 'load' | 'drop'
-  /** where this batch is bound (load), or the stop itself (drop) */
+  /** load destination, else the stop */
   boundFor: string
-  /** layer hint, e.g. "bottom · load first" */
-  placement: string
-  /** 1-based among load groups at this stop; 0 for a drop */
+  /** 1-based load group, 0 on drop */
   groupPos: number
   groupTotal: number
   lines: RouteLoadLine[]
   loadIds: string[]
   dropIds: string[]
-}
-
-function layerHint(pos: number, total: number): string {
-  if (total <= 1) return ''
-  if (pos === 1) return 'bottom · load first'
-  if (pos === total) return 'top · load last'
-  return 'next layer up'
 }
 
 interface ObjPool {
@@ -156,9 +173,7 @@ interface ObjPool {
   boxes: Array<{ scuSize: number; count: number }>
 }
 
-// distinctive "find the contract with..." tell per contract, computed from a
-// pool of objectives still in the warehouse. recomputed each load step so a
-// stack you've already pulled stops being the identifier.
+// tell per contract from pool
 function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
   const tupleOwners = new Map<string, Set<string>>()
   const commodityOwners = new Map<string, Set<string>>()
@@ -222,7 +237,6 @@ export function buildLoadingSteps(
         ...common,
         kind: 'drop',
         boundFor: stop.label,
-        placement: 'pull these off first',
         groupPos: 0,
         groupTotal: 0,
         lines: stop.drops,
@@ -236,12 +250,11 @@ export function buildLoadingSteps(
       arr.push(l)
       byDest.set(l.destination, arr)
     }
-    // deepest (last delivered) first, matching the bottom-up 3D pack
+    // deepest first, like the pack
     const dests = [...byDest.keys()].sort((a, b) => (rank.get(b) ?? -1) - (rank.get(a) ?? -1))
     const groups = dests.map((d) => byDest.get(d) as RouteLoadLine[])
     groups.forEach((lines, i) => {
-      // tell from what's still in this terminal's warehouse: this group plus the
-      // later ones, so stacks pulled in earlier groups stop being the tell
+      // tell from this group on
       const remaining = groups.slice(i).flat()
       const tells = tellsForPool(remaining.map((l) => objInfo.get(l.objectiveId)).filter((x): x is ObjPool => !!x))
       const lined = lines.map((l) => ({ ...l, tell: tells.get(l.contractId) ?? null }))
@@ -249,7 +262,6 @@ export function buildLoadingSteps(
         ...common,
         kind: 'load',
         boundFor: dests[i],
-        placement: layerHint(i + 1, groups.length),
         groupPos: i + 1,
         groupTotal: groups.length,
         lines: lined,

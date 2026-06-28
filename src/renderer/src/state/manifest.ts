@@ -1,7 +1,8 @@
-// no react/zustand here so it stays testable
+// no react/zustand, keeps it testable
 
 import type { HaulingContract, HistoryEntry, HistoryStatus } from '@shared/types'
-import { boxBreakdown, boxCount, boxList } from '@shared/box'
+import type { RoutePlan } from './route'
+import { boxBreakdown, boxCount, boxList, listBreakdown } from '@shared/box'
 import { payoutFactor, snapPayout } from '@shared/payout'
 import { splitDestination } from '../data/stations'
 import { stopColor } from '../theme'
@@ -15,7 +16,9 @@ export interface StopItem {
   boxStr: string
   boxCount: number
   delivered: boolean
-  /** loads somewhere other than contract pickup */
+  /** undefined = not turned in */
+  turnedInScu?: number
+  /** loads elsewhere than contract pickup */
   pickups?: string[]
 }
 
@@ -28,8 +31,12 @@ export interface PickupItem {
   boxStr: string
   boxCount: number
   destination: string
-  /** loads from more than one place */
+  /** loads from multiple places */
   split: boolean
+  /** pickup stop's node key */
+  pickupKey?: string
+  /** checked off as collected here */
+  picked?: boolean
 }
 
 export interface Stop {
@@ -51,6 +58,8 @@ export interface Stop {
   pickupOnly?: boolean
   /** run start, always first */
   start?: boolean
+  /** node key, for reordering */
+  nodeKey?: string
 }
 
 export interface DerivedContractObjective {
@@ -64,7 +73,9 @@ export interface DerivedContractObjective {
   delivered: boolean
   /** undefined = full turn-in */
   deliveredScu?: number
-  /** loads somewhere other than contract pickup */
+  /** undefined = not turned in */
+  turnedInScu?: number
+  /** loads elsewhere than contract pickup */
   pickups?: string[]
 }
 
@@ -87,7 +98,7 @@ export interface DerivedContract {
   reputation?: number
 }
 
-// hidden while its capture modal is open, so it isn't shown twice
+// hidden while capture modal open
 export const isHeld = (c: HaulingContract): boolean => !!c.pendingOcr
 
 export const activeContracts = (contracts: HaulingContract[]): HaulingContract[] =>
@@ -122,6 +133,7 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
           boxStr: boxBreakdown(o.boxes),
           boxCount: boxCount(o.boxes),
           delivered: o.delivered,
+          turnedInScu: o.turnedInScu,
           pickups: o.pickups
         })
       }
@@ -161,7 +173,7 @@ export function deriveStopsWithPickups(
     for (const o of c.objectives) {
       if (o.delivered) continue
       const locs = o.pickups && o.pickups.length ? o.pickups : c.pickup ? [c.pickup] : []
-      // dedupe: a split pickup can list the same terminal twice
+      // dedupe repeated terminals
       const byKey = new Map<string, string>()
       for (const pu of locs) {
         const k = normLoc(pu)
@@ -186,7 +198,7 @@ export function deriveStopsWithPickups(
     }
   }
 
-  // pull start group out so it isn't also on its delivery stop
+  // start can't double as delivery
   let startStop: Stop | null = null
   if (startKey) {
     const g = groups.get(startKey)
@@ -210,20 +222,11 @@ export function deriveStopsWithPickups(
     }
   }
 
-  const used = new Set<string>()
-  for (const s of stops) {
-    const g = groups.get(normLoc(s.destination))
-    if (g) {
-      s.pickups = g.items
-      used.add(normLoc(s.destination))
-    }
-  }
-
+  // own card per pickup visit
   const pos = new Map<string, number>()
   stops.forEach((s, i) => pos.set(normLoc(s.destination), i))
   const extras: Array<{ at: number; stop: Stop }> = []
-  for (const [key, g] of groups) {
-    if (used.has(key)) continue
+  for (const [, g] of groups) {
     const at = Math.min(...g.items.map((it) => pos.get(normLoc(it.destination)) ?? stops.length))
     const split = splitDestination(g.name)
     extras.push({
@@ -255,6 +258,91 @@ export function deriveStopsWithPickups(
   return out
 }
 
+// one card per route visit
+export function deriveRouteStops(
+  contracts: HaulingContract[],
+  route: RoutePlan,
+  order: string[]
+): Stop[] {
+  type Obj = HaulingContract['objectives'][number]
+  const byObjective = new Map<string, { c: HaulingContract; o: Obj }>()
+  for (const c of activeContracts(contracts)) for (const o of c.objectives) byObjective.set(o.id, { c, o })
+  // colour by destination slot
+  const dests = destinationsInOrder(contracts, order)
+  const colorOf = (dest: string): string => stopColor(Math.max(0, dests.indexOf(dest)))
+
+  const out: Stop[] = []
+  let deliveryNo = 0
+  for (const step of route.steps) {
+    const items: StopItem[] = []
+    const dropSeen = new Set<string>()
+    for (const r of step.dropRefs) {
+      if (dropSeen.has(r.objectiveId)) continue
+      dropSeen.add(r.objectiveId)
+      const f = byObjective.get(r.objectiveId)
+      if (!f) continue
+      const boxes = r.boxes ?? boxList(f.o.boxes)
+      items.push({
+        objectiveId: r.objectiveId,
+        contractId: f.c.id,
+        ref: f.c.ref,
+        scu: r.scu,
+        commodity: f.o.commodity,
+        boxStr: listBreakdown(boxes),
+        boxCount: boxes.length,
+        delivered: f.o.delivered,
+        turnedInScu: f.o.turnedInScu,
+        pickups: f.o.pickups
+      })
+    }
+    const pickups: PickupItem[] = []
+    const loadSeen = new Set<string>()
+    for (const r of step.loadRefs) {
+      if (loadSeen.has(r.objectiveId)) continue
+      loadSeen.add(r.objectiveId)
+      const f = byObjective.get(r.objectiveId)
+      if (!f) continue
+      const boxes = r.boxes ?? boxList(f.o.boxes)
+      pickups.push({
+        objectiveId: r.objectiveId,
+        contractId: f.c.id,
+        ref: f.c.ref,
+        commodity: f.o.commodity,
+        scu: r.scu,
+        boxStr: listBreakdown(boxes),
+        boxCount: boxes.length,
+        destination: f.o.destination,
+        split: (f.o.pickups?.length ?? 0) > 1,
+        pickupKey: step.nodeKey,
+        picked: (f.o.pickedUpAt ?? []).includes(step.nodeKey)
+      })
+    }
+    if (!items.length && !pickups.length) continue
+    const pickupOnly = items.length === 0
+    if (!pickupOnly) deliveryNo++
+    const split = splitDestination(step.label)
+    const firstDrop = items[0] ? byObjective.get(items[0].objectiveId)?.o.destination : undefined
+    out.push({
+      destination: step.label,
+      idx: out.length,
+      nodeKey: step.nodeKey,
+      n: pickupOnly ? '↑' : String(deliveryNo).padStart(2, '0'),
+      code: step.code || split.code,
+      name: split.name || step.label,
+      region: step.region || split.region,
+      color: pickupOnly ? '#5fd089' : colorOf(firstDrop ?? step.label),
+      items,
+      totSCU: items.reduce((a, i) => a + i.scu, 0),
+      totBoxes: items.reduce((a, i) => a + i.boxCount, 0),
+      totContracts: new Set(items.map((i) => i.contractId)).size,
+      pickups,
+      pickupOnly,
+      start: step.nodeKey === 'depot'
+    })
+  }
+  return out
+}
+
 export function deriveContracts(contracts: HaulingContract[]): DerivedContract[] {
   return contracts.map((c) => {
     const objectives = c.objectives.map((o) => {
@@ -269,6 +357,7 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
         boxCount: boxCount(o.boxes),
         delivered: o.delivered,
         deliveredScu: o.deliveredScu,
+        turnedInScu: o.turnedInScu,
         pickups: o.pickups
       }
     })
@@ -317,7 +406,7 @@ export function toHistoryEntry(
 ): HistoryEntry {
   const destinations = [...new Set(c.objectives.map((o) => o.destination))]
   const totalScu = c.objectives.reduce((a, o) => a + o.scuAmount, 0)
-  // unmarked: completed counts full, abandon counts zero; explicit wins
+  // unmarked: completed full, abandon zero
   const deliveredScu = c.objectives.reduce(
     (a, o) => a + (o.deliveredScu ?? (status === 'completed' ? o.scuAmount : 0)),
     0
@@ -349,7 +438,8 @@ export function toHistoryEntry(
 
 export function packBoxes(
   contracts: HaulingContract[],
-  order: string[]
+  order: string[],
+  includeDelivered = false
 ): Array<{
   id: string
   size: number
@@ -358,6 +448,9 @@ export function packBoxes(
   commodity: string
   stopIdx: number
   objectiveId: string
+  bucketId: string
+  /** ordinal within its objective */
+  slot: number
 }> {
   const stops = deriveStops(contracts, order)
   const live = activeContracts(contracts)
@@ -369,13 +462,16 @@ export function packBoxes(
     commodity: string
     stopIdx: number
     objectiveId: string
+    bucketId: string
+    slot: number
   }> = []
   let n = 0
   for (const stop of stops) {
     for (const c of live) {
       for (const o of c.objectives) {
         if (o.destination !== stop.destination) continue
-        if (o.delivered) continue // already off the ship
+        if (o.delivered && !includeDelivered) continue // already off the ship
+        let slot = 0
         for (const size of boxList(o.boxes)) {
           out.push({
             id: `pk-${n++}`,
@@ -384,7 +480,9 @@ export function packBoxes(
             dest: stop.code || stop.name,
             commodity: o.commodity,
             stopIdx: stop.idx,
-            objectiveId: o.id
+            objectiveId: o.id,
+            bucketId: o.id,
+            slot: slot++
           })
         }
       }

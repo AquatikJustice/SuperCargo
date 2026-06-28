@@ -7,7 +7,7 @@ interface.
 
 ## Download
 
-Grab the latest build from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
+Grab the latest build (**v0.7.0**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
 
 - **Windows installer** (`SuperCargo-Setup-*.exe`) installs and auto-updates.
 - **Windows portable** (`SuperCargo-Portable-*.exe`) is a single exe with no install.
@@ -34,8 +34,9 @@ If you hit problems, please open an issue with your distro and what happened.
   and abandons as they happen.
 - **Manifest.** Every active contract's cargo in one place, grouped by destination or by
   contract, with per-stop SCU and box totals and a color-coded hold-capacity bar.
-- **Loading Mode.** Follows your route and tells you what to load at each pickup, where to put it
+- **Auto-loading mode.** Follows your route and tells you what to load at each pickup, where to put it
   on your ship, and what to drop along the way, so a multi-pickup run turns into a checklist.
+- **Manual loading mode.** Would rather pack it your own way? Place every box in the 3D hold by hand.
 - **Route optimization.** Orders your stops to cut down on travel. Drag to override whenever you
   want.
 - **3D cargo grid and loading guide.** A packed view of your hold plus a per-stop walkthrough of
@@ -49,7 +50,6 @@ If you hit problems, please open an issue with your distro and what happened.
 - **Runs and history.** Work is grouped into runs. One trip is one run. History keeps each run's
   contracts and earnings.
 - **Compact overlay.** A small always-on-top "next stop" card you can pin over the game.
-- **Bundled game data.** Ships, freight locations, and commodities come with the app.
 - **StarStrings compatible.** When it's present, blueprint chances and reputation show up.
 
 ## Screenshots
@@ -73,6 +73,14 @@ Reading a contract screen with OCR:
 Or just add one by hand:
 
 ![Manual contract entry](assets/screens/manual-entry.png)
+
+Past runs, with their contracts and earnings:
+
+![Run history](assets/screens/history.png)
+
+The compact next-stop overlay you can pin over the game:
+
+![Compact overlay](assets/screens/overlay.png)
 
 ## Requirements
 

@@ -5,6 +5,7 @@ export const IPC = {
   settingsSet: 'settings:set',
   detectInstalls: 'installs:detect',
   pickLogFile: 'dialog:pickLogFile',
+  exportRunFile: 'dialog:exportRunFile',
 
   manifestLoad: 'manifest:load',
   manifestSave: 'manifest:save',
@@ -15,6 +16,7 @@ export const IPC = {
   uexGetShips: 'uex:getShips',
   uexGetLocations: 'uex:getLocations',
   uexGetCommodities: 'uex:getCommodities',
+  uexGetGridFaces: 'uex:getGridFaces',
 
   watcherStatus: 'watcher:status',
   watcherRestart: 'watcher:restart',
@@ -39,6 +41,8 @@ export const IPC = {
   contractDataStatus: 'contractData:status',
   contractDataRescan: 'contractData:rescan',
 
+  dataRefresh: 'data:refresh',
+
   telemetryStatus: 'telemetry:status',
 
   updaterCheck: 'updater:check',
@@ -56,6 +60,7 @@ export const IPC = {
   evtShips: 'evt:ships',
   evtLocations: 'evt:locations',
   evtCommodities: 'evt:commodities',
+  evtGridFaces: 'evt:gridFaces',
   evtWindowState: 'evt:window:state',
   evtOcrResult: 'evt:ocr:result',
   evtOcrStatus: 'evt:ocr:status',

@@ -31,6 +31,10 @@ export interface DeliveryObjective {
   delivered: boolean
   /** undefined = full turn-in */
   deliveredScu?: number
+  /** soft turn-in marked in loading mode, editable until the game log confirms; undefined = not yet turned in */
+  turnedInScu?: number
+  /** route node keys where this cargo has been collected, for the manifest pickup checklist */
+  pickedUpAt?: string[]
 }
 
 export interface HaulingContract {
@@ -68,6 +72,12 @@ export interface WatcherStatus {
   error?: string
 }
 
+/** saved orbit camera for the 3D cargo grid: where the eye sits and what it looks at */
+export interface GridView {
+  pos: [number, number, number]
+  target: [number, number, number]
+}
+
 export interface AppSettings {
   gameLogPath: string
   gameChannel: GameChannel
@@ -84,11 +94,11 @@ export interface AppSettings {
   ocrCrop: CropRect
   /** electron accelerator, '' = disabled */
   ocrHotkey: string
-  ocrSaveSamples: boolean
 
   /** '' = auto-locate next to game log */
   contractsDataPath: string
 
+  /** keep + upload each confirmed capture to train the shared OCR model */
   contributeTrainingData: boolean
   telemetryClientId: string
 
@@ -96,6 +106,9 @@ export interface AppSettings {
   theme: 'dark' | 'light'
   /** 1 = 100% */
   uiZoom: number
+
+  /** orbit camera per ship, so the 3D grid view survives leaving the page and restarts */
+  gridView?: Record<string, GridView>
 
   autoCheckUpdates: boolean
 
@@ -114,6 +127,8 @@ export interface FrozenBox {
   objectiveId: string
   destination: string
   delivered: boolean
+  /** ordinal within its objective, for stable manual-placement keys */
+  slot?: number
   // packed position, stamped when frozen; absent = didn't fit
   gridId?: string
   x?: number
@@ -131,6 +146,16 @@ export interface CargoLayout {
   boxes: FrozenBox[]
 }
 
+/** a box the user hand-placed in manual mode, keyed by objectiveId#slot so it
+ *  survives manifest edits. coords are bay-local cells, like a Placement. */
+export interface ManualPlacement {
+  gridId: string
+  x: number
+  y: number
+  z: number
+  rotated: boolean
+}
+
 export interface ManifestDoc {
   runId: string
   contracts: HaulingContract[]
@@ -142,9 +167,27 @@ export interface ManifestDoc {
   layout?: CargoLayout
   /** empty = let the solver pick the start */
   startLocation?: string
+  /** hand-placed boxes from manual mode, keyed by objectiveId#slot */
+  manualLayout?: Record<string, ManualPlacement>
+  /** resume the loading/manual walkthrough where you left off after a restart */
+  loadingActive?: boolean
+  manualActive?: boolean
+  loadingIdx?: number
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
+
+/** a finished contract's reproducible inputs, so a run can be replayed step by step
+ *  when debugging a route or loading issue. the contract is reset to its
+ *  pre-delivery state so re-running the planner reproduces the original route. */
+export interface RunReplay {
+  ship: string
+  installedModules?: string[]
+  startLocation: string
+  order: string[]
+  stopOrder: string[]
+  contract: HaulingContract
+}
 
 export interface HistoryEntry {
   id: string
@@ -168,6 +211,8 @@ export interface HistoryEntry {
   endedAt: string
   runId: string
   dataSource: DataSource
+  /** captured inputs to replay this run when debugging; absent on older entries */
+  replay?: RunReplay
 }
 
 export interface HistoryDoc {
@@ -258,6 +303,39 @@ export interface CommodityRoster {
   syncedAt: string
 }
 
+/** WALL = solid side, EXIT = cargo leaves here, AISLE = walkway you can pull into. */
+export type BayFaceKind = 'wall' | 'exit' | 'aisle'
+/** the six bay faces, by signed axis (y+ = roof side, y- = floor). */
+export type BayDir = 'x+' | 'x-' | 'y+' | 'y-' | 'z+' | 'z-'
+
+export interface BayMarkup {
+  id: string
+  faces?: Partial<Record<BayDir, BayFaceKind>>
+  /** which combined hold this bay belongs to; bays sharing a group pack as one room.
+   *  overrides the generated group; absent = use generated. */
+  group?: number
+  /** position/size override correcting the generated layout; absent = use generated. */
+  x?: number
+  y?: number
+  z?: number
+  w?: number
+  l?: number
+  h?: number
+}
+
+/** authored markup for one ship: orientation + per-bay faces and layout fixes. */
+export interface ShipMarkup {
+  ship: string
+  /** which signed axis points to the bow / to starboard (up is y+). */
+  frame?: { fore: BayDir; starboard: BayDir }
+  bays: BayMarkup[]
+}
+
+export interface GridFacesRoster {
+  gridFaces: ShipMarkup[]
+  syncedAt: string
+}
+
 export interface ScannedContract {
   accepted: ContractAcceptedEvent
   objectives: ObjectiveEvent[]
@@ -331,6 +409,12 @@ export interface ContractDataStatus {
   source: string | null
   titles: number
   blueprintContracts: number
+}
+
+export interface DataSyncResult {
+  reached: boolean
+  changed: boolean
+  updated: string[]
 }
 
 export type UpdateState =

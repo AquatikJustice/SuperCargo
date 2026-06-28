@@ -13,11 +13,13 @@ import type {
   ShipRoster,
   LocationRoster,
   CommodityRoster,
+  GridFacesRoster,
   ScannedContract,
   DisplayInfo,
   OcrEngineInfo,
   OcrResult,
-  ContractDataStatus
+  ContractDataStatus,
+  DataSyncResult
 } from '@shared/types'
 
 type Unsubscribe = () => void
@@ -35,6 +37,8 @@ const api = {
   detectInstalls: (): Promise<{ installs: DetectedInstalls; ordered: string[] }> =>
     ipcRenderer.invoke(IPC.detectInstalls),
   pickLogFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.pickLogFile),
+  exportRunFile: (payload: { defaultName: string; json: string }): Promise<string | null> =>
+    ipcRenderer.invoke(IPC.exportRunFile, payload),
 
   loadManifest: (): Promise<ManifestDoc> => ipcRenderer.invoke(IPC.manifestLoad),
   saveManifest: (doc: ManifestDoc): Promise<boolean> =>
@@ -47,6 +51,7 @@ const api = {
   getUexShips: (): Promise<ShipRoster | null> => ipcRenderer.invoke(IPC.uexGetShips),
   getUexLocations: (): Promise<LocationRoster | null> => ipcRenderer.invoke(IPC.uexGetLocations),
   getUexCommodities: (): Promise<CommodityRoster | null> => ipcRenderer.invoke(IPC.uexGetCommodities),
+  getUexGridFaces: (): Promise<GridFacesRoster | null> => ipcRenderer.invoke(IPC.uexGetGridFaces),
 
   getWatcherStatus: (): Promise<WatcherStatus> => ipcRenderer.invoke(IPC.watcherStatus),
   restartWatcher: (): Promise<boolean> => ipcRenderer.invoke(IPC.watcherRestart),
@@ -94,6 +99,8 @@ const api = {
   rescanContractData: (): Promise<ContractDataStatus> =>
     ipcRenderer.invoke(IPC.contractDataRescan),
 
+  refreshData: (): Promise<DataSyncResult> => ipcRenderer.invoke(IPC.dataRefresh),
+
   getTelemetryStatus: (): Promise<{ uploaded: number; queued: number }> =>
     ipcRenderer.invoke(IPC.telemetryStatus),
 
@@ -112,7 +119,8 @@ const api = {
   onOpenCapture: (cb: () => void): Unsubscribe => on(IPC.evtOpenCapture, cb),
   onShips: (cb: (roster: ShipRoster) => void): Unsubscribe => on(IPC.evtShips, cb),
   onLocations: (cb: (roster: LocationRoster) => void): Unsubscribe => on(IPC.evtLocations, cb),
-  onCommodities: (cb: (roster: CommodityRoster) => void): Unsubscribe => on(IPC.evtCommodities, cb)
+  onCommodities: (cb: (roster: CommodityRoster) => void): Unsubscribe => on(IPC.evtCommodities, cb),
+  onGridFaces: (cb: (roster: GridFacesRoster) => void): Unsubscribe => on(IPC.evtGridFaces, cb)
 }
 
 export type SuperCargoApi = typeof api

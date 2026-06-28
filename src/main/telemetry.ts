@@ -1,6 +1,5 @@
-// opt-in ocr sample upload, queued + retried
-// bucket is insert-only so this key can't read/list/delete
-
+// opt-in ocr upload, queued + retried
+// insert-only bucket, key can't read
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
@@ -47,7 +46,7 @@ function saveQueue(): void {
 }
 
 async function putObject(objectPath: string, body: Buffer, contentType: string): Promise<boolean> {
-  // no x-upsert: bucket has no SELECT policy
+  // no x-upsert, no SELECT policy
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${objectPath}`, {
     method: 'POST',
     headers: {
@@ -57,7 +56,7 @@ async function putObject(objectPath: string, body: Buffer, contentType: string):
     },
     body: new Uint8Array(body)
   })
-  // 409 = already there, treat as done
+  // 409 = already there
   return res.status === 200 || res.status === 409
 }
 
@@ -72,7 +71,8 @@ async function processQueue(): Promise<void> {
       if (!fs.existsSync(png) || !fs.existsSync(json)) continue
       try {
         const okPng = await putObject(`${item.clientId}/${item.id}.png`, fs.readFileSync(png), 'image/png')
-        const okJson = await putObject(`${item.clientId}/${item.id}.json`, fs.readFileSync(json), 'application/json')
+        // skip label if image rejected
+        const okJson = okPng && await putObject(`${item.clientId}/${item.id}.json`, fs.readFileSync(json), 'application/json')
         if (okPng && okJson) {
           fs.unlinkSync(png)
           fs.unlinkSync(json)

@@ -14,7 +14,9 @@ import type {
   OcrEngineInfo,
   HistoryEntry,
   HistoryStatus,
-  CargoLayout
+  CargoLayout,
+  FrozenBox,
+  ManualPlacement
 } from '@shared/types'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
@@ -23,12 +25,14 @@ import { payoutFactor, snapPayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules } from '@shared/shipModules'
-import { gridCapacity, gridsFor, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
+import { gridCapacity, gridsFor, loadableGrids, setGridFaces, type CargoGrid } from '@shared/cargoGrids'
 import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
-import { snapshotLayout, reconcileLayout } from './layout'
+import { reconcileLayout } from './layout'
+import type { LoadingStep } from './loading'
+import type { PackBox } from '@shared/packer'
 
-// fallback roster before first uex sync
+// fallback before first uex sync
 const ROSTER_SHIPS = withModules(SHIPS.filter((s) => isRosterShip(s.name)))
 
 export type ViewId = 'manifest' | 'contracts' | 'grid' | 'history' | 'settings'
@@ -62,7 +66,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   ocrDisplayId: '',
   ocrCrop: { x: 0.32, y: 0.2, w: 0.36, h: 0.6 },
   ocrHotkey: 'CommandOrControl+Shift+C',
-  ocrSaveSamples: false,
   contractsDataPath: '',
   contributeTrainingData: false,
   telemetryClientId: '',
@@ -70,7 +73,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   uiZoom: 1.1,
   autoCheckUpdates: true,
-  // pre-init only; true so welcome screen doesn't flash
+  // avoids a welcome-screen flash
   onboarded: true
 }
 
@@ -111,7 +114,7 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     haulType: e.haulType,
     pickup: e.pickup,
     reward: 0,
-    // 16 default when unknown, corrected via ocr/manual
+    // 16 default, fixed via ocr/manual
     maxBoxSize: e.maxBoxSize ?? 16,
     boxSizeConfirmed: e.maxBoxSize != null,
     acceptedAt: e.acceptedAt,
@@ -135,9 +138,9 @@ interface StoreState {
   runId: string
   contracts: HaulingContract[]
   order: string[]
-  /** visit sequence (node keys) the user drags; empty = use the suggestion */
+  /** empty = use the suggestion */
   stopOrder: string[]
-  /** empty = solver picks cheapest start */
+  /** empty = solver picks start */
   startLocation: string
   /** null = live plan */
   layout: CargoLayout | null
@@ -154,6 +157,8 @@ interface StoreState {
   locations: Location[]
   locationsSyncedAt: string
   commodities: Commodity[]
+  /** bumps to re-derive grid faces */
+  gridFacesSyncedAt: string
 
   ocrStatus: 'idle' | 'capturing' | 'recognizing'
   ocrResult: OcrResult | null
@@ -161,13 +166,34 @@ interface StoreState {
 
   // overlays
   captureOpen: boolean
-  /** capture adds to this existing contract */
+  /** capture adds to this contract */
   captureTargetId: string | null
   compactOpen: boolean
+
+  // survives leaving the grid page
+  loadingActive: boolean
+  /** drag boxes by hand */
+  manualActive: boolean
+  /** keyed by objectiveId#slot */
+  manualLayout: Record<string, ManualPlacement>
+  loadingIdx: number
+  /** frozen so turn-ins keep steps */
+  loadingSteps: LoadingStep[] | null
+  /** frozen so turn-ins don't repack */
+  loadingBoxes: PackBox[] | null
 
   init: () => Promise<void>
 
   setView: (view: ViewId) => void
+  setLoadingActive: (v: boolean | ((p: boolean) => boolean)) => void
+  setManualActive: (v: boolean) => void
+  setManualPlacement: (key: string, placement: ManualPlacement) => void
+  mergeManualPlacements: (placements: Record<string, ManualPlacement>) => void
+  clearManualPlacement: (key: string) => void
+  clearAllManual: () => void
+  setLoadingIdx: (v: number | ((p: number) => number)) => void
+  setLoadingSteps: (v: LoadingStep[] | null | ((p: LoadingStep[] | null) => LoadingStep[] | null)) => void
+  setLoadingBoxes: (v: PackBox[] | null | ((p: PackBox[] | null) => PackBox[] | null)) => void
   setGroupBy: (g: 'destination' | 'contract') => void
   toggleBoxMath: () => void
   openCapture: (targetId?: string) => void
@@ -190,13 +216,17 @@ interface StoreState {
   setContractStatus: (id: string, status: HaulingContract['status']) => void
   resetRouteToAuto: () => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
-  lockLayout: () => void
+  lockLayout: (boxes: FrozenBox[]) => void
   unlockLayout: () => void
   turnInDestination: (
     entries: Array<{ contractId: string; objectiveId: string; deliveredScu: number }>
   ) => void
+  /** undo a soft turn-in */
+  unmarkTurnIn: (objectiveIds: string[]) => void
+  /** toggle a pickup checkoff */
+  setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
-  /** changing maxBoxSize re-boxes every objective */
+  /** maxBoxSize change re-boxes everything */
   editContract: (
     id: string,
     patch: { title?: string; pickup?: string; rank?: string; reward?: number; maxBoxSize?: number }
@@ -212,13 +242,15 @@ interface StoreState {
     refs: Array<{ contractId: string; objectiveId: string }>,
     delivered: boolean
   ) => void
-  reorderStops: (from: number, to: number) => void
+  reorderStops: (fromKey: string, toKey: string) => void
   setStartLocation: (loc: string) => void
   startNewRun: () => void
 
   // history
   updateHistoryReward: (id: string, reward: number) => void
   clearHistory: () => void
+  /** remove every entry in run */
+  deleteRun: (runId: string) => void
 
   checkForUpdates: () => Promise<void>
 
@@ -233,16 +265,34 @@ function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] 
   return destinationsInOrder(contracts, prevOrder)
 }
 
-// guards against re-binding IPC listeners when init runs more than once
+// guards re-binding on repeat init
 let listenersBound = false
+// unsubscribes, for HMR teardown
+let listenerSubs: Array<() => void> = []
+const track = (u: () => void): void => {
+  listenerSubs.push(u)
+}
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    listenerSubs.forEach((u) => u())
+    listenerSubs = []
+    listenersBound = false
+  })
+  // hot-swap strands the components
+  import.meta.hot.accept(() => {
+    window.location.reload()
+  })
+}
 
 export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
-    const { runId, contracts, order, stopOrder, layout, startLocation } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation })
+    // main owns the file
+    if (isCompactWindow) return
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx })
   }
 
-  // grids for the active ship, used to pack and freeze the hold
+  // active ship's grids
   const holdGrids = (): CargoGrid[] => {
     const { settings } = get()
     return gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
@@ -250,7 +300,7 @@ export const useStore = create<StoreState>((set, get) => {
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
     const nextOrd = nextOrder(contracts, order ?? get().order)
-    // keep locked layout in sync without re-flowing
+    // sync locked layout, no re-flow
     let layout = get().layout
     if (!contracts.length) layout = null
     else if (layout?.locked) layout = reconcileLayout(contracts, layout, holdGrids())
@@ -258,21 +308,17 @@ export const useStore = create<StoreState>((set, get) => {
     persist()
   }
 
-  // freeze the whole hold that's aboard, with real positions, so delivering
-  // only removes boxes and never re-packs the rest
-  const freezeHold = (): CargoLayout => snapshotLayout(get().contracts, get().order, holdGrids())
-
-  // only main owns route ordering, compact would fight it
+  // only main owns route ordering
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
   const doReroute = async (): Promise<void> => {
     const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder } = get()
     const installed = settings.installedModules[settings.activeShip]
-    // route against what auto-loads (grid bays), not the nominal hold
+    // route against grid bays
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
-    // manual mode follows the user's stop order; auto lets the solver choose
+    // manual keeps order, auto re-solves
     const plan = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
       locations,
@@ -282,13 +328,13 @@ export const useStore = create<StoreState>((set, get) => {
       isRouteAuto ? undefined : stopOrder
     )
     set({ route: plan })
-    // compact computes the route only to display it; main owns the ordering
+    // compact only displays the route
     if (!plan || isCompactWindow) return
     const cur = get()
     const patch: Partial<StoreState> = {}
     const order = nextOrder(cur.contracts, plan.destOrder)
     if (order.length !== cur.order.length || order.some((d, i) => d !== cur.order[i])) patch.order = order
-    // while auto, adopt the suggested visit order so a drag starts from it
+    // auto adopts the suggested order
     if (
       isRouteAuto &&
       (plan.stopKeys.length !== cur.stopOrder.length || plan.stopKeys.some((k, i) => k !== cur.stopOrder[i]))
@@ -311,16 +357,45 @@ export const useStore = create<StoreState>((set, get) => {
     void window.supercargo.saveHistory({ entries })
   }
 
+  // bake soft turn-ins into delivery
+  const finalizeDelivery = (contract: HaulingContract): HaulingContract => ({
+    ...contract,
+    objectives: contract.objectives.map((o) =>
+      o.turnedInScu !== undefined
+        ? { ...o, delivered: true, deliveredScu: o.turnedInScu }
+        : { ...o, delivered: true }
+    )
+  })
+
   // newest first, deduped by id
   const archive = (contract: HaulingContract, status: HistoryStatus): void => {
-    const entry = toHistoryEntry(contract, status, get().runId, new Date().toISOString())
-    const history = [entry, ...get().history.filter((h) => h.id !== entry.id)]
+    const s = get()
+    const entry = toHistoryEntry(contract, status, s.runId, new Date().toISOString())
+    // snapshot inputs for replay
+    entry.replay = {
+      ship: s.settings.activeShip,
+      installedModules: s.settings.installedModules[s.settings.activeShip],
+      startLocation: s.startLocation,
+      order: s.order,
+      stopOrder: s.stopOrder,
+      contract: {
+        ...contract,
+        status: 'active',
+        objectives: contract.objectives.map((o) => ({
+          ...o,
+          delivered: false,
+          deliveredScu: undefined,
+          turnedInScu: undefined,
+          pickedUpAt: undefined
+        }))
+      }
+    }
+    const history = [entry, ...s.history.filter((h) => h.id !== entry.id)]
     set({ history })
     persistHistory(history)
   }
 
-  // disconnect ends every contract at once, looks like abandon;
-  // coalesce, only auto-archive a lone end (2+ = session leave, keep)
+  // only archive a lone end
   let abandonTimer: ReturnType<typeof setTimeout> | null = null
   const pendingEnds = new Map<string, HistoryStatus>()
   const ABANDON_COALESCE_MS = 2500
@@ -330,9 +405,7 @@ export const useStore = create<StoreState>((set, get) => {
     pendingEnds.clear()
     if (pending.length !== 1) {
       if (pending.length > 1)
-        console.info(
-          `[abandon] ${pending.length} contracts ended together; treating as a disconnect/force-close, keeping them`
-        )
+        console.info(`[abandon] ${pending.length} ended together, looks like a disconnect, keeping them`)
       return
     }
     const [id, status] = pending[0]
@@ -350,7 +423,7 @@ export const useStore = create<StoreState>((set, get) => {
     abandonTimer = setTimeout(flushEnds, ABANDON_COALESCE_MS)
   }
 
-  // un-hold pending-ocr; omit id = release all
+  // release pending-ocr holds
   const resolvePending = (missionId?: string): void => {
     const { contracts } = get()
     let changed = false
@@ -390,25 +463,44 @@ export const useStore = create<StoreState>((set, get) => {
     locations: [],
     locationsSyncedAt: '',
     commodities: [],
+    gridFacesSyncedAt: '',
     ocrStatus: 'idle',
     ocrResult: null,
     ocrEngine: null,
     captureOpen: false,
     captureTargetId: null,
     compactOpen: false,
+    loadingActive: false,
+    manualActive: false,
+    manualLayout: {},
+    loadingIdx: 0,
+    loadingSteps: null,
+    loadingBoxes: null,
 
     init: async () => {
-      const [settings, manifest, historyDoc, watcher, appVersion, roster, locRoster, comRoster] =
-        await Promise.all([
-          window.supercargo.getSettings(),
-          window.supercargo.loadManifest(),
-          window.supercargo.loadHistory(),
-          window.supercargo.getWatcherStatus(),
-          window.supercargo.getAppVersion(),
-          window.supercargo.getUexShips(),
-          window.supercargo.getUexLocations(),
-          window.supercargo.getUexCommodities()
-        ])
+      const [
+        settings,
+        manifest,
+        historyDoc,
+        watcher,
+        appVersion,
+        roster,
+        locRoster,
+        comRoster,
+        faceRoster
+      ] = await Promise.all([
+        window.supercargo.getSettings(),
+        window.supercargo.loadManifest(),
+        window.supercargo.loadHistory(),
+        window.supercargo.getWatcherStatus(),
+        window.supercargo.getAppVersion(),
+        window.supercargo.getUexShips(),
+        window.supercargo.getUexLocations(),
+        window.supercargo.getUexCommodities(),
+        window.supercargo.getUexGridFaces()
+      ])
+      // faces before grids for reconcile
+      if (faceRoster?.gridFaces) setGridFaces(faceRoster.gridFaces)
 
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
@@ -440,6 +532,11 @@ export const useStore = create<StoreState>((set, get) => {
         order: nextOrder(active, manifest.order),
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
+        manualLayout: manifest.manualLayout ?? {},
+        // resume walkthrough only with cargo
+        loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
+        manualActive: active.length ? (manifest.manualActive ?? false) : false,
+        loadingIdx: manifest.loadingIdx ?? 0,
         layout,
         history,
         watcher,
@@ -449,57 +546,62 @@ export const useStore = create<StoreState>((set, get) => {
         locations: locRoster?.locations ?? [],
         locationsSyncedAt: locRoster?.syncedAt ?? '',
         commodities: comRoster?.commodities ?? [],
+        gridFacesSyncedAt: faceRoster?.syncedAt ?? '',
         ready: true
       })
-      scheduleReroute() // initial order from loaded manifest
+      scheduleReroute()
 
-      // bind push listeners once; a StrictMode/HMR remount calls init again and
-      // would otherwise stack a fresh set every time (the EventEmitter warning)
+      // bind once; a remount calls init again
       if (listenersBound) return
       listenersBound = true
 
-      window.supercargo.onShips((r) => {
+      track(window.supercargo.onShips((r) => {
         if (r.ships.length) set({ ships: r.ships, shipsSyncedAt: r.syncedAt })
-      })
-      window.supercargo.onLocations((r) => {
+      }))
+      track(window.supercargo.onLocations((r) => {
         set({ locations: r.locations, locationsSyncedAt: r.syncedAt })
-        scheduleReroute() // new coords can change the route
-      })
-      window.supercargo.onCommodities((r) => {
+        scheduleReroute() // new coords, new route
+      }))
+      track(window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
-      })
+      }))
+      track(window.supercargo.onGridFaces((r) => {
+        setGridFaces(r.gridFaces)
+        set({ gridFacesSyncedAt: r.syncedAt || String(Date.now()) })
+        scheduleReroute()
+      }))
 
-      window.supercargo.onWatcherStatus((s) => set({ watcher: s }))
-      window.supercargo.onUpdate((u) => set({ update: u }))
-      window.supercargo.onContractAccepted((e: ContractAcceptedEvent) => {
+      track(window.supercargo.onWatcherStatus((s) => set({ watcher: s })))
+      track(window.supercargo.onUpdate((u) => set({ update: u })))
+      track(window.supercargo.onContractAccepted((e: ContractAcceptedEvent) => {
         const { contracts } = get()
-        // dedup relog re-emits, no dupe capture
+        // dedup relog re-emits
         if (contracts.some((c) => c.id === e.missionId)) return
-        // empty manifest = new trip, roll run id so batches group separately
+        // empty manifest = fresh trip
         if (contracts.length === 0) {
           const { runId, history } = get()
-          set({ runId: newRunId([runId, ...history.map((h) => h.runId)]) })
+          set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, manualActive: false, loadingIdx: 0 })
         }
         const contract = makeLogContract(e, contracts.length)
         const willOcr = get().settings.ocrAutoCapture && contractNeedsOcr(contract)
-        // hold until capture resolves, else looks like a dupe
+        // hold until capture resolves
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
         set({ isRouteAuto: true })
         scheduleReroute()
         if (willOcr) {
-          // open the capture view now so the wait shows progress, not a dead ui
+          // open capture so the wait shows
           set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
           window.supercargo.requestOcrCapture(e.missionId)
-          // safety net if capture never opens
+          // net if capture never opens
           setTimeout(() => resolvePending(e.missionId), 20000)
         }
-      })
-      window.supercargo.onObjective((e: ObjectiveEvent) => {
+      }))
+      track(window.supercargo.onObjective((e: ObjectiveEvent) => {
         const { contracts } = get()
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // match commodity+destination, fix scu in place not dupe
+        // fix scu in place, no dupe
         const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}`
         const exIdx = c.objectives.findIndex(
           (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}` === ek
@@ -523,56 +625,92 @@ export const useStore = create<StoreState>((set, get) => {
         updated[idx] = { ...c, objectives }
         commit(updated)
         scheduleReroute()
-      })
-      window.supercargo.onContractEnded((e: ContractEndedEvent) => {
+      }))
+      track(window.supercargo.onContractEnded((e: ContractEndedEvent) => {
         const { contracts } = get()
         const contract = contracts.find((c) => c.id === e.missionId)
         if (!contract) return
         if (e.completion === 'Complete') {
-          archive(contract, 'completed')
+          archive(finalizeDelivery(contract), 'completed')
           commit(contracts.filter((c) => c.id !== e.missionId))
           set({ isRouteAuto: true })
           scheduleReroute()
           return
         }
-        // coalesce so a disconnect storm doesn't wipe the manifest
+        // coalesce against a disconnect wipe
         if (e.completion === 'Abandon' || e.completion === 'Fail') {
           queueEnd(e.missionId, e.completion === 'Fail' ? 'failed' : 'abandoned')
         }
-      })
-      window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null }))
+      }))
+      track(window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null })))
 
-      // apply without persisting, else the windows ping-pong
-      window.supercargo.onManifestChanged((doc) => {
+      // apply without persisting, avoids ping-pong
+      track(window.supercargo.onManifestChanged((doc) => {
         set({
           runId: doc.runId,
           contracts: doc.contracts,
           order: doc.order,
           stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
+          manualLayout: doc.manualLayout ?? {},
           layout: doc.layout ?? null
         })
         scheduleReroute()
-      })
-      window.supercargo.onCompactState((s) => set({ compactOpen: s.open }))
+      }))
+      track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
 
-      window.supercargo.onOcrStatus((s) =>
+      track(window.supercargo.onOcrStatus((s) =>
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })
-      )
-      window.supercargo.onOcrResult((r) => {
-        // merge into the tagged contract, not a dupe
+      ))
+      track(window.supercargo.onOcrResult((r) => {
+        // merge into the tagged contract
         const target =
           r.targetMissionId && get().contracts.some((c) => c.id === r.targetMissionId)
             ? r.targetMissionId
             : null
         set({ ocrResult: r, ocrStatus: 'idle', captureOpen: true, captureTargetId: target })
-      })
+      }))
       void get().refreshOcrEngine()
-      // backfill contracts the live watcher missed
+      // backfill what the watcher missed
       void get().scanSession()
     },
 
     setView: (view) => set({ view }),
+    setLoadingActive: (v) => {
+      set((s) => ({ loadingActive: typeof v === 'function' ? v(s.loadingActive) : v }))
+      persist()
+    },
+    setManualActive: (v) => {
+      set({ manualActive: v })
+      persist()
+    },
+    setManualPlacement: (key, placement) => {
+      set((s) => ({ manualLayout: { ...s.manualLayout, [key]: placement } }))
+      persist()
+    },
+    mergeManualPlacements: (placements) => {
+      set((s) => ({ manualLayout: { ...s.manualLayout, ...placements } }))
+      persist()
+    },
+    clearManualPlacement: (key) => {
+      set((s) => {
+        if (!(key in s.manualLayout)) return s
+        const next = { ...s.manualLayout }
+        delete next[key]
+        return { manualLayout: next }
+      })
+      persist()
+    },
+    clearAllManual: () => {
+      set({ manualLayout: {} })
+      persist()
+    },
+    setLoadingIdx: (v) => {
+      set((s) => ({ loadingIdx: typeof v === 'function' ? v(s.loadingIdx) : v }))
+      persist()
+    },
+    setLoadingSteps: (v) => set((s) => ({ loadingSteps: typeof v === 'function' ? v(s.loadingSteps) : v })),
+    setLoadingBoxes: (v) => set((s) => ({ loadingBoxes: typeof v === 'function' ? v(s.loadingBoxes) : v })),
     setGroupBy: (groupBy) => set({ groupBy }),
     toggleBoxMath: () => set((s) => ({ showBoxMath: !s.showBoxMath })),
     openCapture: (targetId) => set({ captureOpen: true, captureTargetId: targetId ?? null }),
@@ -591,8 +729,15 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     updateSettings: async (patch) => {
+      const prev = get().settings
       const settings = await window.supercargo.setSettings(patch)
       set({ settings })
+      // ship/modules set the hold
+      const shipChanged = patch.activeShip !== undefined && patch.activeShip !== prev.activeShip
+      const modulesChanged =
+        patch.installedModules !== undefined &&
+        JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
+      if (shipChanged || modulesChanged) scheduleReroute()
     },
 
     addManualContract: (input) => {
@@ -622,7 +767,7 @@ export const useStore = create<StoreState>((set, get) => {
     addObjectivesToContract: (contractId, objectives, maxBoxSize) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
-        // key on commodity+destination, not scu (ocr misread would dupe)
+        // key on commodity+destination, not scu
         const key = (commodity: string, destination: string): string =>
           `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}`
         const seen = new Set(c.objectives.map((o) => key(o.commodity, o.destination)))
@@ -630,12 +775,12 @@ export const useStore = create<StoreState>((set, get) => {
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
           .filter((o) => !seen.has(key(o.commodity, o.destination)))
           .map((o) => makeObjective(o, maxBoxSize))
-        // re-box existing in case maxBoxSize changed
+        // re-box in case maxBoxSize changed
         const existing = c.objectives.map((o) => ({
           ...o,
           boxes: calculateBoxes(o.scuAmount, maxBoxSize)
         }))
-        // box size now confirmed, release the hold
+        // box size confirmed, release hold
         return {
           ...c,
           maxBoxSize,
@@ -656,12 +801,18 @@ export const useStore = create<StoreState>((set, get) => {
       scheduleReroute()
     },
 
+    // soft turn-in, reversible until Complete
     completeContract: (id) => {
-      const contract = get().contracts.find((c) => c.id === id)
-      if (contract) archive(contract, 'completed')
-      commit(get().contracts.filter((c) => c.id !== id))
-      set({ isRouteAuto: true })
-      scheduleReroute()
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== id) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) =>
+            o.turnedInScu === undefined ? { ...o, turnedInScu: o.scuAmount } : o
+          )
+        }
+      })
+      commit(contracts)
     },
 
     abandonContract: (id) => {
@@ -673,7 +824,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     updateHistoryReward: (id, reward) => {
-      // re-derive payout from stored completion % for partials
+      // re-derive payout from completion %
       const history = get().history.map((h) =>
         h.id === id ? { ...h, reward, payout: snapPayout(reward * payoutFactor(h.completionPct ?? 1)) } : h
       )
@@ -684,6 +835,12 @@ export const useStore = create<StoreState>((set, get) => {
     clearHistory: () => {
       set({ history: [] })
       persistHistory([])
+    },
+
+    deleteRun: (runId) => {
+      const history = get().history.filter((h) => (h.runId || '-') !== runId)
+      set({ history })
+      persistHistory(history)
     },
 
     setContractStatus: (id, status) => {
@@ -703,7 +860,10 @@ export const useStore = create<StoreState>((set, get) => {
         layout: null,
         startLocation: '',
         stopOrder: [],
-        isRouteAuto: true
+        isRouteAuto: true,
+        loadingActive: false,
+        manualActive: false,
+        loadingIdx: 0
       })
       persist()
     },
@@ -722,10 +882,11 @@ export const useStore = create<StoreState>((set, get) => {
       scheduleReroute()
     },
 
-    lockLayout: () => {
+    lockLayout: (boxes) => {
       const { contracts, layout } = get()
       if (layout?.locked || !activeContracts(contracts).length) return
-      set({ layout: freezeHold() })
+      // freeze the plan the grid shows
+      set({ layout: { locked: true, boxes } })
       persist()
     },
 
@@ -735,35 +896,53 @@ export const useStore = create<StoreState>((set, get) => {
       persist()
     },
 
+    // soft turn-in, live until Complete
     turnInDestination: (entries) => {
       if (!entries.length) return
-      const byContract = new Map<string, Map<string, number>>()
-      for (const e of entries) {
-        const m = byContract.get(e.contractId) ?? new Map<string, number>()
-        m.set(e.objectiveId, e.deliveredScu)
-        byContract.set(e.contractId, m)
-      }
+      const amounts = new Map(entries.map((e) => [e.objectiveId, e.deliveredScu]))
       const updated = get().contracts.map((c) => {
-        const m = byContract.get(c.id)
-        if (!m) return c
+        if (!c.objectives.some((o) => amounts.has(o.id))) return c
         return {
           ...c,
           objectives: c.objectives.map((o) =>
-            m.has(o.id)
-              ? {
-                  ...o,
-                  delivered: true,
-                  deliveredScu: Math.max(0, Math.min(o.scuAmount, Math.round(m.get(o.id) as number)))
-                }
+            amounts.has(o.id)
+              ? { ...o, turnedInScu: Math.max(0, Math.min(o.scuAmount, Math.round(amounts.get(o.id) as number))) }
               : o
           )
         }
       })
-      const finished = updated.filter((c) => byContract.has(c.id) && c.objectives.every((o) => o.delivered))
-      for (const c of finished) archive(c, 'completed')
-      const finishedIds = new Set(finished.map((c) => c.id))
-      commit(updated.filter((c) => !finishedIds.has(c.id)))
-      scheduleReroute()
+      commit(updated)
+    },
+
+    setPickedUp: (contractId, objectiveId, pickupKey, picked) => {
+      const updated = get().contracts.map((c) => {
+        if (c.id !== contractId) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) => {
+            if (o.id !== objectiveId) return o
+            const cur = o.pickedUpAt ?? []
+            const next = picked ? [...new Set([...cur, pickupKey])] : cur.filter((k) => k !== pickupKey)
+            return { ...o, pickedUpAt: next }
+          })
+        }
+      })
+      commit(updated)
+    },
+
+    unmarkTurnIn: (objectiveIds) => {
+      const ids = new Set(objectiveIds)
+      if (!ids.size) return
+      const updated = get().contracts.map((c) => {
+        if (!c.objectives.some((o) => ids.has(o.id) && o.turnedInScu !== undefined)) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) =>
+            ids.has(o.id) && o.turnedInScu !== undefined ? { ...o, turnedInScu: undefined } : o
+          )
+        }
+      })
+      commit(updated)
     },
 
     editContract: (id, patch) => {
@@ -863,12 +1042,14 @@ export const useStore = create<StoreState>((set, get) => {
       scheduleReroute()
     },
 
-    reorderStops: (from, to) => {
+    reorderStops: (fromKey, toKey) => {
       const stopOrder = [...get().stopOrder]
-      if (from < 0 || from >= stopOrder.length || to < 0 || to >= stopOrder.length) return
+      const from = stopOrder.indexOf(fromKey)
+      const to = stopOrder.indexOf(toKey)
+      if (from < 0 || to < 0 || from === to) return
       const [moved] = stopOrder.splice(from, 1)
       stopOrder.splice(to, 0, moved)
-      // manual order wins until you ask for a fresh suggestion
+      // manual order wins for now
       set({ stopOrder, isRouteAuto: false })
       persist()
       scheduleReroute()
@@ -876,7 +1057,7 @@ export const useStore = create<StoreState>((set, get) => {
 
     setStartLocation: (loc) => {
       if (loc === get().startLocation) return
-      // new start changes order, resume auto-sort
+      // new start, resume auto-sort
       set({ startLocation: loc, isRouteAuto: true })
       persist()
       scheduleReroute()
@@ -894,7 +1075,7 @@ export const useStore = create<StoreState>((set, get) => {
         `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}`
       const byId = new Map(scanned.map((s) => [s.accepted.missionId, s]))
       let changed = 0
-      // backfill objectives a partial live capture missed
+      // backfill objectives capture missed
       let contracts = get().contracts.map((c) => {
         const s = byId.get(c.id)
         if (!s) return c
@@ -915,7 +1096,7 @@ export const useStore = create<StoreState>((set, get) => {
           ]
         }
       })
-      // add active contracts not in the manifest at all
+      // add contracts missing entirely
       for (const s of scanned) {
         if (contracts.some((c) => c.id === s.accepted.missionId)) continue
         const contract = makeLogContract(s.accepted, contracts.length)

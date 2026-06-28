@@ -5,8 +5,8 @@ import { C, F, GLOW } from '../theme'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
 import { shipCapacity } from '@shared/shipModules'
+import { hasGridMarkup } from '@shared/cargoGrids'
 
-// close popover on outside click
 function useOutsideClose<T extends HTMLElement>(): {
   open: boolean
   setOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -35,6 +35,8 @@ const labelStyle: React.CSSProperties = {
 export default function TopBar(): React.ReactElement {
   const openCapture = useStore((s) => s.openCapture)
   const openCompact = useStore((s) => s.openCompact)
+  const closeCompact = useStore((s) => s.closeCompact)
+  const compactOpen = useStore((s) => s.compactOpen)
   const appVersion = useStore((s) => s.appVersion)
   const narrow = useNarrow()
 
@@ -82,7 +84,13 @@ export default function TopBar(): React.ReactElement {
 
       <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
         <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
-        <ChromeButton onClick={openCompact} icon={<CompactIcon />} label="COMPACT" compact={narrow} />
+        <ChromeButton
+          onClick={() => (compactOpen ? closeCompact() : openCompact())}
+          icon={<CompactIcon active={compactOpen} />}
+          label="OVERLAY"
+          compact={narrow}
+          active={compactOpen}
+        />
         <WindowControls />
       </div>
     </div>
@@ -189,9 +197,13 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const shipName = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const ships = useStore((s) => s.ships)
+  const gridFacesSyncedAt = useStore((s) => s.gridFacesSyncedAt)
   const updateSettings = useStore((s) => s.updateSettings)
   const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
   const shipNames = useMemo(() => ships.map((s) => s.name), [ships])
+  // recompute when markup syncs
+  const needsGrid = useMemo(() => (name: string) => !hasGridMarkup(name), [gridFacesSyncedAt])
+  const activeNeedsGrid = needsGrid(shipName)
   const ship = ships.find((s) => s.name === shipName)
   const scu = shipCapacity(ship, installedModules[shipName])
   const modules = ship?.modules ?? []
@@ -228,6 +240,11 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
         }}
         hoverStyle={{ border: `1px solid ${C.acc}`, textShadow: GLOW }}
       >
+        {activeNeedsGrid && (
+          <span title="This ship's cargo grid isn't optimized for the loading system yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1 }}>
+            ⚠
+          </span>
+        )}
         <span>{shipName}</span>
         <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{scu} SCU</span>
         <svg
@@ -265,6 +282,8 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
             autoFocus
             clearOnFocus
             search
+            warn={needsGrid}
+            warnTitle="Cargo grid not optimized for the loading system yet"
             onSelect={(name) => void updateSettings({ activeShip: name })}
             placeholder="Search ships..."
           />
@@ -305,6 +324,15 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           )}
         </div>
       )}
+
+      {activeNeedsGrid && !narrow && (
+        <span
+          title="Pick a ship without the ⚠ for an accurate layout"
+          style={{ flex: '0 1 auto', minWidth: 0, marginLeft: 4, fontFamily: F.body, fontSize: 12, color: '#e8b13a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          Cargo grid not optimized for the loading system yet
+        </span>
+      )}
     </div>
   )
 }
@@ -332,12 +360,14 @@ function ChromeButton({
   onClick,
   icon,
   label,
-  compact
+  compact,
+  active
 }: {
   onClick: () => void
   icon: React.ReactNode
   label: string
   compact?: boolean
+  active?: boolean
 }): React.ReactElement {
   return (
     <Btn
@@ -347,9 +377,9 @@ function ChromeButton({
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        border: `1px solid rgba(255,255,255,0.18)`,
-        background: 'transparent',
-        color: C.body,
+        border: `1px solid ${active ? C.green : 'rgba(255,255,255,0.18)'}`,
+        background: active ? 'rgba(95,208,137,0.1)' : 'transparent',
+        color: active ? C.text : C.body,
         fontFamily: F.display,
         fontSize: 12,
         fontWeight: 600,
@@ -357,7 +387,7 @@ function ChromeButton({
         padding: compact ? '8px 10px' : '8px 14px',
         cursor: 'pointer'
       }}
-      hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text, textShadow: GLOW }}
+      hoverStyle={{ border: `1px solid ${active ? C.green : C.acc}`, color: C.text, textShadow: GLOW }}
     >
       {icon}
       {!compact && label}
@@ -434,10 +464,11 @@ function ScanIcon(): React.ReactElement {
   )
 }
 
-function CompactIcon(): React.ReactElement {
+function CompactIcon({ active }: { active?: boolean }): React.ReactElement {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
       <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+      {active && <rect x="8" y="8" width="8" height="8" rx="1.5" fill={C.green} stroke="none" />}
     </svg>
   )
 }

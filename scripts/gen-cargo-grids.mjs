@@ -1,26 +1,5 @@
-// Generate src/shared/cargoGrids.ts - per-ship cargo-bay geometry WITH POSITIONS
-// for the Phase 4 3D cargo grid view.
-//
-// PRIMARY SOURCE: sc-cargo.space (community cargo-bay layout tool, which in turn
-// credits Ratjack's grid reference). Unlike the datamine/UEX, sc-cargo gives the
-// real PER-GRID POSITION of every bay plus the way bays are split into physically
-// separated groups and each grid's MaxSize. Its data is snapshotted, parsed, and
-// committed at scripts/data/sccargo-ships.json (87 ships). Coordinate system:
-//   x = width axis, y = up/height, z = length axis.
-//   world position of a grid = (group.x + grid.x, grid.y, group.z + grid.z)  [cells]
-//
-// FALLBACK: ships sc-cargo doesn't cover fall back to the datamine grid list
-// (scripts/data/datamine-grids.json, baked from scunpacked) laid out as a simple
-// row of bays and flagged layout:'datamine' (positions approximate).
-//
-// NAMES: sc-cargo has no per-grid names, so we borrow the datamine grid name whose
-// dimensions match (by sorted W/L/H); leftover grids get a generic "Bay N".
-//
-// OVERRIDE LAYER: grids missing from sc-cargo (Ironclad / Assault LIFT pads) and
-// curated module bays (Aurora Mk II rack). Secure/lift grids are reference-only
-// (autoLoad:false), shown in the view but the packer must never auto-fill them.
-//
-// Run:  node scripts/gen-cargo-grids.mjs   (npm run gen:grids)
+// Builds src/shared/cargoGrids.ts from sc-cargo + datamine fallback.
+// npm run gen:grids
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -33,7 +12,6 @@ const OUT_TS = path.join(ROOT, 'src/shared/cargoGrids.ts')
 const SCCARGO = path.join(ROOT, 'scripts/data/sccargo-ships.json')
 const DATAMINE = path.join(ROOT, 'scripts/data/datamine-grids.json')
 
-// ---------- helpers ----------
 const norm = (s) =>
   String(s)
     .toLowerCase()
@@ -44,7 +22,7 @@ const norm = (s) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-// must match shipModules.ts `slug`
+// must match shipModules.ts slug
 const slug = (s) =>
   s
     .toLowerCase()
@@ -53,7 +31,7 @@ const slug = (s) =>
 
 const dimKey = (w, l, h) => [w, l, h].sort((a, b) => a - b).join('x')
 
-// ---------- roster (mirror uexMap.isRosterShip) ----------
+// mirrors uexMap.isRosterShip
 const SHIP_EXCLUDE = /\bedition\b|best in show/i
 function loadRoster() {
   const ts = fs.readFileSync(ROSTER_TS, 'utf8')
@@ -65,12 +43,10 @@ function loadRoster() {
     if (SHIP_EXCLUDE.test(name) || name === 'Drake Golem') continue
     out.push({ name, scu: Number(m[2]) })
   }
-  // de-dupe by name, keep first
   const seen = new Set()
   return out.filter((s) => (seen.has(s.name) ? false : (seen.add(s.name), true)))
 }
 
-// ---------- sc-cargo index ----------
 function buildScIndex(ships) {
   const byKey = new Map()
   for (const sh of ships) {
@@ -82,7 +58,7 @@ function buildScIndex(ships) {
   return byKey
 }
 
-// roster name -> [manufacturer, name] in sc-cargo (geometry verified identical).
+// roster name to sc-cargo [manufacturer, name]
 const ALIAS = {
   'Argo MPUV Cargo': ['Argo', 'MPUV-C'],
   'Argo MPUV Tractor': ['Argo', 'MPUV-T'],
@@ -90,14 +66,14 @@ const ALIAS = {
   'Crusader C2 Hercules Starlifter': ['Crusader', 'C2 Hercules'],
   'Crusader M2 Hercules Starlifter': ['Crusader', 'M2 Hercules'],
   'RSI Aurora Mk I CL': ['RSI', 'Aurora CL (Mk I)'],
-  'RSI Aurora Mk I SE': ['RSI', 'Aurora CL (Mk I)'], // SE shares CL geometry (6 SCU)
+  'RSI Aurora Mk I SE': ['RSI', 'Aurora CL (Mk I)'], // SE shares CL geometry
   'RSI Aurora Mk I ES': ['RSI', 'Aurora ES (Mk I)'],
   'RSI Aurora Mk I LN': ['RSI', 'Aurora LN (Mk I)'],
   'RSI Aurora Mk I LX': ['RSI', 'Aurora LX (Mk I)'],
   'RSI Aurora Mk I MR': ['RSI', 'Aurora MR (Mk I)'],
-  'RSI Aurora Mk II': ['RSI', 'Aurora (Mk II)'], // base 2 SCU; +curated rack module below
-  'MISC Starfarer': ['MISC', 'Starfarer Gemini'], // identical bays
-  'RSI Constellation Phoenix Emerald': ['RSI', 'Constellation Phoenix'], // paint variant
+  'RSI Aurora Mk II': ['RSI', 'Aurora (Mk II)'], // rack module added below
+  'MISC Starfarer': ['MISC', 'Starfarer Gemini'],
+  'RSI Constellation Phoenix Emerald': ['RSI', 'Constellation Phoenix'],
   'Anvil C8X Pisces Expedition': ['Anvil', 'C8X Pisces'],
   'Anvil Carrack Expedition': ['Anvil', 'Carrack'],
   'Aegis Retaliator': ['Aegis', 'Retaliator']
@@ -111,33 +87,25 @@ function matchSc(scIndex, ship) {
   }
   const nn = norm(ship.name)
   if (scIndex.has(nn)) return scIndex.get(nn)
-  // safe suffix only: roster name ends with the sc bare name (never mid-string,
-  // which would wrongly fold "Freelancer MAX" into base "Freelancer").
+  // suffix only, never mid-string
   for (const [k, rec] of scIndex) {
     if (k && nn.endsWith(' ' + k)) return rec
   }
   return null
 }
 
-// ---------- per-ship overrides ----------
-// Ships where sc-cargo's geometry is wrong/stale and UEX+datamine agree: use the
-// datamine layout instead (e.g. Hammerhead: sc-cargo 64 vs UEX/datamine 40).
-const PREFER_DATAMINE = new Set(['Aegis Hammerhead'])
+// stale sc-cargo geometry, use datamine
+const PREFER_DATAMINE = new Set(['Aegis Hammerhead', 'MISC Hull A'])
 
-// sc-cargo group index whose grids are reference-only (never auto-filled).
-// Safety-critical, so kept explicit rather than name/heuristic-matched.
-const REFERENCE_ONLY_GROUPS = { 'Drake Ironclad': [1] } // the Secured Cargo Bay
+// reference-only groups, explicit
+const REFERENCE_ONLY_GROUPS = { 'Drake Ironclad': [1] }
 
-// sc-cargo group -> installable module id (so the view can show/hide by module).
 const MODULE_OF = {
-  // Retaliator: group with 36 SCU is the stern bay, 38 SCU is the bow trio.
   'Aegis Retaliator': (_gi, groupScu) =>
     groupScu === 36 ? 'aegis-retaliator-stern' : 'aegis-retaliator-bow'
 }
 
-// LIFT pads missing from sc-cargo (Ratjack-verified, patch 4.8.x). reference-only:
-// cargo on an elevator can be dropped on a Quantum jump. Positioned clear of the
-// hull so they read as separate pads in the view.
+// lift pads sc-cargo lacks, reference-only
 const lift = (id, name, x, y, z) => ({
   id,
   name,
@@ -156,7 +124,7 @@ const ADD_GRIDS = {
   'Drake Ironclad Assault': [lift('lift-1', 'Lift 1', -4, 0, 0), lift('lift-2', 'Lift 2', -4, 0, 8)]
 }
 
-// Curated module bays not present in any source (real item dims unknown; SCU exact).
+// curated module bays absent from every source
 const MODULE_GRIDS = {
   'RSI Aurora Mk II': [
     {
@@ -175,7 +143,6 @@ const MODULE_GRIDS = {
   ]
 }
 
-// ---------- builders ----------
 function makeNamePicker(dmGrids) {
   const pool = (dmGrids || []).map((g) => ({ key: dimKey(g.w, g.l, g.h), name: g.name, used: false }))
   return (w, l, h) => {
@@ -254,12 +221,11 @@ function fromDatamine(dmGrids) {
       group: i,
       source: 'datamine'
     })
-    x += g.w + 1 // 1-cell aisle between bays
+    x += g.w + 1 // aisle between bays
   })
   return grids
 }
 
-// ---------- overlap validation (ship-space AABB) ----------
 function overlaps(a, b) {
   const ax2 = a.x + a.w,
     ay2 = a.y + a.h,
@@ -277,7 +243,6 @@ function findOverlaps(grids) {
   return bad
 }
 
-// ---------- main ----------
 function main() {
   const scShips = JSON.parse(fs.readFileSync(SCCARGO, 'utf8'))
   const datamine = JSON.parse(fs.readFileSync(DATAMINE, 'utf8'))
@@ -340,6 +305,8 @@ function writeOut(result) {
 // Regenerate: npm run gen:grids
 // Generated: ${new Date().toISOString().slice(0, 10)}
 
+import type { ShipMarkup, BayDir, BayFaceKind } from './types'
+
 export interface CargoGrid {
   id: string
   name: string
@@ -362,6 +329,11 @@ export interface CargoGrid {
   /** false = reference-only: shown in the view but the packer must never auto-fill it
    *  (secure vaults you can't fit haul boxes into; lift pads that drop cargo on a QT jump). */
   autoLoad?: boolean
+  /** the face cargo peels out toward (the ramp/exit); DERIVED from \`faces\`. when
+   *  set, the packer fills the deep end first so earlier drops sit nearest it. */
+  exit?: { axis: 'x' | 'z'; dir: -1 | 1 }
+  /** authored per-face markup (wall/exit/aisle), from synced grid-faces. */
+  faces?: Partial<Record<BayDir, BayFaceKind>>
   source: 'sccargo' | 'datamine' | 'override' | 'curated'
 }
 
@@ -382,16 +354,86 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 ${entries}
 }
 
+// authored markup (per-bay faces + layout fixes), synced from the repo like the
+// uex lists (markup tool -> data/uex/grid-faces.json). setGridFaces is called
+// once the roster loads; until then bays have no markup and the packer falls
+// back to a dense pack.
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h'>>
+let MARKUP: Record<string, Record<string, BayInfo>> = {}
+let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+
+export function setGridFaces(ships: ShipMarkup[]): void {
+  const map: Record<string, Record<string, BayInfo>> = {}
+  const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+  for (const s of ships) {
+    const bays: Record<string, BayInfo> = {}
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h }
+    map[s.ship] = bays
+    if (s.frame) frames[s.ship] = s.frame
+  }
+  MARKUP = map
+  FRAMES = frames
+}
+
+/** authored bow/starboard, or undefined (the view defaults bow to z-). */
+export function shipFrame(ship: string): NonNullable<ShipMarkup['frame']> | undefined {
+  return FRAMES[ship]
+}
+
+const DIR_TO_EXIT: Record<BayDir, { axis: 'x' | 'z'; dir: -1 | 1 }> = {
+  'x+': { axis: 'x', dir: 1 },
+  'x-': { axis: 'x', dir: -1 },
+  'z+': { axis: 'z', dir: 1 },
+  'z-': { axis: 'z', dir: -1 },
+  'y+': { axis: 'z', dir: -1 }, // roof: not a horizontal peel direction
+  'y-': { axis: 'z', dir: -1 }
+}
+
+// the packer peels toward a horizontal exit/aisle; the roof (y) is a bonus, not
+// a peel axis. prefer an EXIT face, else an AISLE face.
+function deriveExit(faces?: Partial<Record<BayDir, BayFaceKind>>): CargoGrid['exit'] {
+  if (!faces) return undefined
+  const horiz: BayDir[] = ['x+', 'x-', 'z+', 'z-']
+  const exit = horiz.find((d) => faces[d] === 'exit')
+  if (exit) return DIR_TO_EXIT[exit]
+  const aisle = horiz.find((d) => faces[d] === 'aisle')
+  return aisle ? DIR_TO_EXIT[aisle] : undefined
+}
+
 /** All grids for a ship (for the view), optionally limited to installed modules. */
 export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const rec = CARGO_GRIDS[ship]
   if (!rec) return []
-  return rec.grids.filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+  const bays = MARKUP[ship]
+  return rec.grids
+    .filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+    .map((g) => {
+      const m = bays && bays[g.id]
+      if (!m) return g
+      // apply any layout override, attach faces, derive the peel exit
+      return {
+        ...g,
+        ...(m.x !== undefined ? { x: m.x } : {}),
+        ...(m.y !== undefined ? { y: m.y } : {}),
+        ...(m.z !== undefined ? { z: m.z } : {}),
+        ...(m.w !== undefined ? { w: m.w } : {}),
+        ...(m.l !== undefined ? { l: m.l } : {}),
+        ...(m.h !== undefined ? { h: m.h } : {}),
+        faces: m.faces,
+        exit: deriveExit(m.faces)
+      }
+    })
 }
 
 /** Grids the packer may fill - gridsFor minus reference-only (secure/lift) bays. */
 export function loadableGrids(ship: string, installed?: string[]): CargoGrid[] {
   return gridsFor(ship, installed).filter((g) => g.autoLoad !== false)
+}
+
+// what actually fits on the run: auto-load bays only, no elevators or secure
+// storage. for the Ironclad this is ~2160, not the 2200 nominal hold.
+export function gridCapacity(ship: string, installed?: string[]): number {
+  return loadableGrids(ship, installed).reduce((a, g) => a + g.w * g.l * g.h, 0)
 }
 `
   fs.writeFileSync(OUT_TS, ts)

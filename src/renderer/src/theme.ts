@@ -10,6 +10,7 @@ export const C = {
   faint: '#a4adb1',
   ghost: '#8d9396',
   green: '#5fd089',
+  purple: '#7c74c8',
   amber: '#e6b65e',
   red: '#ec7470',
   line: 'rgba(255,255,255,0.12)',

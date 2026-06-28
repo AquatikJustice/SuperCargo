@@ -159,7 +159,7 @@ export default function OcrCalibrator(): React.ReactElement {
 
       {preview && (
         <div style={{ marginTop: 8, fontFamily: F.body, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Drag the box over the contract panel, drag its corner to resize. The crop saves
+          Drag the box over the contract panel, drag its corner to resize. It saves
           automatically. Hit <span style={{ fontFamily: F.mono, color: C.faint }}>DONE</span> to
           collapse the preview, or <span style={{ fontFamily: F.mono, color: C.faint }}>TEST READ</span> to
           check it.
@@ -180,7 +180,7 @@ export default function OcrCalibrator(): React.ReactElement {
               </div>
               {test.objectives.length === 0 ? (
                 <div style={{ fontFamily: F.body, fontSize: 12, color: C.amber }}>
-                  No objectives parsed. Adjust the crop to frame the objective lines, then test again.
+                  No objectives found. Move the capture box over the objective lines, then test again.
                 </div>
               ) : (
                 test.objectives.map((o, i) => (

@@ -5,7 +5,7 @@ import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
 import OcrCalibrator from '../components/OcrCalibrator'
 import PrivacyPolicy from '../components/PrivacyPolicy'
-import type { DisplayInfo, ContractDataStatus } from '@shared/types'
+import type { DisplayInfo, ContractDataStatus, DataSyncResult } from '@shared/types'
 import {
   APP_NAME,
   FANKIT_URL,
@@ -66,6 +66,8 @@ export default function SettingsPage(): React.ReactElement {
   const [hotkey, setHotkey] = useState(settings.ocrHotkey)
   const [contractData, setContractData] = useState<ContractDataStatus | null>(null)
   const [rescanning, setRescanning] = useState(false)
+  const [dataSyncing, setDataSyncing] = useState(false)
+  const [dataStatus, setDataStatus] = useState<DataSyncResult | null>(null)
   const [telemetry, setTelemetry] = useState<{ uploaded: number; queued: number } | null>(null)
 
   useEffect(() => {
@@ -87,6 +89,20 @@ export default function SettingsPage(): React.ReactElement {
       setContractData(await window.supercargo.rescanContractData())
     } finally {
       setRescanning(false)
+    }
+  }
+
+  const updateData = async (): Promise<void> => {
+    if (dataSyncing) return
+    setDataSyncing(true)
+    setDataStatus(null)
+    try {
+      const fn = window.supercargo.refreshData
+      setDataStatus(fn ? await fn() : { reached: false, changed: false, updated: [] })
+    } catch {
+      setDataStatus({ reached: false, changed: false, updated: [] })
+    } finally {
+      setDataSyncing(false)
     }
   }
 
@@ -214,15 +230,14 @@ export default function SettingsPage(): React.ReactElement {
       </div>
 
       <Section title="DATA" />
-      <div style={{ ...rowStyle, borderBottom: `1px solid ${C.lineSoft}`, alignItems: 'start' }}>
-        <span style={{ ...keyStyle, paddingTop: 2 }}>Game data</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <div style={rowStyle}>
+        <span style={keyStyle}>Game data</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <SmallBtn onClick={() => void updateData()}>{dataSyncing ? 'CHECKING...' : 'UPDATE DATA'}</SmallBtn>
           <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
             {ships.length} ships · {locations.length} locations · {commodities.length} commodities
           </span>
-          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Bundled with the app and kept current automatically. No account or token needed.
-          </span>
+          {!dataSyncing && dataStatus && <DataSyncPill result={dataStatus} />}
         </div>
       </div>
 
@@ -316,7 +331,7 @@ export default function SettingsPage(): React.ReactElement {
         </div>
       </div>
       <div style={{ ...rowStyle, gridTemplateColumns: '210px 1fr', alignItems: 'start' }}>
-        <span style={{ ...keyStyle, paddingTop: 4 }}>Crop region</span>
+        <span style={{ ...keyStyle, paddingTop: 4 }}>Capture area</span>
         <OcrCalibrator />
       </div>
       <div style={rowStyle}>
@@ -370,15 +385,6 @@ export default function SettingsPage(): React.ReactElement {
           <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>{settings.ocrCaptureDelay.toFixed(1)} s</span>
         </div>
       </div>
-      <div style={rowStyle}>
-        <span style={keyStyle}>Save training samples</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Toggle on={settings.ocrSaveSamples} onClick={() => void updateSettings({ ocrSaveSamples: !settings.ocrSaveSamples })} />
-          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Keep each confirmed capture (image + your corrections) to train a custom model later
-          </span>
-        </div>
-      </div>
 
       <Section title="CONTRIBUTE TRAINING DATA" />
       <div style={rowStyle}>
@@ -393,9 +399,9 @@ export default function SettingsPage(): React.ReactElement {
             }
           />
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, lineHeight: 1.6, maxWidth: 540 }}>
-            Anonymously upload the <strong style={{ color: C.body }}>grayscale contract-panel crop</strong> and your
-            confirmed text to help train the shared OCR model. Opt-in, with no account or identity. Only the cropped panel
-            (which you see in the capture window) is sent, and only when you confirm a read. It uploads in the background and
+            Anonymously send the <strong style={{ color: C.body }}>picture of the contract panel</strong> and the text you
+            confirmed, to help the app read contracts better. No account, no name. Only that one image (the same one you see
+            in the capture window) is sent, and only after you confirm it. It uploads in the background and
             retries if you&apos;re offline.
           </span>
         </div>
@@ -484,7 +490,7 @@ export default function SettingsPage(): React.ReactElement {
 }
 
 function AboutBlock(): React.ReactElement {
-  // badge png optional, text credit not
+  // badge png is optional
   const [logoOk, setLogoOk] = useState(true)
   const [showPolicy, setShowPolicy] = useState(false)
   return (
@@ -577,6 +583,15 @@ function Pill({ color, text }: { color: string; text: string }): React.ReactElem
       <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color }}>{text}</span>
     </span>
   )
+}
+
+function DataSyncPill({ result }: { result: DataSyncResult }): React.ReactElement {
+  if (!result.reached) return <Pill color={C.amber} text="NO CONNECTION" />
+  if (result.changed) {
+    const n = result.updated.length
+    return <Pill color={C.green} text={`UPDATED ${n} LIST${n === 1 ? '' : 'S'}`} />
+  }
+  return <Pill color={C.green} text="UP TO DATE" />
 }
 
 function SmallBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }): React.ReactElement {

@@ -221,7 +221,11 @@
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": -18956880483.059193,
+      "y": -2665823193.5330234,
+      "z": 5282237.225567,
+      "system": "stanton"
     },
     {
       "name": "Baijini Point",
@@ -1185,7 +1189,11 @@
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 22462605975.476906,
+      "y": 37186164329.143265,
+      "z": 743654.685314,
+      "system": "stanton"
     },
     {
       "name": "New Babbage",
@@ -1509,7 +1517,11 @@
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 18586917330.719185,
+      "y": -22152033653.831776,
+      "z": -262094.438106,
+      "system": "stanton"
     },
     {
       "name": "Rod's Fuel 'N Supplies",
@@ -1874,7 +1886,11 @@
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 12850128103.83473,
+      "y": -752434.615701,
+      "z": 572120.273853,
+      "system": "stanton"
     },
     {
       "name": "Terra Gateway (Stanton)",

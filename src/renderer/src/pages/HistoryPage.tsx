@@ -36,7 +36,7 @@ export default function HistoryPage(): React.ReactElement {
     [sorted, filter]
   )
 
-  // shown is newest-first; map insertion order keeps runs sorted
+  // insertion order keeps runs newest-first
   const groups = useMemo<RunGroupData[]>(() => {
     const map = new Map<string, HistoryEntry[]>()
     for (const e of shown) {
@@ -165,23 +165,75 @@ interface RunGroupData {
   latest: string
 }
 
+// fallback when native save fails
+function downloadJson(name: string, json: string): void {
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
+}
+
+function exportRun(group: RunGroupData): void {
+  const replays = group.entries.map((e) => e.replay).filter((r): r is NonNullable<typeof r> => !!r)
+  // inputs from the fullest snapshot
+  let ctx = replays[0]
+  for (const r of replays) if (r.order.length > (ctx?.order.length ?? -1)) ctx = r
+  const doc = {
+    app: 'SuperCargo',
+    kind: 'run-export',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    runId: group.runId,
+    ship: ctx?.ship ?? '',
+    installedModules: ctx?.installedModules,
+    startLocation: ctx?.startLocation ?? '',
+    order: ctx?.order ?? [],
+    stopOrder: ctx?.stopOrder ?? [],
+    contracts: replays.map((r) => r.contract),
+    summary: group.entries.map((e) => ({
+      ref: e.ref,
+      title: e.title,
+      status: e.status,
+      completionPct: e.completionPct,
+      payout: e.payout,
+      totalScu: e.totalScu,
+      totalBoxes: e.totalBoxes,
+      destinations: e.destinations
+    }))
+  }
+  const json = JSON.stringify(doc, null, 2)
+  const defaultName = `supercargo-run-${group.runId || 'export'}.json`
+  try {
+    void window.supercargo.exportRunFile({ defaultName, json }).catch(() => downloadJson(defaultName, json))
+  } catch {
+    downloadJson(defaultName, json)
+  }
+}
+
 function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: boolean }): React.ReactElement {
   const [open, setOpen] = useState(defaultOpen)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const deleteRun = useStore((s) => s.deleteRun)
   const { runId, entries, completedCount, abandonedCount, failedCount, earnings, latest } = group
 
   return (
-    <div style={{ marginBottom: 10, border: `1px solid ${C.line}` }}>
+    <div style={{ marginBottom: 10, border: `1px solid ${C.line}`, borderLeft: `3px solid ${C.acc}` }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', background: open ? C.accFill : 'transparent' }}>
       <Btn
         onClick={() => setOpen((o) => !o)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 14,
-          width: '100%',
+          flex: 1,
+          minWidth: 0,
           textAlign: 'left',
           border: 0,
-          borderLeft: `3px solid ${C.acc}`,
-          background: open ? C.accFill : 'transparent',
+          background: 'transparent',
           padding: '12px 14px',
           cursor: 'pointer'
         }}
@@ -213,6 +265,25 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
           {fmt(earnings)} <span style={{ fontSize: 11, color: C.dim }}>aUEC</span>
         </span>
       </Btn>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 4px', flex: 'none' }}>
+        <Btn
+          onClick={() => exportRun(group)}
+          title="Download this run's data as JSON to share for debugging"
+          style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 10px', cursor: 'pointer' }}
+          hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
+        >
+          EXPORT
+        </Btn>
+        <Btn
+          onClick={() => setConfirmDel(true)}
+          title="Delete this run from history"
+          style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 10px', cursor: 'pointer' }}
+          hoverStyle={{ color: C.red, border: `1px solid ${C.red}` }}
+        >
+          DELETE
+        </Btn>
+      </div>
+      </div>
 
       {open && (
         <div style={{ padding: '4px 14px 10px' }}>
@@ -244,6 +315,18 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
             <HistoryRow key={h.id} entry={h} />
           ))}
         </div>
+      )}
+      {confirmDel && (
+        <ConfirmModal
+          title={`Delete run ${runId}?`}
+          body="This permanently removes this run and every contract in it from history. It can't be undone."
+          confirmLabel="DELETE RUN"
+          onCancel={() => setConfirmDel(false)}
+          onConfirm={() => {
+            deleteRun(runId)
+            setConfirmDel(false)
+          }}
+        />
       )}
     </div>
   )
@@ -393,7 +476,7 @@ function ConfirmModal({
           <Btn
             onClick={onCancel}
             style={{ border: `1px solid rgba(255,255,255,0.2)`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', padding: '8px 16px', cursor: 'pointer' }}
-            hoverStyle={{ color: C.text, borderColor: C.body }}
+            hoverStyle={{ color: C.text, border: `1px solid ${C.body}` }}
           >
             CANCEL
           </Btn>

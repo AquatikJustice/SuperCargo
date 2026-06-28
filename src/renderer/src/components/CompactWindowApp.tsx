@@ -2,15 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
 import { buildLoadingSteps, type LoadingStep } from '../state/loading'
-import { splitDestination } from '../data/stations'
-import { Btn } from './ui'
-
-// always-on-top overlay (#compact), styled after the in-game contract tracker.
-// locked in place: no drag region anywhere, the window is pinned top-right.
-const NODRAG = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
 const WHITE = '#eaf1f7'
-// brighter than the app green so it stays legible over the game
 const GREEN = '#8fe9b0'
 
 export default function CompactWindowApp(): React.ReactElement {
@@ -19,21 +12,17 @@ export default function CompactWindowApp(): React.ReactElement {
   const route = useStore((s) => s.route)
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
-  const closeCompact = useStore((s) => s.closeCompact)
 
   useEffect(() => {
     void init()
   }, [init])
 
-  // the route broken into one step per destination, deepest first - same list
-  // the grid walks, so step N here is step N there
   const liveSteps = useMemo(
     () => (route ? buildLoadingSteps(contracts, route, order) : []),
     [contracts, route, order]
   )
 
   const [idx, setIdx] = useState(0)
-  // follow the main window's walkthrough while it's driving
   const [driven, setDriven] = useState(false)
   useEffect(
     () =>
@@ -44,30 +33,52 @@ export default function CompactWindowApp(): React.ReactElement {
     []
   )
 
-  // freeze the plan during a load session so a turn-in can't shift the steps,
-  // keeping our index aligned with the grid's
+  // freeze so turn-ins don't reindex
   const [frozen, setFrozen] = useState<LoadingStep[] | null>(null)
   useEffect(() => {
     setFrozen((prev) => (driven ? prev ?? liveSteps : null))
   }, [driven, liveSteps])
   const steps = frozen ?? liveSteps
 
-  const pendingObjIds = useMemo(
-    () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => !o.delivered).map((o) => o.id))),
-    [contracts]
-  )
-
   const safeIdx = Math.min(idx, Math.max(0, steps.length - 1))
   const step = steps[safeIdx]
 
-  // stepping here also advances the grid's loading walkthrough
-  const go = (n: number): void => {
-    const next = Math.max(0, Math.min(steps.length - 1, n))
-    setIdx(next)
-    window.supercargo?.setLoadingState?.({ active: true, idx: next })
+  // never merge by location id
+  const visits = useMemo(() => {
+    const out: { steps: LoadingStep[] }[] = []
+    steps.forEach((s, i) => {
+      const prev = i > 0 ? steps[i - 1] : null
+      if (out.length && prev && prev.nodeKey === s.nodeKey && prev.trip === s.trip) {
+        out[out.length - 1].steps.push(s)
+      } else {
+        out.push({ steps: [s] })
+      }
+    })
+    return out
+  }, [steps])
+  let visitIdx = 0
+  let seen = 0
+  for (let i = 0; i < visits.length; i++) {
+    if (safeIdx < seen + visits[i].steps.length) {
+      visitIdx = i
+      break
+    }
+    seen += visits[i].steps.length
   }
+  const here = visits[visitIdx]?.steps ?? []
+  const dropLines = here.filter((s) => s.kind === 'drop').flatMap((s) => s.lines)
+  const loadLines = here.filter((s) => s.kind === 'load').flatMap((s) => s.lines)
+  const handedOver = useMemo(
+    () =>
+      new Set(
+        contracts.flatMap((c) =>
+          c.objectives.filter((o) => o.delivered || o.turnedInScu !== undefined).map((o) => o.id)
+        )
+      ),
+    [contracts]
+  )
+  const stopCounter = step ? `${visitIdx + 1}/${visits.length}` : ''
 
-  // grow/shrink the window to fit whatever's shown
   const contentRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = contentRef.current
@@ -81,38 +92,9 @@ export default function CompactWindowApp(): React.ReactElement {
     return () => ro.disconnect()
   })
 
-  const isLoad = step?.kind === 'load'
-  const dest = step ? splitDestination(step.boundFor) : null
-  const destLabel = dest ? (dest.code ? `${dest.code} · ${dest.name}` : dest.name || step!.boundFor) : ''
-
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'transparent', fontFamily: F.display }}>
       <div ref={contentRef} style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 14 }}>
-          <span style={{ fontSize: 10, letterSpacing: '0.22em', color: 'rgba(180,198,210,0.6)' }}>
-            {driven ? 'LOADING' : 'SUPERCARGO'}
-          </span>
-          <Btn
-            onClick={closeCompact}
-            title="Close overlay"
-            style={{
-              ...NODRAG,
-              border: 0,
-              background: 'rgba(0,0,0,0.5)',
-              borderRadius: 4,
-              color: C.dim,
-              cursor: 'pointer',
-              display: 'flex',
-              padding: 2
-            }}
-            hoverStyle={{ color: C.text }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </Btn>
-        </div>
-
         {!ready ? null : !step ? (
           <Panel>
             <div style={{ padding: '12px 14px', fontSize: 13, color: C.dim, lineHeight: 1.5 }}>
@@ -121,48 +103,42 @@ export default function CompactWindowApp(): React.ReactElement {
           </Panel>
         ) : (
           <>
-            <Chip title={step.label} counter={`${safeIdx + 1}/${steps.length}`} />
+            <Chip title={step.label} counter={stopCounter} />
 
             <Panel>
               <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: 8,
-                    padding: '7px 14px 5px',
-                    fontFamily: F.display,
-                    fontSize: 11.5,
-                    letterSpacing: '0.16em'
-                  }}
-                >
-                  <span style={{ color: isLoad ? GREEN : C.amber }}>
-                    {isLoad ? `LOAD → ${destLabel}` : `DELIVER → ${destLabel}`}
-                  </span>
-                  {isLoad && step.groupTotal > 1 && step.placement && (
-                    <span style={{ fontFamily: F.body, fontSize: 11, letterSpacing: 0, color: 'rgba(185,210,235,0.7)' }}>
-                      {step.placement}
-                    </span>
-                  )}
-                </div>
-                {step.lines.map((l) => (
-                  <LoadLine
-                    key={`${step.kind}-${l.objectiveId}`}
-                    breakdown={l.breakdown}
-                    commodity={l.commodity}
-                    tell={isLoad ? l.tell : undefined}
-                    delivered={!isLoad && !pendingObjIds.has(l.objectiveId)}
-                  />
-                ))}
+                {dropLines.length > 0 && (
+                  <div>
+                    <SectionLabel color={C.amber}>DROP OFF HERE</SectionLabel>
+                    {dropLines.map((l) => (
+                      <LoadLine
+                        key={`drop-${l.objectiveId}`}
+                        breakdown={l.breakdown}
+                        commodity={l.commodity}
+                        delivered={handedOver.has(l.objectiveId)}
+                        tripPos={l.tripPos}
+                        tripTotal={l.tripTotal}
+                      />
+                    ))}
+                  </div>
+                )}
+                {loadLines.length > 0 && (
+                  <div>
+                    <SectionLabel color={GREEN}>PICK UP HERE</SectionLabel>
+                    {loadLines.map((l) => (
+                      <LoadLine
+                        key={`load-${l.objectiveId}`}
+                        breakdown={l.breakdown}
+                        commodity={l.commodity}
+                        tell={l.tell}
+                        tripPos={l.tripPos}
+                        tripTotal={l.tripTotal}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </Panel>
-
-            {steps.length > 1 && (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <NavBtn label="‹ PREV" onClick={() => go(safeIdx - 1)} disabled={safeIdx === 0} />
-                <NavBtn label="NEXT ›" onClick={() => go(safeIdx + 1)} disabled={safeIdx >= steps.length - 1} />
-              </div>
-            )}
           </>
         )}
       </div>
@@ -201,7 +177,7 @@ function Chip({ title, counter }: { title: string; counter: string }): React.Rea
         {title}
       </span>
       <span style={{ fontFamily: F.mono, fontSize: 11, color: 'rgba(185,210,235,0.8)', flex: 'none' }}>
-        {counter}
+        STOP {counter}
       </span>
     </div>
   )
@@ -223,19 +199,21 @@ function Panel({ children }: { children: React.ReactNode }): React.ReactElement 
   )
 }
 
-// breakdown up front so it matches the Freight Elevator box list, with the
-// tell underneath so you know which contract to pull it from. tell undefined
-// means a drop (no contract to hunt for).
+// tell undefined means a drop
 function LoadLine({
   breakdown,
   commodity,
   tell,
-  delivered
+  delivered,
+  tripPos,
+  tripTotal
 }: {
   breakdown: string
   commodity: string
   tell?: string | null
   delivered?: boolean
+  tripPos?: number
+  tripTotal?: number
 }): React.ReactElement {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '7px 14px', opacity: delivered ? 0.55 : 1 }}>
@@ -254,13 +232,6 @@ function LoadLine({
         }}
       />
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span style={{ fontSize: 15, lineHeight: 1.35, color: WHITE, textDecoration: delivered ? 'line-through' : 'none' }}>
-          <span style={{ color: C.amber, fontFamily: F.mono, fontWeight: 600 }}>{breakdown}</span>{' '}
-          <span style={{ color: GREEN }}>{commodity}</span>
-        </span>
-        {delivered && (
-          <span style={{ fontFamily: F.body, fontSize: 12, color: GREEN }}>✓ delivered</span>
-        )}
         {!delivered && tell !== undefined && (
           <span style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.3, color: 'rgba(196,214,230,0.85)' }}>
             {tell ? (
@@ -272,39 +243,25 @@ function LoadLine({
             )}
           </span>
         )}
+        <span style={{ fontSize: 15, lineHeight: 1.35, color: WHITE, textDecoration: delivered ? 'line-through' : 'none' }}>
+          <span style={{ color: C.amber, fontFamily: F.mono, fontWeight: 600 }}>{breakdown}</span>{' '}
+          <span style={{ color: GREEN }}>{commodity}</span>
+          {tripTotal && tripTotal > 1 && (
+            <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber }}> · trip {tripPos}/{tripTotal}</span>
+          )}
+        </span>
+        {delivered && (
+          <span style={{ fontFamily: F.body, fontSize: 12, color: GREEN }}>✓ turned in</span>
+        )}
       </span>
     </div>
   )
 }
 
-function NavBtn({
-  label,
-  onClick,
-  disabled
-}: {
-  label: string
-  onClick: () => void
-  disabled: boolean
-}): React.ReactElement {
+function SectionLabel({ color, children }: { color: string; children: React.ReactNode }): React.ReactElement {
   return (
-    <Btn
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        ...NODRAG,
-        flex: 1,
-        border: `1px solid ${disabled ? 'rgba(255,255,255,0.1)' : 'rgba(255,210,30,0.4)'}`,
-        borderRadius: 7,
-        background: 'rgba(8,14,20,0.6)',
-        color: disabled ? C.ghost : C.dim,
-        cursor: disabled ? 'default' : 'pointer',
-        fontSize: 11,
-        letterSpacing: '0.12em',
-        padding: '8px 0'
-      }}
-      hoverStyle={disabled ? {} : { color: C.text, borderColor: 'rgba(255,210,30,0.75)' }}
-    >
-      {label}
-    </Btn>
+    <div style={{ padding: '7px 14px 5px', fontFamily: F.display, fontSize: 11.5, letterSpacing: '0.16em', color }}>
+      {children}
+    </div>
   )
 }

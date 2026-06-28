@@ -4,10 +4,11 @@ import { C, F, GLOW, fmt } from '../theme'
 import { deriveContracts } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
+import TurnInModal from '../components/TurnInModal'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
-// minmax(0,…) so long names ellipsize, don't widen the track
-const OBJ_COLS = '58px minmax(0,1fr) minmax(0,1.4fr) 220px 70px'
+// long names ellipsize, not widen
+const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px'
 
 const statusColor: Record<string, string> = {
   active: C.green,
@@ -19,6 +20,9 @@ const statusColor: Record<string, string> = {
 export default function ContractsPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const abandonContract = useStore((s) => s.abandonContract)
+  const completeContract = useStore((s) => s.completeContract)
+  const turnInDestination = useStore((s) => s.turnInDestination)
+  const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const openCapture = useStore((s) => s.openCapture)
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const editContract = useStore((s) => s.editContract)
@@ -26,6 +30,7 @@ export default function ContractsPage(): React.ReactElement {
   // hide until ocr capture resolves
   const derived = useMemo(() => deriveContracts(contracts.filter((c) => !c.pendingOcr)), [contracts])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
+  const [editTurnIn, setEditTurnIn] = useState<TurnInTarget | null>(null)
 
   return (
     <div style={{ padding: PAGE_PADDING }}>
@@ -147,9 +152,17 @@ export default function ContractsPage(): React.ReactElement {
                       </DetailField>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
-                      {['SCU', 'COMMODITY', 'DESTINATION', 'BOX BREAKDOWN', 'COUNT'].map((h, i) => (
-                        <span key={h} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: i === 0 || i === 4 ? 'right' : 'left' }}>
-                          {h}
+                      {[
+                        { h: '', align: 'left' },
+                        { h: 'SCU', align: 'right' },
+                        { h: 'COMMODITY', align: 'left' },
+                        { h: 'DESTINATION', align: 'left' },
+                        { h: 'BOX BREAKDOWN', align: 'left' },
+                        { h: 'COUNT', align: 'right' },
+                        { h: '', align: 'left' }
+                      ].map((c, i) => (
+                        <span key={i} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: c.align as 'left' | 'right' }}>
+                          {c.h}
                         </span>
                       ))}
                     </div>
@@ -159,25 +172,42 @@ export default function ContractsPage(): React.ReactElement {
                         screen with OCR.
                       </div>
                     )}
-                    {c.objectives.map((o) => (
-                      <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
-                        <EditableScu value={o.scu} onCommit={(n) => setObjectiveScu(c.id, o.objectiveId, n)} />
-                        <EditableText
-                          value={o.commodity}
-                          onCommit={(v) => editObjective(c.id, o.objectiveId, { commodity: v })}
-                          placeholder="commodity"
-                          textStyle={{ fontSize: 14, color: C.textBody }}
-                        />
-                        <EditableText
-                          value={o.destination}
-                          onCommit={(v) => editObjective(c.id, o.objectiveId, { destination: v })}
-                          placeholder="destination"
-                          textStyle={{ fontSize: 13, color: C.dim }}
-                        />
-                        <span style={{ fontFamily: F.mono, fontSize: 12, color: '#b6bec0' }}>{o.boxStr || '-'}</span>
-                        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
-                      </div>
-                    ))}
+                    {c.objectives.map((o) => {
+                      const ti = o.turnedInScu
+                      const isTurnedIn = ti !== undefined
+                      // color tracks turn-in fullness
+                      const tiColor = ti === undefined ? C.textBody : ti >= o.scu ? C.green : ti <= 0 ? C.red : C.amber
+                      return (
+                        <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                          <span style={{ fontFamily: F.display, fontSize: 15, color: tiColor, textShadow: isTurnedIn ? GLOW : 'none' }}>
+                            {isTurnedIn ? '✓' : ''}
+                          </span>
+                          <EditableScu value={o.scu} onCommit={(n) => setObjectiveScu(c.id, o.objectiveId, n)} />
+                          <EditableText
+                            value={o.commodity}
+                            onCommit={(v) => editObjective(c.id, o.objectiveId, { commodity: v })}
+                            placeholder="commodity"
+                            textStyle={{ fontSize: 14, color: isTurnedIn ? tiColor : C.textBody }}
+                          />
+                          <EditableText
+                            value={o.destination}
+                            onCommit={(v) => editObjective(c.id, o.objectiveId, { destination: v })}
+                            placeholder="destination"
+                            textStyle={{ fontSize: 13, color: isTurnedIn ? tiColor : C.dim }}
+                          />
+                          <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : '#b6bec0' }}>{o.boxStr || '-'}</span>
+                          <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
+                          <Btn
+                            onClick={() => setEditTurnIn({ contractId: c.id, objectiveId: o.objectiveId, commodity: o.commodity, destination: o.destination, scu: o.scu, boxStr: o.boxStr, ref: c.ref, turnedInScu: ti })}
+                            title={isTurnedIn ? `Turned in: ${ti >= o.scu ? 'full' : ti <= 0 ? 'none' : `${ti} SCU`}. Click to change.` : 'Record what you handed over'}
+                            style={{ border: `1px solid ${tiColor}`, background: 'transparent', color: tiColor, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '5px 0', cursor: 'pointer', textAlign: 'center' }}
+                            hoverStyle={{ background: 'rgba(255,255,255,0.06)', textShadow: GLOW }}
+                          >
+                            {isTurnedIn ? '✓ EDIT' : 'TURN IN'}
+                          </Btn>
+                        </div>
+                      )
+                    })}
 
                     {c.blueprints.length > 0 && (
                       <div style={{ marginTop: 16, border: `1px solid ${C.accBorder}`, background: C.accFill, padding: '12px 14px' }}>
@@ -201,8 +231,22 @@ export default function ContractsPage(): React.ReactElement {
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
+                      {c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
+                        <>
+                          <ActionBtn
+                            label="↩ UNDO COMPLETE"
+                            color={C.amber}
+                            onClick={() => unmarkTurnIn(c.objectives.map((o) => o.objectiveId))}
+                          />
+                          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
+                            marked done · the game finishing the contract is what files it to History
+                          </span>
+                        </>
+                      ) : (
+                        <ActionBtn label="COMPLETE" color={C.green} onClick={() => completeContract(c.id)} />
+                      )}
                       <ActionBtn label="ABANDON" color={C.red} onClick={() => abandonContract(c.id)} />
                     </div>
                   </div>
@@ -212,8 +256,47 @@ export default function ContractsPage(): React.ReactElement {
           })}
         </>
       )}
+
+      {editTurnIn && (
+        <TurnInModal
+          eyebrow="EDIT TURN-IN"
+          heading={editTurnIn.commodity}
+          sub={`→ ${editTurnIn.destination}`}
+          items={[
+            {
+              objectiveId: editTurnIn.objectiveId,
+              contractId: editTurnIn.contractId,
+              breakdown: editTurnIn.boxStr || '-',
+              commodity: editTurnIn.commodity,
+              ref: editTurnIn.ref,
+              totalScu: editTurnIn.scu,
+              turnedInScu: editTurnIn.turnedInScu
+            }
+          ]}
+          onSave={(entries) => {
+            turnInDestination(entries)
+            setEditTurnIn(null)
+          }}
+          onUnmark={(ids) => {
+            unmarkTurnIn(ids)
+            setEditTurnIn(null)
+          }}
+          onClose={() => setEditTurnIn(null)}
+        />
+      )}
     </div>
   )
+}
+
+type TurnInTarget = {
+  contractId: string
+  objectiveId: string
+  commodity: string
+  destination: string
+  scu: number
+  boxStr: string
+  ref: string
+  turnedInScu?: number
 }
 
 function ActionBtn({ label, color, onClick }: { label: string; color: string; onClick: () => void }): React.ReactElement {
@@ -238,7 +321,6 @@ function ActionBtn({ label, color, onClick }: { label: string; color: string; on
   )
 }
 
-/** click-to-edit scu */
 function EditableScu({ value, onCommit }: { value: number; onCommit: (n: number) => void }): React.ReactElement {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(String(value))
@@ -323,7 +405,6 @@ function DetailField({ label, children }: { label: string; children: React.React
   )
 }
 
-/** click-to-edit text */
 function EditableText({
   value,
   onCommit,
@@ -389,7 +470,6 @@ function EditableText({
   )
 }
 
-/** click-to-edit number */
 function EditableNum({
   value,
   onCommit,

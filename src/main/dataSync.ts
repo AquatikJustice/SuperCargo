@@ -1,10 +1,10 @@
-// refresh bundled uex lists from the repo without an app update.
-// token users skip this, their live sync is fresher.
+// refresh bundled uex lists, no update
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 import { app } from 'electron'
+import type { DataSyncResult } from '@shared/types'
 
 const RAW_BASE = 'https://raw.githubusercontent.com/AquatikJustice/SuperCargo/master/data/uex'
 const FETCH_TIMEOUT_MS = 12000
@@ -12,7 +12,8 @@ const FETCH_TIMEOUT_MS = 12000
 const SPECS = [
   { repo: 'ships.json', cache: 'uex-vehicles.json', key: 'ships' },
   { repo: 'locations.json', cache: 'uex-locations.json', key: 'locations' },
-  { repo: 'commodities.json', cache: 'uex-commodities.json', key: 'commodities' }
+  { repo: 'commodities.json', cache: 'uex-commodities.json', key: 'commodities' },
+  { repo: 'grid-faces.json', cache: 'uex-grid-faces.json', key: 'gridFaces' }
 ] as const
 
 function cachePath(file: string): string {
@@ -32,7 +33,7 @@ function sha256(buf: Buffer | string): string {
   return crypto.createHash('sha256').update(buf).digest('hex')
 }
 
-// mtime guard: don't clobber a user-updated cache
+// don't clobber a user-updated cache
 export function seedCacheIfNeeded(): void {
   const dir = seedDir()
   for (const s of SPECS) {
@@ -67,18 +68,18 @@ async function fetchText(url: string): Promise<string | null> {
   }
 }
 
-// true if anything changed, so caller re-pushes rosters
-export async function refreshFromRepo(): Promise<boolean> {
+// reached=false means "couldn't check"
+export async function refreshFromRepo(): Promise<DataSyncResult> {
   const hashesText = await fetchText(`${RAW_BASE}/hashes.json`)
-  if (!hashesText) return false
+  if (!hashesText) return { reached: false, changed: false, updated: [] }
   let hashes: Record<string, string>
   try {
     hashes = JSON.parse(hashesText)
   } catch {
-    return false
+    return { reached: false, changed: false, updated: [] }
   }
 
-  let changed = false
+  const updated: string[] = []
   for (const s of SPECS) {
     const want = hashes[s.key]
     if (!want) continue
@@ -92,7 +93,7 @@ export async function refreshFromRepo(): Promise<boolean> {
 
     const body = await fetchText(`${RAW_BASE}/${s.repo}`)
     if (!body) continue
-    // verify hash + shape: guards truncated download or bad commit
+    // guards a truncated download
     if (sha256(body) !== want) continue
     try {
       const parsed = JSON.parse(body)
@@ -102,10 +103,10 @@ export async function refreshFromRepo(): Promise<boolean> {
     }
     try {
       fs.writeFileSync(cachePath(s.cache), body)
-      changed = true
+      updated.push(s.key)
     } catch (e) {
       console.warn(`[data] write ${s.cache} failed:`, (e as Error).message)
     }
   }
-  return changed
+  return { reached: true, changed: updated.length > 0, updated }
 }

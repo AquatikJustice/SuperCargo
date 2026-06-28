@@ -1,0 +1,1754 @@
+{
+  "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
+  "syncedAt": "2026-06-27",
+  "gridFaces": [
+    {
+      "ship": "Drake Ironclad",
+      "frame": {
+        "fore": "z-",
+        "starboard": "x+"
+      },
+      "bays": [
+        {
+          "id": "hold-center-1",
+          "faces": {
+            "z-": "exit",
+            "x+": "aisle",
+            "y+": "exit",
+            "x-": "wall",
+            "y-": "wall",
+            "z+": "aisle"
+          },
+          "x": -1
+        },
+        {
+          "id": "hold-center-2",
+          "faces": {
+            "z-": "exit",
+            "x-": "aisle",
+            "y+": "exit",
+            "x+": "wall",
+            "y-": "wall",
+            "z+": "aisle"
+          },
+          "x": 9
+        },
+        {
+          "id": "hold-1",
+          "faces": {
+            "z-": "exit",
+            "y+": "exit",
+            "x+": "aisle",
+            "x-": "wall",
+            "z+": "wall",
+            "y-": "wall"
+          },
+          "x": -1
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "z-": "exit",
+            "y+": "exit",
+            "x-": "aisle",
+            "x+": "wall",
+            "z+": "wall",
+            "y-": "wall"
+          },
+          "x": 9
+        },
+        {
+          "id": "lift-1",
+          "y": 0,
+          "faces": {
+            "z-": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "x-": "wall",
+            "z+": "exit",
+            "y+": "exit"
+          },
+          "z": -3,
+          "x": 0
+        },
+        {
+          "id": "lift-2",
+          "z": -3,
+          "faces": {
+            "y-": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "x-": "wall",
+            "z+": "exit",
+            "y+": "exit"
+          },
+          "x": 12
+        },
+        {
+          "id": "secure-hold-1",
+          "z": -4,
+          "y": 4,
+          "x": 3
+        },
+        {
+          "id": "secure-hold-3",
+          "y": 4,
+          "z": -8,
+          "x": 3
+        },
+        {
+          "id": "secure-hold-2",
+          "y": 4,
+          "z": -4,
+          "x": 9
+        },
+        {
+          "id": "secure-hold-center",
+          "y": 4,
+          "x": 6,
+          "z": -8
+        },
+        {
+          "id": "secure-hold-4",
+          "y": 4,
+          "x": 9,
+          "z": -8
+        }
+      ]
+    },
+    {
+      "ship": "Drake Ironclad Assault",
+      "frame": {
+        "fore": "z-",
+        "starboard": "x+"
+      },
+      "bays": [
+        {
+          "id": "hold-center-1",
+          "faces": {
+            "z-": "exit",
+            "x+": "aisle",
+            "y+": "exit",
+            "x-": "wall",
+            "z+": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hold-center-2",
+          "faces": {
+            "z-": "exit",
+            "x-": "aisle",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "lift-1",
+          "z": -3,
+          "faces": {
+            "z+": "exit",
+            "x-": "wall",
+            "z-": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "y+": "exit"
+          },
+          "x": 12
+        },
+        {
+          "id": "lift-2",
+          "z": -3,
+          "faces": {
+            "x-": "wall",
+            "z+": "exit",
+            "y-": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y+": "exit"
+          },
+          "x": 0
+        }
+      ]
+    },
+    {
+      "ship": "Argo RAFT",
+      "bays": [
+        {
+          "id": "ic-192",
+          "faces": {
+            "y-": "exit",
+            "x-": "exit",
+            "y+": "wall",
+            "z+": "exit",
+            "x+": "wall",
+            "z-": "wall"
+          }
+        }
+      ],
+      "frame": {
+        "fore": "z-",
+        "starboard": "x+"
+      }
+    },
+    {
+      "ship": "Drake Golem Ox",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "y+": "wall",
+            "z+": "exit",
+            "y-": "exit",
+            "x+": "wall",
+            "z-": "wall",
+            "x-": "wall"
+          }
+        }
+      ],
+      "frame": {
+        "fore": "z+",
+        "starboard": "x-"
+      }
+    },
+    {
+      "ship": "Aegis Avenger Titan",
+      "bays": [
+        {
+          "id": "titan",
+          "faces": {
+            "x-": "wall",
+            "x+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "z-": "wall",
+            "z+": "exit"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Aegis Avenger Titan Renegade",
+      "bays": [
+        {
+          "id": "titan",
+          "faces": {
+            "z+": "exit",
+            "x-": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Aegis Hammerhead",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "z+": "exit",
+            "x-": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Aegis Idris-M",
+      "bays": [
+        {
+          "id": "hangar-16",
+          "faces": {
+            "x-": "exit",
+            "x+": "wall",
+            "z-": "wall",
+            "y+": "exit",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-15",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-14",
+          "faces": {
+            "y+": "exit",
+            "x-": "exit",
+            "x+": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-13",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-12",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-11",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-10",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-9",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-8",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z-": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-7",
+          "faces": {
+            "y+": "exit",
+            "x+": "exit",
+            "x-": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-6",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-5",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-4",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-3",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "hangar-2",
+          "faces": {
+            "y+": "exit",
+            "x+": "exit",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hangar-1",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "wall",
+            "z+": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "cargo-room-front",
+          "faces": {
+            "x-": "exit",
+            "z-": "aisle",
+            "z+": "wall",
+            "x+": "exit",
+            "y+": "exit"
+          },
+          "y": 9,
+          "x": 3,
+          "z": 41,
+          "w": 14,
+          "l": 5
+        },
+        {
+          "id": "cargo-room-back",
+          "faces": {
+            "x-": "exit",
+            "z+": "aisle",
+            "z-": "wall",
+            "x+": "exit",
+            "y+": "exit"
+          },
+          "y": 9,
+          "x": 1,
+          "z": 36,
+          "w": 18,
+          "l": 4
+        },
+        {
+          "id": "cargo-room-small-2",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "z-": "exit"
+          },
+          "z": 46,
+          "y": 9,
+          "x": 3,
+          "w": 2,
+          "l": 1
+        },
+        {
+          "id": "cargo-room-medium",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "z-": "exit"
+          },
+          "z": 46,
+          "y": 9,
+          "x": 7.5,
+          "w": 5,
+          "l": 1
+        },
+        {
+          "id": "cargo-room-small-1",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "z-": "exit"
+          },
+          "x": 15,
+          "z": 46,
+          "y": 9,
+          "w": 2,
+          "l": 1
+        }
+      ]
+    },
+    {
+      "ship": "Aegis Idris-P",
+      "bays": [
+        {
+          "id": "hangar-8",
+          "faces": {
+            "z+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-16",
+          "faces": {
+            "z+": "wall",
+            "z-": "wall",
+            "x+": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-15",
+          "faces": {
+            "z+": "wall",
+            "x+": "wall",
+            "y+": "exit",
+            "x-": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-7",
+          "faces": {
+            "z+": "wall",
+            "x-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-5",
+          "faces": {
+            "z+": "wall",
+            "x-": "wall",
+            "x+": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-13",
+          "faces": {
+            "z+": "wall",
+            "x+": "wall",
+            "y+": "exit",
+            "x-": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-11",
+          "faces": {
+            "z+": "wall",
+            "x+": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-3",
+          "faces": {
+            "z+": "wall",
+            "x-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-1",
+          "faces": {
+            "z+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-9",
+          "faces": {
+            "z+": "wall",
+            "z-": "wall",
+            "x+": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-6",
+          "faces": {
+            "x-": "wall",
+            "z-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-4",
+          "faces": {
+            "x-": "wall",
+            "z-": "wall",
+            "x+": "exit",
+            "y+": "exit",
+            "z+": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-2",
+          "faces": {
+            "x-": "wall",
+            "z-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-10",
+          "faces": {
+            "z-": "wall",
+            "x+": "wall",
+            "y+": "exit",
+            "x-": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-12",
+          "faces": {
+            "z-": "wall",
+            "x+": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hangar-14",
+          "faces": {
+            "z-": "wall",
+            "x+": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "cargo-room-small-2",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "z-": "exit",
+            "y-": "wall"
+          },
+          "z": 46,
+          "y": 9,
+          "w": 2,
+          "l": 1,
+          "x": 3
+        },
+        {
+          "id": "cargo-room-medium",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "z-": "exit",
+            "y-": "wall"
+          },
+          "z": 46,
+          "y": 9,
+          "w": 5,
+          "l": 1,
+          "x": 7.5
+        },
+        {
+          "id": "cargo-room-small-1",
+          "faces": {
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "z-": "exit",
+            "y-": "wall"
+          },
+          "z": 46,
+          "y": 9,
+          "w": 2,
+          "l": 1,
+          "x": 15
+        },
+        {
+          "id": "cargo-room-front",
+          "faces": {
+            "z+": "wall",
+            "x+": "exit",
+            "y+": "exit",
+            "x-": "exit",
+            "z-": "aisle",
+            "y-": "wall"
+          },
+          "y": 9,
+          "w": 14,
+          "l": 5,
+          "x": 3,
+          "z": 41
+        },
+        {
+          "id": "cargo-room-back",
+          "faces": {
+            "x+": "exit",
+            "z+": "aisle",
+            "y+": "exit",
+            "x-": "exit",
+            "z-": "wall",
+            "y-": "wall"
+          },
+          "y": 9,
+          "w": 18,
+          "l": 4,
+          "x": 1,
+          "z": 36
+        },
+        {
+          "id": "bay-3-1",
+          "y": 9,
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "z-": "exit",
+            "x-": "exit",
+            "z+": "exit",
+            "y-": "wall"
+          },
+          "x": 6,
+          "z": 15
+        },
+        {
+          "id": "bay-3-2",
+          "y": 9,
+          "faces": {
+            "y+": "exit",
+            "x+": "exit",
+            "z-": "exit",
+            "x-": "exit",
+            "z+": "exit",
+            "y-": "wall"
+          },
+          "x": 11,
+          "z": 15
+        }
+      ]
+    },
+    {
+      "ship": "Aegis Reclaimer",
+      "bays": [
+        {
+          "id": "salvage-front-temp-1",
+          "y": 9,
+          "faces": {
+            "x+": "aisle",
+            "y+": "exit",
+            "z-": "exit",
+            "x-": "wall",
+            "y-": "wall",
+            "z+": "wall"
+          },
+          "x": 13,
+          "z": 23
+        },
+        {
+          "id": "salvage-front-temp-2",
+          "y": 9,
+          "faces": {
+            "y+": "exit",
+            "x-": "aisle",
+            "z+": "wall",
+            "z-": "exit",
+            "x+": "wall",
+            "y-": "wall"
+          },
+          "x": 20,
+          "z": 23
+        },
+        {
+          "id": "salvage-rear-temp-1",
+          "y": 9,
+          "faces": {
+            "y+": "exit",
+            "x+": "aisle",
+            "z-": "wall",
+            "z+": "wall",
+            "x-": "wall",
+            "y-": "wall"
+          },
+          "x": 13,
+          "z": 34
+        },
+        {
+          "id": "salvage-rear-temp-2",
+          "y": 9,
+          "faces": {
+            "y+": "exit",
+            "z-": "wall",
+            "z+": "wall",
+            "x-": "aisle",
+            "x+": "wall",
+            "y-": "wall"
+          },
+          "x": 20,
+          "z": 34
+        },
+        {
+          "id": "small-4",
+          "faces": {
+            "x+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "x-": "exit",
+            "z+": "wall",
+            "z-": "aisle"
+          }
+        },
+        {
+          "id": "hold-4",
+          "faces": {
+            "x+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "x-": "exit",
+            "z+": "aisle",
+            "z-": "aisle"
+          }
+        },
+        {
+          "id": "hold-3",
+          "faces": {
+            "x+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "x-": "exit",
+            "z+": "aisle",
+            "z-": "aisle"
+          }
+        },
+        {
+          "id": "small-3",
+          "faces": {
+            "x+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "x-": "exit",
+            "z+": "aisle",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "small-1",
+          "faces": {
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "x+": "exit",
+            "z+": "aisle",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hold-1",
+          "faces": {
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "x+": "exit",
+            "z+": "aisle",
+            "z-": "aisle"
+          }
+        },
+        {
+          "id": "small-2",
+          "faces": {
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "x+": "exit",
+            "z+": "wall",
+            "z-": "aisle"
+          }
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "x+": "exit",
+            "z+": "aisle",
+            "z-": "aisle"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Anvil Asgard",
+      "bays": [
+        {
+          "id": "ic",
+          "faces": {
+            "z+": "exit",
+            "z-": "exit",
+            "x-": "exit",
+            "x+": "exit",
+            "y+": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Anvil C8 Pisces",
+      "bays": [
+        {
+          "id": "hold-1",
+          "faces": {
+            "x+": "exit",
+            "y+": "exit",
+            "z+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "x-": "exit",
+            "y+": "exit",
+            "z+": "wall",
+            "z-": "wall",
+            "x+": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Anvil C8X Pisces Expedition",
+      "bays": [
+        {
+          "id": "hold-1",
+          "faces": {
+            "y-": "wall",
+            "y+": "exit",
+            "x+": "exit",
+            "z+": "wall",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "y-": "wall",
+            "x-": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z+": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Argo SRV",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "x-": "exit",
+            "x+": "exit",
+            "z+": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Fortune",
+      "bays": [
+        {
+          "id": "side-1",
+          "y": 2.5,
+          "faces": {
+            "x+": "wall",
+            "y+": "exit",
+            "z-": "exit",
+            "x-": "exit",
+            "y-": "exit",
+            "z+": "exit"
+          },
+          "x": -1.5,
+          "w": 1,
+          "h": 2,
+          "l": 3,
+          "z": 0
+        },
+        {
+          "id": "side-2",
+          "y": 2.5,
+          "faces": {
+            "y+": "exit",
+            "z-": "exit",
+            "z+": "exit",
+            "y-": "exit",
+            "x+": "exit",
+            "x-": "wall"
+          },
+          "x": 2.5,
+          "w": 1,
+          "h": 2,
+          "l": 3,
+          "z": 0
+        },
+        {
+          "id": "lift",
+          "z": 8,
+          "faces": {
+            "z+": "exit",
+            "x-": "wall",
+            "x+": "wall",
+            "z-": "exit",
+            "y-": "wall",
+            "y+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Crusader C2 Hercules Starlifter",
+      "bays": [
+        {
+          "id": "small-c2",
+          "faces": {
+            "z+": "exit",
+            "z-": "aisle",
+            "y+": "wall",
+            "x-": "aisle",
+            "x+": "aisle",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "large-c2",
+          "faces": {
+            "z+": "aisle",
+            "z-": "exit",
+            "x-": "aisle",
+            "y+": "wall",
+            "x+": "aisle",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Crusader M2 Hercules Starlifter",
+      "bays": [
+        {
+          "id": "small-m2",
+          "faces": {
+            "x-": "aisle",
+            "z+": "exit",
+            "y+": "wall",
+            "x+": "aisle",
+            "z-": "aisle",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "large-m2",
+          "faces": {
+            "x+": "aisle",
+            "z+": "aisle",
+            "y+": "wall",
+            "x-": "aisle",
+            "z-": "exit",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Crusader A2 Hercules Starlifter",
+      "bays": [
+        {
+          "id": "small-a2",
+          "faces": {
+            "z+": "exit",
+            "z-": "exit",
+            "x-": "aisle",
+            "x+": "aisle",
+            "y+": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Crusader Intrepid",
+      "bays": [
+        {
+          "id": "hold-1",
+          "faces": {
+            "z+": "exit",
+            "x+": "wall",
+            "y+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall",
+            "x+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Crusader C1 Spirit",
+      "bays": [
+        {
+          "id": "hold-1",
+          "faces": {
+            "z+": "exit",
+            "x+": "exit"
+          }
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "z+": "exit",
+            "x-": "exit"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Clipper",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "z+": "exit",
+            "x+": "aisle",
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Corsair",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Salvation",
+      "bays": [
+        {
+          "id": "template",
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Constellation Andromeda",
+      "bays": [
+        {
+          "id": "main",
+          "faces": {
+            "z+": "exit",
+            "z-": "exit",
+            "x-": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "x+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Constellation Aquila",
+      "bays": [
+        {
+          "id": "main",
+          "faces": {
+            "z+": "exit",
+            "x+": "wall",
+            "y+": "wall",
+            "z-": "exit",
+            "x-": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Constellation Phoenix",
+      "bays": [
+        {
+          "id": "main",
+          "faces": {
+            "z+": "exit",
+            "z-": "exit",
+            "x-": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Constellation Phoenix Emerald",
+      "bays": [
+        {
+          "id": "main",
+          "faces": {
+            "z-": "exit",
+            "y-": "wall",
+            "x+": "wall",
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Hermes",
+      "bays": [
+        {
+          "id": "rsi-hermes-cargo-inventory-main-1",
+          "faces": {
+            "x+": "aisle",
+            "z+": "exit",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall",
+            "y+": "wall"
+          }
+        },
+        {
+          "id": "rsi-hermes-cargo-inventory-main-2",
+          "faces": {
+            "x-": "aisle",
+            "z+": "exit",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "wall",
+            "y+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Cutter",
+      "bays": [
+        {
+          "id": "4scu",
+          "w": 1,
+          "h": 2,
+          "l": 2,
+          "x": 0.5,
+          "y": 0,
+          "z": -0.5,
+          "faces": {
+            "x+": "exit",
+            "z+": "exit",
+            "y-": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Cutter Rambler",
+      "bays": [
+        {
+          "id": "2scu",
+          "faces": {
+            "z+": "exit",
+            "x+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Cutter Scout",
+      "bays": [
+        {
+          "id": "2scu",
+          "faces": {
+            "z+": "exit",
+            "x+": "exit",
+            "y+": "wall",
+            "y-": "wall",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "Drake Vulture",
+      "bays": [
+        {
+          "id": "drak-vulture-cargo-inventory-main",
+          "faces": {
+            "z+": "exit",
+            "x+": "aisle",
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Freelancer MAX",
+      "bays": [
+        {
+          "id": "mid-1",
+          "z": -3.5,
+          "faces": {
+            "x+": "exit",
+            "y+": "wall",
+            "z-": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "z+": "wall"
+          },
+          "x": 0.5,
+          "w": 1,
+          "h": 3,
+          "l": 2,
+          "y": 0
+        },
+        {
+          "id": "mid-2",
+          "z": -3.5,
+          "faces": {
+            "x-": "exit",
+            "z-": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "z+": "wall",
+            "x+": "wall"
+          },
+          "x": 2.5,
+          "w": 1,
+          "h": 3,
+          "l": 2,
+          "y": 0
+        },
+        {
+          "id": "max-rear",
+          "faces": {
+            "z-": "wall",
+            "x+": "wall",
+            "x-": "wall",
+            "y+": "wall",
+            "y-": "wall",
+            "z+": "exit"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Freelancer",
+      "bays": [
+        {
+          "id": "rear",
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "x-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "mid-1",
+          "faces": {
+            "x-": "wall",
+            "y+": "wall",
+            "z-": "wall",
+            "x+": "exit",
+            "y-": "wall",
+            "z+": "wall"
+          }
+        },
+        {
+          "id": "mid-2",
+          "faces": {
+            "z-": "wall",
+            "y+": "wall",
+            "x-": "exit",
+            "x+": "wall",
+            "y-": "wall",
+            "z+": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Freelancer DUR",
+      "bays": [
+        {
+          "id": "mid-1",
+          "faces": {
+            "x+": "exit",
+            "y+": "wall",
+            "z+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "mid-2",
+          "faces": {
+            "x-": "exit",
+            "z+": "wall",
+            "y+": "wall",
+            "z-": "wall",
+            "y-": "wall",
+            "x+": "wall"
+          }
+        },
+        {
+          "id": "dur-rear",
+          "faces": {
+            "y-": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "y+": "wall",
+            "z+": "exit",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Freelancer MIS",
+      "bays": [
+        {
+          "id": "mid-1",
+          "faces": {
+            "x+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "z+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "mid-2",
+          "faces": {
+            "x-": "exit",
+            "z+": "wall",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        },
+        {
+          "id": "dur-rear",
+          "faces": {
+            "x-": "wall",
+            "y+": "wall",
+            "z+": "exit",
+            "x+": "wall",
+            "y-": "wall",
+            "z-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Starlancer MAX",
+      "bays": [
+        {
+          "id": "max-template-1",
+          "z": -19,
+          "faces": {
+            "y+": "exit",
+            "x-": "exit",
+            "z+": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          },
+          "x": -1
+        },
+        {
+          "id": "max-template-2",
+          "z": -19,
+          "faces": {
+            "y+": "exit",
+            "x+": "exit",
+            "x-": "wall",
+            "z+": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          },
+          "x": 4
+        },
+        {
+          "id": "template-2",
+          "faces": {
+            "z-": "aisle",
+            "y+": "wall",
+            "x+": "wall",
+            "y-": "wall",
+            "z+": "exit",
+            "x-": "exit"
+          },
+          "x": 4
+        },
+        {
+          "id": "template-1",
+          "faces": {
+            "z-": "aisle",
+            "y+": "wall",
+            "x-": "wall",
+            "y-": "wall",
+            "x+": "exit",
+            "z+": "exit"
+          },
+          "x": -1
+        }
+      ]
+    },
+    {
+      "ship": "MISC Starlancer TAC",
+      "bays": [
+        {
+          "id": "template-1",
+          "faces": {
+            "z+": "exit",
+            "x+": "aisle",
+            "y+": "wall",
+            "x-": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "template-2",
+          "faces": {
+            "z+": "exit",
+            "x-": "aisle",
+            "y+": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "wall"
+          },
+          "x": 4
+        }
+      ]
+    },
+    {
+      "ship": "RSI Zeus Mk II CL",
+      "bays": [
+        {
+          "id": "cargo-left",
+          "w": 1,
+          "h": 2,
+          "l": 2,
+          "x": -1.5,
+          "y": 0,
+          "z": 4.5,
+          "faces": {
+            "z+": "exit",
+            "x+": "aisle",
+            "y+": "exit",
+            "z-": "exit",
+            "x-": "wall",
+            "y-": "wall"
+          }
+        },
+        {
+          "id": "cargo-right",
+          "w": 1,
+          "h": 2,
+          "l": 2,
+          "x": 5.5,
+          "y": 0,
+          "z": 4.5,
+          "faces": {
+            "z+": "exit",
+            "y+": "exit",
+            "x+": "wall",
+            "z-": "exit",
+            "y-": "wall",
+            "x-": "aisle"
+          }
+        },
+        {
+          "id": "cargo-main",
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "aisle",
+            "x+": "aisle",
+            "z-": "wall",
+            "y-": "wall"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "MISC Hull A",
+      "bays": [
+        {
+          "id": "hold-1",
+          "y": 3,
+          "faces": {
+            "x+": "wall",
+            "z+": "exit",
+            "x-": "exit",
+            "y+": "exit",
+            "z-": "exit",
+            "y-": "exit"
+          },
+          "x": 3
+        },
+        {
+          "id": "hold-3",
+          "y": 3,
+          "faces": {
+            "x-": "wall",
+            "z+": "exit",
+            "y-": "exit",
+            "z-": "exit",
+            "x+": "exit",
+            "y+": "exit"
+          },
+          "x": 9
+        },
+        {
+          "id": "hold-2",
+          "faces": {
+            "x+": "wall",
+            "z+": "exit",
+            "x-": "exit",
+            "y+": "exit",
+            "z-": "exit",
+            "y-": "exit"
+          }
+        },
+        {
+          "id": "hold-4",
+          "faces": {
+            "x-": "wall",
+            "z+": "exit",
+            "y-": "exit",
+            "z-": "exit",
+            "x+": "exit",
+            "y+": "exit"
+          }
+        }
+      ]
+    },
+    {
+      "ship": "RSI Perseus",
+      "bays": [
+        {
+          "id": "hold",
+          "faces": {
+            "y+": "wall",
+            "y-": "wall",
+            "z+": "wall",
+            "z-": "wall",
+            "x-": "exit",
+            "x+": "exit"
+          },
+          "w": 8,
+          "h": 2,
+          "l": 6,
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      ]
+    }
+  ]
+}

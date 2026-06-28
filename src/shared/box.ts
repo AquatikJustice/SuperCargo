@@ -33,6 +33,16 @@ export function boxBreakdown(boxes: BoxAllocation[]): string {
   return boxes.map((b) => `${b.count}×${b.scuSize}`).join(' + ')
 }
 
+// "2×32 + 1×24 + 1×2" from a flat list of box sizes, largest first
+export function listBreakdown(sizes: number[]): string {
+  const counts = new Map<number, number>()
+  for (const s of sizes) counts.set(s, (counts.get(s) ?? 0) + 1)
+  return [...counts.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([s, c]) => `${c}×${s}`)
+    .join(' + ')
+}
+
 export function boxList(boxes: BoxAllocation[]): number[] {
   const out: number[] = []
   for (const b of boxes) for (let i = 0; i < b.count; i++) out.push(b.scuSize)

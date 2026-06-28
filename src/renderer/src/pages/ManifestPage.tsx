@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
-import { deriveStopsWithPickups, deriveContracts, deriveTotals, activeContracts, type Stop, type PickupItem } from '../state/manifest'
+import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, type Stop, type StopItem, type PickupItem } from '../state/manifest'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
 import Typeahead from '../components/Typeahead'
-import { splitDestination } from '../data/stations'
+import TurnInModal from '../components/TurnInModal'
 
-const ITEM_GRID = '118px 1fr minmax(160px, 1fr) 70px'
+const ITEM_GRID = '118px 1fr minmax(160px, 1fr) 70px 104px'
 
 export default function ManifestPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
@@ -22,23 +22,25 @@ export default function ManifestPage(): React.ReactElement {
   const route = useStore((s) => s.route)
   const openCapture = useStore((s) => s.openCapture)
   const turnInDestination = useStore((s) => s.turnInDestination)
+  const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
 
-  const [turnInStop, setTurnInStop] = useState<Stop | null>(null)
+  const [turnIn, setTurnIn] = useState<{ stop: Stop; item: StopItem } | null>(null)
 
   const stops = useMemo(
-    () => deriveStopsWithPickups(contracts, order, startLocation),
-    [contracts, order, startLocation]
+    () =>
+      route
+        ? deriveRouteStops(contracts, route, order)
+        : deriveStopsWithPickups(contracts, order, startLocation),
+    [route, contracts, order, startLocation]
   )
   const totals = useMemo(
     () => deriveTotals(stops.filter((s) => !s.pickupOnly), contracts),
     [stops, contracts]
   )
-  // activeContracts drops finished + held-pending-ocr
   const derivedContracts = useMemo(() => deriveContracts(activeContracts(contracts)), [contracts])
 
-  // usable bays only (no elevators/secure storage), so the Ironclad reads ~2160
+  // usable bays only, no elevators or secure storage
   const capMax = gridCapacity(activeShip, installedModules[activeShip])
-  // what you're carrying leaving your current stop, not the run-wide peak
   const currentLoad = route?.startLoad ?? 0
   const here = route?.startStop || startLocation || activeShip
   const trips = route?.trips ?? 0
@@ -101,19 +103,35 @@ export default function ManifestPage(): React.ReactElement {
       />
 
       {groupBy === 'destination' ? (
-        <ByDestination stops={stops} showBoxMath={showBoxMath} onTurnIn={setTurnInStop} />
+        <ByDestination stops={stops} showBoxMath={showBoxMath} holdScu={capMax} onTurnIn={(stop, item) => setTurnIn({ stop, item })} />
       ) : (
         <ByContract contracts={derivedContracts} showBoxMath={showBoxMath} />
       )}
 
-      {turnInStop && (
+      {turnIn && (
         <TurnInModal
-          stop={turnInStop}
-          onClose={() => setTurnInStop(null)}
-          onSubmit={(entries) => {
+          heading={turnIn.stop.code ? `${turnIn.stop.code} · ${turnIn.stop.name}` : turnIn.stop.name}
+          sub="Mark what you handed over. You can change it until the game finishes the contract."
+          items={[
+            {
+              objectiveId: turnIn.item.objectiveId,
+              contractId: turnIn.item.contractId,
+              breakdown: turnIn.item.boxStr,
+              commodity: turnIn.item.commodity,
+              ref: turnIn.item.ref,
+              totalScu: turnIn.item.scu,
+              turnedInScu: turnIn.item.turnedInScu
+            }
+          ]}
+          onSave={(entries) => {
             turnInDestination(entries)
-            setTurnInStop(null)
+            setTurnIn(null)
           }}
+          onUnmark={(ids) => {
+            unmarkTurnIn(ids)
+            setTurnIn(null)
+          }}
+          onClose={() => setTurnIn(null)}
         />
       )}
     </div>
@@ -168,7 +186,6 @@ function MissingObjectivesBanner({
   )
 }
 
-// blank lets the solver pick the start
 function StartLocationPicker(): React.ReactElement {
   const startLocation = useStore((s) => s.startLocation)
   const setStartLocation = useStore((s) => s.setStartLocation)
@@ -215,7 +232,7 @@ function StartLocationPicker(): React.ReactElement {
               cursor: 'pointer',
               flex: 'none'
             }}
-            hoverStyle={{ borderColor: C.acc, color: C.text }}
+            hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}
           >
             CLEAR
           </Btn>
@@ -287,11 +304,13 @@ function GroupToggle({
 function ByDestination({
   stops,
   showBoxMath,
+  holdScu,
   onTurnIn
 }: {
   stops: Stop[]
   showBoxMath: boolean
-  onTurnIn: (stop: Stop) => void
+  holdScu: number
+  onTurnIn: (stop: Stop, item: StopItem) => void
 }): React.ReactElement {
   const reorderStops = useStore((s) => s.reorderStops)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -308,10 +327,10 @@ function ByDestination({
 
       {stops.map((stop) => (
         <div
-          key={stop.pickupOnly ? `pk-${stop.destination}` : stop.destination}
-          draggable={!stop.pickupOnly}
+          key={`${stop.idx}-${stop.pickupOnly ? 'p' : 'd'}-${stop.destination}`}
+          draggable={!stop.start}
           onDragStart={(e) => {
-            if (stop.pickupOnly) return
+            if (stop.start) return
             setDragIdx(stop.idx)
             try {
               e.dataTransfer.effectAllowed = 'move'
@@ -320,15 +339,16 @@ function ByDestination({
             }
           }}
           onDragOver={(e) => {
-            if (stop.pickupOnly) return
+            if (stop.start) return
             e.preventDefault()
             if (overIdx !== stop.idx) setOverIdx(stop.idx)
           }}
           onDragLeave={() => setOverIdx((v) => (v === stop.idx ? null : v))}
           onDrop={(e) => {
-            if (stop.pickupOnly) return
+            if (stop.start) return
             e.preventDefault()
-            if (dragIdx !== null && dragIdx !== stop.idx) reorderStops(dragIdx, stop.idx)
+            const fromKey = dragIdx !== null ? stops[dragIdx]?.nodeKey : undefined
+            if (fromKey && stop.nodeKey && fromKey !== stop.nodeKey) reorderStops(fromKey, stop.nodeKey)
             setDragIdx(null)
             setOverIdx(null)
           }}
@@ -343,8 +363,18 @@ function ByDestination({
             outlineOffset: 6
           }}
         >
-          <StopHeader stop={stop} onTurnIn={() => onTurnIn(stop)} />
-          {!stop.pickupOnly && stop.items.map((item) => (
+          <StopHeader stop={stop} />
+          {!stop.pickupOnly && stop.items.map((item) => {
+            // color tracks turn-in fullness
+            const tiColor =
+              item.turnedInScu === undefined
+                ? C.textBody
+                : item.turnedInScu >= item.scu
+                  ? C.green
+                  : item.turnedInScu <= 0
+                    ? C.red
+                    : C.amber
+            return (
             <div
               key={item.objectiveId}
               style={{
@@ -354,7 +384,7 @@ function ByDestination({
                 gap: 18,
                 padding: '7px 0 7px 39px',
                 borderBottom: `1px solid ${C.lineSoft}`,
-                opacity: item.delivered ? 0.45 : 1
+                opacity: item.delivered || item.turnedInScu !== undefined ? 0.45 : 1
               }}
             >
               <div
@@ -364,29 +394,26 @@ function ByDestination({
                   color: C.text,
                   textShadow: GLOW,
                   textAlign: 'right',
-                  textDecoration: item.delivered ? 'line-through' : 'none'
+                  textDecoration: item.delivered || item.turnedInScu !== undefined ? 'line-through' : 'none'
                 }}
               >
                 {item.scu}
                 <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontFamily: F.body,
-                      fontSize: 15,
-                      color: C.textBody,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {item.commodity}
-                  </span>
-                  <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{item.ref}]</span>
-                </div>
-                <PickupNote pickups={item.pickups} />
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
+                <span
+                  style={{
+                    fontFamily: F.body,
+                    fontSize: 15,
+                    color: C.textBody,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {item.commodity}
+                </span>
+                <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{item.ref}]</span>
               </div>
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
@@ -399,21 +426,23 @@ function ByDestination({
               <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>
                 {item.boxCount} box
               </div>
+              {item.delivered ? (
+                <span />
+              ) : (
+                <Btn
+                  onClick={() => onTurnIn(stop, item)}
+                  title={item.turnedInScu !== undefined ? 'Edit what you delivered' : 'Record what you handed over'}
+                  style={{ border: `1px solid ${tiColor}`, background: 'transparent', color: tiColor, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 0', cursor: 'pointer', textAlign: 'center' }}
+                  hoverStyle={{ background: 'rgba(255,255,255,0.06)', textShadow: GLOW }}
+                >
+                  {item.turnedInScu !== undefined ? '✎ DELIVERED' : 'TURN IN'}
+                </Btn>
+              )}
             </div>
-          ))}
-          {!stop.pickupOnly && (
-            <div style={{ display: 'grid', gridTemplateColumns: ITEM_GRID, alignItems: 'center', gap: 18, padding: '7px 0 0 39px' }}>
-              <div style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textAlign: 'right' }}>
-                {stop.totSCU}
-                <span style={{ fontSize: 11, color: C.accDeep }}> SCU</span>
-              </div>
-              <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.faint }}>STOP TOTAL</div>
-              <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{stop.totContracts} contracts</div>
-              <div style={{ fontFamily: F.mono, fontSize: 12, color: C.body, textAlign: 'right' }}>{stop.totBoxes} box</div>
-            </div>
-          )}
+            )
+          })}
           {stop.pickups && stop.pickups.length > 0 && (
-            <PickupSection items={stop.pickups} showBoxMath={showBoxMath} />
+            <PickupSection items={stop.pickups} showBoxMath={showBoxMath} label={!stop.pickupOnly} />
           )}
         </div>
       ))}
@@ -421,41 +450,37 @@ function ByDestination({
   )
 }
 
-function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMath: boolean }): React.ReactElement {
+function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; showBoxMath: boolean; label: boolean }): React.ReactElement {
+  const setPickedUp = useStore((s) => s.setPickedUp)
   return (
     <div style={{ marginTop: 6 }}>
-      <div style={{ padding: '8px 0 2px 39px', fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.green }}>
-        ↑ PICK UP HERE
-      </div>
-      {items.map((it) => {
-        const dest = splitDestination(it.destination)
-        return (
+      {label && (
+        <div style={{ padding: '8px 0 2px 39px', fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.green }}>
+          ↑ PICK UP HERE
+        </div>
+      )}
+      {items.map((it) => (
           <div
-            key={`${it.objectiveId}-${it.destination}`}
+            key={`${it.objectiveId}-${it.pickupKey}`}
             style={{
               display: 'grid',
               gridTemplateColumns: ITEM_GRID,
               alignItems: 'center',
               gap: 18,
               padding: '6px 0 6px 39px',
-              borderBottom: `1px solid ${C.lineSoft}`
+              borderBottom: `1px solid ${C.lineSoft}`,
+              opacity: it.picked ? 0.5 : 1
             }}
           >
-            <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right' }}>
+            <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right', textDecoration: it.picked ? 'line-through' : 'none' }}>
               {it.scu}
               <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
-                <span style={{ fontFamily: F.body, fontSize: 15, color: C.textBody, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {it.commodity}
-                </span>
-                <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{it.ref}]</span>
-              </div>
-              <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.green, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                → {dest.code || dest.name || it.destination}
-                {it.split ? ' · split pickup' : ''}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
+              <span style={{ fontFamily: F.body, fontSize: 15, color: C.textBody, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {it.commodity}
               </span>
+              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{it.ref}]</span>
             </div>
             {showBoxMath ? (
               <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
@@ -466,98 +491,58 @@ function PickupSection({ items, showBoxMath }: { items: PickupItem[]; showBoxMat
               <div />
             )}
             <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{it.boxCount} box</div>
+            {it.pickupKey ? (
+              <Btn
+                onClick={() => setPickedUp(it.contractId, it.objectiveId, it.pickupKey as string, !it.picked)}
+                title={it.picked ? 'Mark as not yet collected' : 'Check off this pickup'}
+                style={{ border: `1px solid ${C.green}`, background: 'transparent', color: C.green, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 0', cursor: 'pointer', textAlign: 'center' }}
+                hoverStyle={{ background: 'rgba(95,208,137,0.10)', textShadow: GLOW }}
+              >
+                {it.picked ? '✓ PICKED UP' : 'PICK UP'}
+              </Btn>
+            ) : (
+              <div />
+            )}
           </div>
         )
-      })}
+      )}
     </div>
   )
 }
 
-function StopHeader({ stop, onTurnIn }: { stop: Stop; onTurnIn: () => void }): React.ReactElement {
+function StopHeader({ stop }: { stop: Stop }): React.ReactElement {
   const locations = useStore((s) => s.locations)
-  // manual override wins over the location's flag
   const loc = useMemo(() => locations.find((l) => l.name === stop.destination), [locations, stop.destination])
   const external = stop.hasElevator ?? loc?.hasElevator
-  const anyLeft = stop.items.some((i) => !i.delivered)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 12, borderBottom: `1px solid ${C.lineStrong}` }}>
-      {stop.pickupOnly ? (
-        <div
-          style={{ color: stop.start ? C.acc : C.green, display: 'flex', flex: 'none', fontSize: 19, lineHeight: 1 }}
-          title={stop.start ? 'Starting location' : 'Pick-up stop'}
-        >
-          {stop.start ? '▸' : '↑'}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 12, borderBottom: `1px solid ${C.lineStrong}` }}>
+      {stop.start ? (
+        <div style={{ color: C.acc, display: 'flex', flex: 'none', fontSize: 19, lineHeight: 1 }} title="Starting location">
+          ▸
         </div>
       ) : (
         <div style={{ cursor: 'grab', color: '#a3adb1', display: 'flex', flex: 'none' }} title="Drag to reorder">
           <GripIcon />
         </div>
       )}
-      <div style={{ width: 11, height: 11, flex: 'none', background: stop.color }} />
-      {!stop.pickupOnly && (
-        <div style={{ fontFamily: F.mono, fontSize: 24, fontWeight: 600, color: C.text, textShadow: GLOW, flex: 'none', lineHeight: 1 }}>
-          {stop.n}
-        </div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          {stop.code && <span style={{ fontFamily: F.mono, fontSize: 13, color: C.acc, letterSpacing: '0.02em' }}>{stop.code}</span>}
-          <span
-            style={{
-              fontFamily: F.display,
-              fontSize: 19,
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-              color: C.text,
-              textShadow: GLOW,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}
-          >
-            {stop.name}
-          </span>
-        </div>
-        {stop.region && <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>{stop.region}</div>}
-      </div>
-      {stop.pickupOnly && (
-        <span
-          style={{
-            fontFamily: F.display,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.14em',
-            color: stop.start ? C.acc : C.green,
-            border: `1px solid ${stop.start ? C.acc : C.green}`,
-            padding: '4px 10px',
-            flex: 'none'
-          }}
-        >
-          {stop.start ? 'START' : 'PICK UP'}
-        </span>
-      )}
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontFamily: F.display,
+          fontSize: 18,
+          fontWeight: 600,
+          letterSpacing: '0.03em',
+          color: C.text,
+          textShadow: GLOW,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}
+      >
+        {stop.destination || stop.name}
+      </span>
       <ElevatorBadge external={external} />
-      {anyLeft && (
-        <Btn
-          onClick={onTurnIn}
-          title="Record what you turned in here"
-          style={{
-            border: `1px solid ${C.green}`,
-            background: 'rgba(95,208,137,0.10)',
-            color: C.text,
-            fontFamily: F.display,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.14em',
-            padding: '7px 13px',
-            cursor: 'pointer',
-            flex: 'none'
-          }}
-          hoverStyle={{ background: 'rgba(95,208,137,0.2)', textShadow: GLOW }}
-        >
-          TURN IN HERE
-        </Btn>
-      )}
     </div>
   )
 }
@@ -641,122 +626,6 @@ function ByContract({
         </div>
       ))}
     </div>
-  )
-}
-
-type TurnInMode = 'full' | 'part' | 'none'
-
-function TurnInModal({
-  stop,
-  onClose,
-  onSubmit
-}: {
-  stop: Stop
-  onClose: () => void
-  onSubmit: (entries: Array<{ contractId: string; objectiveId: string; deliveredScu: number }>) => void
-}): React.ReactElement {
-  const items = useMemo(() => stop.items.filter((i) => !i.delivered), [stop])
-  const [rows, setRows] = useState<Record<string, { mode: TurnInMode; amount: number }>>(() =>
-    Object.fromEntries(items.map((i) => [i.objectiveId, { mode: 'full' as TurnInMode, amount: i.scu }]))
-  )
-  const set = (id: string, patch: Partial<{ mode: TurnInMode; amount: number }>): void =>
-    setRows((r) => ({ ...r, [id]: { ...r[id], ...patch } }))
-
-  const submit = (): void => {
-    onSubmit(
-      items.map((i) => {
-        const st = rows[i.objectiveId] ?? { mode: 'full' as TurnInMode, amount: i.scu }
-        const deliveredScu =
-          st.mode === 'full'
-            ? i.scu
-            : st.mode === 'none'
-              ? 0
-              : Math.max(0, Math.min(i.scu, Math.round(st.amount || 0)))
-        return { contractId: i.contractId, objectiveId: i.objectiveId, deliveredScu }
-      })
-    )
-  }
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, zIndex: 50 }}>
-      <div style={{ width: 620, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto', background: C.black, border: `1px solid rgba(255,255,255,0.22)`, fontFamily: F.body }}>
-        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.lineStrong}` }}>
-          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, letterSpacing: '0.08em', color: C.text, textShadow: GLOW }}>
-            TURN IN · {stop.code || stop.name}
-          </div>
-          <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
-            Mark what you handed over here. This clears the stop from your cargo grid.
-          </div>
-        </div>
-
-        <div style={{ padding: '8px 20px 16px' }}>
-          {items.map((i) => {
-            const st = rows[i.objectiveId] ?? { mode: 'full' as TurnInMode, amount: i.scu }
-            return (
-              <div key={i.objectiveId} style={{ display: 'grid', gridTemplateColumns: '1fr 186px 96px', gap: 14, alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
-                <div style={{ minWidth: 0 }}>
-                  <span style={{ fontFamily: F.body, fontSize: 14, color: C.textBody }}>{i.commodity}</span>{' '}
-                  <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>[{i.ref}]</span>
-                  <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{i.scu} SCU required</div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <Seg label="FULL" color={C.green} active={st.mode === 'full'} onClick={() => set(i.objectiveId, { mode: 'full', amount: i.scu })} />
-                  <Seg
-                    label="PARTIAL"
-                    color={C.amber}
-                    active={st.mode === 'part'}
-                    onClick={() =>
-                      set(i.objectiveId, {
-                        mode: 'part',
-                        amount: st.amount > 0 && st.amount < i.scu ? st.amount : Math.max(1, Math.min(i.scu - 1, Math.round(i.scu / 2)))
-                      })
-                    }
-                  />
-                  <Seg label="NONE" color={C.red} active={st.mode === 'none'} onClick={() => set(i.objectiveId, { mode: 'none', amount: 0 })} />
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  {st.mode === 'part' ? (
-                    <input
-                      value={st.amount || ''}
-                      onChange={(e) =>
-                        set(i.objectiveId, {
-                          amount: Math.max(0, Math.min(i.scu, parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) || 0))
-                        })
-                      }
-                      inputMode="numeric"
-                      style={{ width: 70, background: 'transparent', border: 0, borderBottom: `1px solid rgba(255,255,255,0.25)`, color: C.text, fontFamily: F.mono, fontSize: 14, textAlign: 'right', padding: '4px 0', outline: 'none' }}
-                    />
-                  ) : (
-                    <span style={{ fontFamily: F.mono, fontSize: 13, color: C.dim }}>{st.mode === 'full' ? i.scu : 0} SCU</span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 20px', borderTop: `1px solid ${C.lineStrong}` }}>
-          <Btn onClick={onClose} style={{ border: `1px solid rgba(255,255,255,0.18)`, background: 'transparent', color: C.body, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: '9px 18px', cursor: 'pointer' }} hoverStyle={{ border: `1px solid #fff`, color: C.text }}>
-            CANCEL
-          </Btn>
-          <Btn onClick={submit} style={{ border: `1px solid ${C.green}`, background: 'rgba(95,208,137,0.14)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: '9px 18px', cursor: 'pointer' }} hoverStyle={{ background: 'rgba(95,208,137,0.24)', textShadow: GLOW }}>
-            TURN IN
-          </Btn>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Seg({ label, color, active, onClick }: { label: string; color: string; active: boolean; onClick: () => void }): React.ReactElement {
-  return (
-    <Btn
-      onClick={onClick}
-      style={{ border: `1px solid ${active ? color : 'rgba(255,255,255,0.16)'}`, background: active ? 'rgba(255,255,255,0.04)' : 'transparent', color: active ? color : C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', padding: '5px 9px', cursor: 'pointer' }}
-      hoverStyle={{ border: `1px solid ${color}`, color }}
-    >
-      {label}
-    </Btn>
   )
 }
 
