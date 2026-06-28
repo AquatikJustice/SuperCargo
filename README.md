@@ -54,33 +54,47 @@ If you hit problems, please open an issue with your distro and what happened.
 
 ## Screenshots
 
-The cargo manifest, grouped by destination:
+Click any shot to view it full size.
 
-![The cargo manifest, grouped by destination](assets/screens/manifest.png)
-
-Every accepted contract, with inline editing for anything the log did not give you:
-
-![Contracts page](assets/screens/contracts.png)
-
-The 3D cargo grid, color-coded by destination:
-
-![3D cargo grid](assets/screens/cargo-grid.png)
-
-Reading a contract screen with OCR:
-
-![OCR capture](assets/screens/ocr-capture.png)
-
-Or just add one by hand:
-
-![Manual contract entry](assets/screens/manual-entry.png)
-
-Past runs, with their contracts and earnings:
-
-![Run history](assets/screens/history.png)
-
-The compact next-stop overlay you can pin over the game:
-
-![Compact overlay](assets/screens/overlay.png)
+<table>
+  <tr>
+    <td width="50%">
+      <a href="assets/screens/manifest.png"><img src="assets/screens/manifest.png" alt="Cargo manifest grouped by destination" width="100%"></a>
+      <br><sub><b>Manifest:</b> every contract's cargo, grouped by destination</sub>
+    </td>
+    <td width="50%">
+      <a href="assets/screens/contracts.png"><img src="assets/screens/contracts.png" alt="Contracts page with inline editing" width="100%"></a>
+      <br><sub><b>Contracts:</b> inline-edit anything the log did not capture</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/screens/cargo-grid.png"><img src="assets/screens/cargo-grid.png" alt="3D cargo grid color-coded by destination" width="100%"></a>
+      <br><sub><b>3D cargo grid:</b> color-coded by destination</sub>
+    </td>
+    <td width="50%">
+      <a href="assets/screens/ocr-capture.png"><img src="assets/screens/ocr-capture.png" alt="OCR capture of a contract screen" width="100%"></a>
+      <br><sub><b>OCR capture:</b> reads the mobiGlas contract screen</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/screens/manual-entry.png"><img src="assets/screens/manual-entry.png" alt="Manual contract entry" width="100%"></a>
+      <br><sub><b>Manual entry:</b> add a contract by hand</sub>
+    </td>
+    <td width="50%">
+      <a href="assets/screens/history.png"><img src="assets/screens/history.png" alt="Run history with contracts and earnings" width="100%"></a>
+      <br><sub><b>History:</b> past runs with their contracts and earnings</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/screens/overlay.png"><img src="assets/screens/overlay.png" alt="Compact next-stop overlay" width="100%"></a>
+      <br><sub><b>Compact overlay:</b> pin the next stop over the game</sub>
+    </td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ## Requirements
 
