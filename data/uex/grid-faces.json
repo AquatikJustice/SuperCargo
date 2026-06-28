@@ -1,6 +1,6 @@
 {
   "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
-  "syncedAt": "2026-06-27",
+  "syncedAt": "2026-06-28",
   "gridFaces": [
     {
       "ship": "Drake Ironclad",
@@ -1059,24 +1059,36 @@
         {
           "id": "small-c2",
           "faces": {
-            "z+": "exit",
-            "z-": "aisle",
+            "z-": "exit",
+            "z+": "aisle",
             "y+": "wall",
-            "x-": "aisle",
             "x+": "aisle",
+            "x-": "aisle",
             "y-": "wall"
-          }
+          },
+          "w": 6,
+          "h": 4,
+          "l": 9,
+          "x": 1,
+          "y": 0,
+          "z": 0
         },
         {
           "id": "large-c2",
           "faces": {
-            "z+": "aisle",
-            "z-": "exit",
-            "x-": "aisle",
-            "y+": "wall",
+            "z-": "aisle",
+            "z+": "exit",
             "x+": "aisle",
+            "y+": "wall",
+            "x-": "aisle",
             "y-": "wall"
-          }
+          },
+          "w": 8,
+          "h": 4,
+          "l": 15,
+          "x": 0,
+          "y": 0,
+          "z": 10
         }
       ]
     },
@@ -1086,24 +1098,36 @@
         {
           "id": "small-m2",
           "faces": {
-            "x-": "aisle",
-            "z+": "exit",
-            "y+": "wall",
             "x+": "aisle",
-            "z-": "aisle",
+            "z-": "exit",
+            "y+": "wall",
+            "x-": "aisle",
+            "z+": "aisle",
             "y-": "wall"
-          }
+          },
+          "w": 6,
+          "h": 3,
+          "l": 9,
+          "x": 1,
+          "y": 0,
+          "z": 0
         },
         {
           "id": "large-m2",
           "faces": {
-            "x+": "aisle",
-            "z+": "aisle",
-            "y+": "wall",
             "x-": "aisle",
-            "z-": "exit",
+            "z-": "aisle",
+            "y+": "wall",
+            "x+": "aisle",
+            "z+": "exit",
             "y-": "wall"
-          }
+          },
+          "w": 8,
+          "h": 3,
+          "l": 15,
+          "x": 0,
+          "y": 0,
+          "z": 10
         }
       ]
     },
