@@ -4,6 +4,8 @@ export const APP_NAME = 'SuperCargo'
 
 export const FANKIT_URL = 'https://robertsspaceindustries.com/en/fankit'
 
+export const DISCORD_URL = 'https://discord.gg/p9V78wKqq'
+
 export const UNOFFICIAL_NOTICE =
   'SuperCargo is an unofficial Star Citizen community tool. It is not endorsed by, sponsored by, or affiliated with Cloud Imperium Games or Roberts Space Industries.'
 
