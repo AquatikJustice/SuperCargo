@@ -213,6 +213,7 @@ interface StoreState {
   removeContract: (id: string) => void
   completeContract: (id: string) => void
   abandonContract: (id: string) => void
+  fileCompleted: (id: string) => void
   setContractStatus: (id: string, status: HaulingContract['status']) => void
   resetRouteToAuto: () => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
@@ -818,6 +819,16 @@ export const useStore = create<StoreState>((set, get) => {
     abandonContract: (id) => {
       const contract = get().contracts.find((c) => c.id === id)
       if (contract) archive(contract, 'abandoned')
+      commit(get().contracts.filter((c) => c.id !== id))
+      set({ isRouteAuto: true })
+      scheduleReroute()
+    },
+
+    // file it ourselves when the game's done-event never lands (manual contracts, missed log)
+    fileCompleted: (id) => {
+      const contract = get().contracts.find((c) => c.id === id)
+      if (!contract) return
+      archive(finalizeDelivery(contract), 'completed')
       commit(get().contracts.filter((c) => c.id !== id))
       set({ isRouteAuto: true })
       scheduleReroute()

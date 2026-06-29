@@ -22,6 +22,7 @@ export default function ContractsPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const abandonContract = useStore((s) => s.abandonContract)
   const completeContract = useStore((s) => s.completeContract)
+  const fileCompleted = useStore((s) => s.fileCompleted)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const openCapture = useStore((s) => s.openCapture)
@@ -242,13 +243,14 @@ export default function ContractsPage(): React.ReactElement {
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
                       {c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
                         <>
+                          <ActionBtn label="FILE TO HISTORY" color={C.green} onClick={() => fileCompleted(c.id)} />
                           <ActionBtn
                             label="↩ UNDO COMPLETE"
                             color={C.amber}
                             onClick={() => unmarkTurnIn(c.objectives.map((o) => o.objectiveId))}
                           />
                           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-                            marked done · the game finishing the contract is what files it to History
+                            or it files itself once the game finishes the contract
                           </span>
                         </>
                       ) : (
