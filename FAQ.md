@@ -70,5 +70,5 @@ You don't reinstall for data fixes.
 
 **Where do I report bugs, request features, or flag bad data?**
 Open an [issue on GitHub](https://github.com/AquatikJustice/SuperCargo/issues), or join the
-community Discord and post in the matching channel. One item per report, and search first
+[community Discord](https://discord.gg/p9V78wKqq) and post in the matching channel. One item per report, and search first
 so we skip duplicates.

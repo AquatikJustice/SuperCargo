@@ -1,5 +1,7 @@
 # <img src="assets/logo/SuperCargo-Logo.png" alt="SuperCargo logo" height="48" align="bottom"> SuperCargo
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/p9V78wKqq)
+
 A desktop app for Star Citizen haulers who stack a pile of contracts into one run.
 It pulls everything into a single manifest: box-size math, a route that orders your
 stops, a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
