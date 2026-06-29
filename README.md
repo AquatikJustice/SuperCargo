@@ -7,7 +7,7 @@ It pulls everything into a single manifest: box-size math, a route that orders y
 stops, a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
 interface.
 
-**Questions, bugs, or feature ideas? Join the community on [Discord](https://discord.gg/p9V78wKqq).**
+**New here? Read the [FAQ](FAQ.md). Questions, bugs, or feature ideas? Join the community on [Discord](https://discord.gg/p9V78wKqq).**
 
 ## Download
 
