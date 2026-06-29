@@ -7,6 +7,8 @@ export interface TypeaheadProps {
   /** fires only when freeText */
   onChange?: (v: string) => void
   onSelect?: (v: string) => void
+  onBlur?: () => void
+  onCancel?: () => void
   placeholder?: string
   /** allow off-list values */
   freeText?: boolean
@@ -24,6 +26,8 @@ export default function Typeahead({
   options,
   onChange,
   onSelect,
+  onBlur,
+  onCancel,
   placeholder,
   freeText = true,
   maxResults = 8,
@@ -90,14 +94,16 @@ export default function Typeahead({
     } else if (e.key === 'Escape') {
       setOpen(false)
       if (!freeText) setQuery(value)
+      onCancel?.()
     }
   }
 
-  const onBlur = (): void => {
+  const handleBlur = (): void => {
     blurTimer.current = setTimeout(() => {
       setFocused(false)
       setOpen(false)
       if (!freeText && query !== value) setQuery(value) // revert off-list value
+      onBlur?.()
     }, 120)
   }
 
@@ -143,7 +149,7 @@ export default function Typeahead({
           }
           setOpen(true)
         }}
-        onBlur={onBlur}
+        onBlur={handleBlur}
         onKeyDown={onKeyDown}
         style={inputStyle}
       />

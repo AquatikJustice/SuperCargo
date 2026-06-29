@@ -5,6 +5,7 @@ import { deriveContracts } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 import TurnInModal from '../components/TurnInModal'
+import Typeahead from '../components/Typeahead'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
 // long names ellipsize, not widen
@@ -27,8 +28,12 @@ export default function ContractsPage(): React.ReactElement {
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const editContract = useStore((s) => s.editContract)
   const editObjective = useStore((s) => s.editObjective)
+  const locations = useStore((s) => s.locations)
+  const commodities = useStore((s) => s.commodities)
   // hide until ocr capture resolves
   const derived = useMemo(() => deriveContracts(contracts.filter((c) => !c.pendingOcr)), [contracts])
+  const locationNames = useMemo(() => locations.map((l) => l.name), [locations])
+  const commodityNames = useMemo(() => commodities.map((c) => c.name), [commodities])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
   const [editTurnIn, setEditTurnIn] = useState<TurnInTarget | null>(null)
 
@@ -139,7 +144,7 @@ export default function ContractsPage(): React.ReactElement {
                   <div style={{ padding: '4px 0 22px 27px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px 22px', marginBottom: 20 }}>
                       <DetailField label="PICKUP">
-                        <EditableText value={c.pickup} onCommit={(v) => editContract(c.id, { pickup: v })} placeholder="set pickup" />
+                        <EditableText value={c.pickup} options={locationNames} onCommit={(v) => editContract(c.id, { pickup: v })} placeholder="set pickup" />
                       </DetailField>
                       <DetailField label="REWARD">
                         <EditableNum value={c.reward} suffix=" aUEC" onCommit={(n) => editContract(c.id, { reward: n })} />
@@ -185,12 +190,14 @@ export default function ContractsPage(): React.ReactElement {
                           <EditableScu value={o.scu} onCommit={(n) => setObjectiveScu(c.id, o.objectiveId, n)} />
                           <EditableText
                             value={o.commodity}
+                            options={commodityNames}
                             onCommit={(v) => editObjective(c.id, o.objectiveId, { commodity: v })}
                             placeholder="commodity"
                             textStyle={{ fontSize: 14, color: isTurnedIn ? tiColor : C.textBody }}
                           />
                           <EditableText
                             value={o.destination}
+                            options={locationNames}
                             onCommit={(v) => editObjective(c.id, o.objectiveId, { destination: v })}
                             placeholder="destination"
                             textStyle={{ fontSize: 13, color: isTurnedIn ? tiColor : C.dim }}
@@ -409,36 +416,54 @@ function EditableText({
   value,
   onCommit,
   placeholder,
-  textStyle
+  textStyle,
+  options
 }: {
   value: string
   onCommit: (v: string) => void
   placeholder?: string
   textStyle?: React.CSSProperties
+  options?: string[]
 }): React.ReactElement {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
 
-  const commit = (): void => {
+  const commit = (v = draft): void => {
     setEditing(false)
-    if (draft.trim() !== value.trim()) onCommit(draft)
+    if (v.trim() !== value.trim()) onCommit(v)
+  }
+
+  const cancel = (): void => {
+    setDraft(value)
+    setEditing(false)
   }
 
   if (editing) {
+    if (options) {
+      return (
+        <Typeahead
+          value={draft}
+          options={options}
+          autoFocus
+          placeholder={placeholder}
+          onChange={setDraft}
+          onSelect={(v) => commit(v)}
+          onBlur={() => commit()}
+          onCancel={cancel}
+        />
+      )
+    }
     return (
       <input
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onBlur={() => commit()}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit()
-          else if (e.key === 'Escape') {
-            setDraft(value)
-            setEditing(false)
-          }
+          else if (e.key === 'Escape') cancel()
         }}
         style={{ ...editInputStyle, ...textStyle }}
       />
