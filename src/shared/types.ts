@@ -109,6 +109,15 @@ export interface AppSettings {
   /** 1 = 100% */
   uiZoom: number
 
+  /** overlay panel background opacity, 0.4..1 (higher blocks the game's re-tracked mission text) */
+  overlayOpacity: number
+  /** overlay size multiplier, 1 = default */
+  overlayScale: number
+  /** which screen corner the overlay pins to */
+  overlayCorner: 'tl' | 'tr' | 'bl' | 'br'
+  /** overlay ignores the mouse so clicks fall through to the game */
+  overlayClickThrough: boolean
+
   /** orbit camera per ship, so the 3D grid view survives leaving the page and restarts */
   gridView?: Record<string, GridView>
 

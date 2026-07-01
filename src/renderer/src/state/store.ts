@@ -75,6 +75,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: false,
   theme: 'dark',
   uiZoom: 1.1,
+  overlayOpacity: 0.85,
+  overlayScale: 1,
+  overlayCorner: 'tr',
+  overlayClickThrough: false,
   autoCheckUpdates: true,
   // avoids a welcome-screen flash
   onboarded: true
@@ -729,6 +733,8 @@ export const useStore = create<StoreState>((set, get) => {
         scheduleReroute()
       }))
       track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
+      // overlay reflects opacity/scale changes made in the main window's settings
+      track(window.supercargo.onSettings((s) => set({ settings: s })))
 
       track(window.supercargo.onOcrStatus((s) =>
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })

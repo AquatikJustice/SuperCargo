@@ -6,6 +6,8 @@ import { offGridByObjective } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
 const GREEN = '#8fe9b0'
+// content design width; the window scales to BASE_W * overlayScale (see main/positionCompact)
+const BASE_W = 332
 
 export default function CompactWindowApp(): React.ReactElement {
   const ready = useStore((s) => s.ready)
@@ -14,6 +16,9 @@ export default function CompactWindowApp(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const looseBoxes = useStore((s) => s.looseBoxes)
+  const settings = useStore((s) => s.settings)
+  const scale = settings.overlayScale || 1
+  const opacity = settings.overlayOpacity ?? 0.85
 
   useEffect(() => {
     void init()
@@ -101,18 +106,18 @@ export default function CompactWindowApp(): React.ReactElement {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'transparent', fontFamily: F.display }}>
-      <div ref={contentRef} style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: 8 }}>
+      <div ref={contentRef} style={{ width: BASE_W, boxSizing: 'border-box', zoom: scale, display: 'flex', flexDirection: 'column', gap: 7, padding: 8 }}>
         {!ready ? null : !step ? (
-          <Panel>
+          <Panel opacity={opacity}>
             <div style={{ padding: '12px 14px', fontSize: 13, color: C.dim, lineHeight: 1.5 }}>
               No active route. Accept a contract to see your loads here.
             </div>
           </Panel>
         ) : (
           <>
-            <Chip title={step.label} counter={stopCounter} />
+            <Chip title={step.label} counter={stopCounter} opacity={opacity} />
 
-            <Panel>
+            <Panel opacity={opacity}>
               <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
                 {dropLines.length > 0 && (
                   <div>
@@ -167,7 +172,7 @@ export default function CompactWindowApp(): React.ReactElement {
   )
 }
 
-function Chip({ title, counter }: { title: string; counter: string }): React.ReactElement {
+function Chip({ title, counter, opacity }: { title: string; counter: string; opacity: number }): React.ReactElement {
   return (
     <div
       style={{
@@ -177,7 +182,7 @@ function Chip({ title, counter }: { title: string; counter: string }): React.Rea
         gap: 10,
         padding: '10px 15px',
         borderRadius: 9,
-        background: 'linear-gradient(180deg, rgba(23,36,49,0.62), rgba(10,16,24,0.62))',
+        background: `linear-gradient(180deg, rgba(23,36,49,${opacity}), rgba(10,16,24,${opacity}))`,
         border: '1px solid rgba(255,210,30,0.7)',
         boxShadow: '0 0 16px rgba(255,210,30,0.28), inset 0 1px 0 rgba(255,255,255,0.12)'
       }}
@@ -204,11 +209,11 @@ function Chip({ title, counter }: { title: string; counter: string }): React.Rea
   )
 }
 
-function Panel({ children }: { children: React.ReactNode }): React.ReactElement {
+function Panel({ children, opacity }: { children: React.ReactNode; opacity: number }): React.ReactElement {
   return (
     <div
       style={{
-        background: 'rgba(7,13,19,0.6)',
+        background: `rgba(7,13,19,${opacity})`,
         border: `1px solid rgba(255,210,30,0.32)`,
         borderRadius: 8,
         boxShadow: '0 4px 14px rgba(0,0,0,0.55)',

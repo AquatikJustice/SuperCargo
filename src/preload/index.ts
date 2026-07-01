@@ -77,6 +77,7 @@ const api = {
     on(IPC.evtLoadingState, cb),
   onManifestChanged: (cb: (doc: ManifestDoc) => void): Unsubscribe =>
     on(IPC.evtManifestChanged, cb),
+  onSettings: (cb: (s: AppSettings) => void): Unsubscribe => on(IPC.evtSettings, cb),
 
   // webFrame zoom avoids layout overflow
   setZoom: (factor: number): void => webFrame.setZoomFactor(factor),

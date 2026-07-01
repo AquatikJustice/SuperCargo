@@ -256,6 +256,66 @@ export default function SettingsPage(): React.ReactElement {
         <Toggle on={settings.alwaysOnTop} onClick={() => void updateSettings({ alwaysOnTop: !settings.alwaysOnTop })} />
       </div>
 
+      <Section title="OVERLAY" />
+      <div style={rowStyle}>
+        <span style={keyStyle}>Corner</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {([['tl', '↖'], ['tr', '↗'], ['bl', '↙'], ['br', '↘']] as const).map(([id, glyph]) => {
+            const active = (settings.overlayCorner ?? 'tr') === id
+            return (
+              <Btn
+                key={id}
+                onClick={() => void updateSettings({ overlayCorner: id })}
+                title={`Pin the overlay to the ${id === 'tl' ? 'top-left' : id === 'tr' ? 'top-right' : id === 'bl' ? 'bottom-left' : 'bottom-right'}`}
+                style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, border: `1px solid ${active ? C.acc : C.lineStrong}`, background: active ? C.accFill : 'transparent', color: active ? C.text : C.dim, textShadow: active ? GLOW : 'none', cursor: 'pointer' }}
+                hoverStyle={active ? {} : { border: `1px solid ${C.acc}`, color: C.text }}
+              >
+                {glyph}
+              </Btn>
+            )
+          })}
+        </div>
+      </div>
+      <div style={rowStyle}>
+        <span style={keyStyle}>Background opacity</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="range"
+            min={0.4}
+            max={1}
+            step={0.05}
+            value={settings.overlayOpacity ?? 0.85}
+            onChange={(e) => void updateSettings({ overlayOpacity: Number(e.target.value) })}
+            style={{ width: 200, accentColor: C.acc }}
+          />
+          <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>{Math.round((settings.overlayOpacity ?? 0.85) * 100)}%</span>
+        </div>
+      </div>
+      <div style={rowStyle}>
+        <span style={keyStyle}>Size</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="range"
+            min={0.9}
+            max={1.5}
+            step={0.05}
+            value={settings.overlayScale ?? 1}
+            onChange={(e) => void updateSettings({ overlayScale: Number(e.target.value) })}
+            style={{ width: 200, accentColor: C.acc }}
+          />
+          <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>{Math.round((settings.overlayScale ?? 1) * 100)}%</span>
+        </div>
+      </div>
+      <div style={rowStyle}>
+        <span style={keyStyle}>
+          Click-through
+          <span style={{ display: 'block', fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
+            Clicks pass through to the game. You can’t move or click the overlay while this is on.
+          </span>
+        </span>
+        <Toggle on={settings.overlayClickThrough} onClick={() => void updateSettings({ overlayClickThrough: !settings.overlayClickThrough })} />
+      </div>
+
       <Section title="OCR CAPTURE" />
       <div style={rowStyle}>
         <span style={keyStyle}>Engine</span>

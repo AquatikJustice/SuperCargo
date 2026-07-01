@@ -130,13 +130,29 @@ function positionCompact(): void {
   // bounds not workArea, overlaps taskbar
   const { bounds } = screen.getPrimaryDisplay()
   const margin = 10
+  const scale = settings.overlayScale || 1
+  const width = Math.round(COMPACT_W * scale)
+  // compactHeight is the renderer's already-scaled content height
   const height = Math.max(120, Math.min(compactHeight, bounds.height - margin * 2))
+  const corner = settings.overlayCorner || 'tr'
+  const onLeft = corner === 'tl' || corner === 'bl'
+  const onTop = corner === 'tl' || corner === 'tr'
   compactWindow.setBounds({
-    x: bounds.x + bounds.width - COMPACT_W - margin,
-    y: bounds.y + margin,
-    width: COMPACT_W,
+    x: onLeft ? bounds.x + margin : bounds.x + bounds.width - width - margin,
+    y: onTop ? bounds.y + margin : bounds.y + bounds.height - height - margin,
+    width,
     height
   })
+}
+
+// size, click-through, and placement from settings; safe to call anytime
+function applyOverlay(): void {
+  if (!compactWindow || compactWindow.isDestroyed()) return
+  const width = Math.round(COMPACT_W * (settings.overlayScale || 1))
+  compactWindow.setMinimumSize(width, 120)
+  compactWindow.setMaximumSize(width, 100000)
+  compactWindow.setIgnoreMouseEvents(!!settings.overlayClickThrough, { forward: true })
+  positionCompact()
 }
 
 function createCompactWindow(): void {
@@ -192,7 +208,7 @@ function createCompactWindow(): void {
 
 function showCompact(): void {
   if (!compactWindow || compactWindow.isDestroyed()) createCompactWindow()
-  positionCompact()
+  applyOverlay()
   compactWindow?.showInactive()
   compactWindow?.setAlwaysOnTop(true, 'screen-saver')
   broadcast(IPC.evtCompactState, { open: true })
@@ -400,13 +416,24 @@ function autoDetectLogPath(): void {
 function registerIpc(): void {
   ipcMain.handle(IPC.settingsGet, () => settings)
 
-  ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<AppSettings>) => {
+  ipcMain.handle(IPC.settingsSet, (e, patch: Partial<AppSettings>) => {
     const prev = settings
     settings = { ...settings, ...patch }
     saveSettings(settings)
 
     if (patch.alwaysOnTop !== undefined && mainWindow) {
       applyAlwaysOnTop(!!patch.alwaysOnTop)
+    }
+    if (
+      patch.overlayScale !== undefined ||
+      patch.overlayCorner !== undefined ||
+      patch.overlayClickThrough !== undefined
+    ) {
+      applyOverlay()
+    }
+    // opacity + scale are drawn in the overlay's own window, so push the new settings there
+    if (patch.overlayOpacity !== undefined || patch.overlayScale !== undefined) {
+      broadcast(IPC.evtSettings, settings, e.sender.id)
     }
     if (
       patch.gameLogPath !== undefined &&

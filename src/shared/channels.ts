@@ -67,5 +67,6 @@ export const IPC = {
   evtOcrStatus: 'evt:ocr:status',
   evtManifestChanged: 'evt:manifest:changed', // saved by another window
   evtCompactState: 'evt:compact:state',
-  evtLoadingState: 'evt:loading:state' // main window's loading-mode step
+  evtLoadingState: 'evt:loading:state', // main window's loading-mode step
+  evtSettings: 'evt:settings' // settings changed, keep the overlay in sync
 } as const

@@ -28,6 +28,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: false,
   theme: 'dark',
   uiZoom: 1.1,
+  overlayOpacity: 0.85,
+  overlayScale: 1,
+  overlayCorner: 'tr',
+  overlayClickThrough: false,
   autoCheckUpdates: true,
   onboarded: false
 }
