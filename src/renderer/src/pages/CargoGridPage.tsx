@@ -13,7 +13,7 @@ import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type LoadEvent, type Occupied } from '@shared/packer'
-import { packSchedule, setAsideToUnload } from '@shared/loadout'
+import { packSchedule, setAsideToUnload, looseSummary } from '@shared/loadout'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -508,7 +508,7 @@ export default function CargoGridPage(): React.ReactElement {
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
-      loose: 'loose' in s ? s.loose : [],
+      loose: ('loose' in s ? s.loose : []) as PackBox[],
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
@@ -613,6 +613,15 @@ export default function CargoGridPage(): React.ReactElement {
     () => setAsideToUnload(grids.filter((g) => g.autoLoad !== false), result.placements),
     [grids, result]
   )
+  // off-grid boxes aboard at the current step (they drop off as their stop is delivered)
+  const looseNow = useMemo<PackBox[]>(() => {
+    if (!(loading && loadingPack) || !loadingPack.snaps.length) return []
+    const at = Math.min(Math.max(0, loadIdx), loadingPack.snaps.length - 1)
+    return loadingPack.snaps[at].loose
+  }, [loading, loadingPack, loadIdx])
+  const offGrid = useMemo(() => looseSummary(looseNow), [looseNow])
+  // heavy once off-grid cargo is a real slice of the hold, not a box or two
+  const offGridHeavy = result.capacity > 0 && offGrid.scu > result.capacity * 0.04
   const visiblePlacements = result.placements
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
@@ -899,6 +908,16 @@ export default function CargoGridPage(): React.ReactElement {
             ↺ set aside {setAside.count} to unload{setAside.big ? ` (${setAside.big} big)` : ''}
           </span>
         )}
+        {loading && offGrid.count > 0 && (
+          <span
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: F.body, fontSize: 13, color: C.amber }}
+            title="Cargo you chose to carry off-grid, riding loose in the hold rather than in a bay slot."
+          >
+            <OffGridGlyph />
+            <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
+            {offGridHeavy && <span style={{ fontStyle: 'italic', color: C.amber }}>· watch your total</span>}
+          </span>
+        )}
       </div>
 
       {loading && manual && (
@@ -950,6 +969,7 @@ export default function CargoGridPage(): React.ReactElement {
               objColors={objColor}
               manual={manual}
               palette={palette}
+              loose={looseNow}
               onPlace={placeFromPalette}
               aboardScu={shownScu}
               done={done}
@@ -1244,6 +1264,7 @@ function LoadingPanel({
   objColors,
   manual,
   palette,
+  loose,
   onPlace,
   aboardScu,
   done,
@@ -1262,6 +1283,7 @@ function LoadingPanel({
   objColors: Map<string, string>
   manual: boolean
   palette: PaletteItem[]
+  loose: PackBox[]
   onPlace: (objectiveId: string, size: number) => void
   aboardScu: number
   done: boolean
@@ -1416,6 +1438,7 @@ function LoadingPanel({
                   )
                 )}
               </div>
+              {!load && <GrabOffGrid loose={loose} dropIds={s.dropIds} />}
             </div>
           )
         })}
@@ -1648,6 +1671,49 @@ function IsoCube({ color, label }: { color: string; label: string }): React.Reac
         {label}
       </text>
     </svg>
+  )
+}
+
+// amber cube = cargo riding off-grid; the manifest badge uses a different (red) glyph
+function OffGridGlyph({ size = 14 }: { size?: number }): React.ReactElement {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="1.7" style={{ flex: 'none' }}>
+      <path d="M12 2.5l9 5v9l-9 5-9-5v-9z" />
+      <path d="M12 2.5v19M3 7.5l9 5 9-5" />
+    </svg>
+  )
+}
+
+// at a drop, the off-grid boxes bound for THIS stop so nothing rattling around gets left behind
+function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }): React.ReactElement | null {
+  const ids = new Set(dropIds)
+  const mine = loose.filter((b) => b.objectiveId && ids.has(b.objectiveId))
+  if (!mine.length) return null
+  const summary = looseSummary(mine)
+  return (
+    <div style={{ marginTop: 10, padding: '11px 13px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <OffGridGlyph size={13} />
+        <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', color: C.amber }}>
+          GRAB YOUR OFF-GRID CARGO
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {summary.groups.map((g, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 7, height: 7, background: C.amber, transform: 'rotate(45deg)', flex: 'none' }} />
+            <span style={{ width: 96, fontFamily: F.mono, fontSize: 12.5, color: C.body, flex: 'none' }}>
+              {g.count}× {g.size} SCU
+            </span>
+            <span style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>{g.commodity}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 9, paddingTop: 8, borderTop: `1px solid rgba(230,182,94,0.25)`, fontFamily: F.mono, fontSize: 12, color: C.amber }}>
+        {summary.groups.length} {summary.groups.length === 1 ? 'bucket' : 'buckets'} · {summary.count}{' '}
+        {summary.count === 1 ? 'box' : 'boxes'} / {fmt(summary.scu)} SCU off-grid for this stop
+      </div>
+    </div>
   )
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
 import { buildLoadingSteps, type LoadingStep } from '../state/loading'
+import { offGridByObjective } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
 const GREEN = '#8fe9b0'
@@ -12,6 +13,7 @@ export default function CompactWindowApp(): React.ReactElement {
   const route = useStore((s) => s.route)
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
+  const looseBoxes = useStore((s) => s.looseBoxes)
 
   useEffect(() => {
     void init()
@@ -68,6 +70,11 @@ export default function CompactWindowApp(): React.ReactElement {
   const here = visits[visitIdx]?.steps ?? []
   const dropLines = here.filter((s) => s.kind === 'drop').flatMap((s) => s.lines)
   const loadLines = here.filter((s) => s.kind === 'load').flatMap((s) => s.lines)
+  const offGrid = useMemo(() => offGridByObjective(contracts, looseBoxes), [contracts, looseBoxes])
+  const dropOffGrid = dropLines
+    .map((l) => ({ commodity: l.commodity, tally: offGrid.get(l.objectiveId) }))
+    .filter((x): x is { commodity: string; tally: NonNullable<typeof x.tally> } => !!x.tally)
+  const offGridBoxes = dropOffGrid.reduce((n, x) => n + x.tally.count, 0)
   const handedOver = useMemo(
     () =>
       new Set(
@@ -119,6 +126,20 @@ export default function CompactWindowApp(): React.ReactElement {
                         tripPos={l.tripPos}
                         tripTotal={l.tripTotal}
                       />
+                    ))}
+                  </div>
+                )}
+                {offGridBoxes > 0 && (
+                  <div style={{ margin: '2px 12px 8px', padding: '9px 12px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)' }}>
+                    <div style={{ fontFamily: F.display, fontSize: 10.5, letterSpacing: '0.14em', color: C.amber, marginBottom: 6 }}>
+                      GRAB OFF-GRID · {offGridBoxes} {offGridBoxes === 1 ? 'BOX' : 'BOXES'}
+                    </div>
+                    {dropOffGrid.map((x, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                        <span style={{ width: 6, height: 6, background: C.amber, transform: 'rotate(45deg)', flex: 'none' }} />
+                        <span style={{ fontFamily: F.mono, fontSize: 12, color: WHITE }}>{x.tally.breakdown}</span>
+                        <span style={{ fontFamily: F.body, fontSize: 12.5, color: GREEN }}>{x.commodity}</span>
+                      </div>
                     ))}
                   </div>
                 )}

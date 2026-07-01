@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
-import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, type Stop, type StopItem, type PickupItem } from '../state/manifest'
+import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, offGridByObjective, type Stop, type StopItem, type PickupItem, type OffGridTally } from '../state/manifest'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
@@ -23,8 +23,11 @@ export default function ManifestPage(): React.ReactElement {
   const openCapture = useStore((s) => s.openCapture)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
+  const looseBoxes = useStore((s) => s.looseBoxes)
 
   const [turnIn, setTurnIn] = useState<{ stop: Stop; item: StopItem } | null>(null)
+
+  const offGrid = useMemo(() => offGridByObjective(contracts, looseBoxes), [contracts, looseBoxes])
 
   const stops = useMemo(
     () =>
@@ -114,7 +117,7 @@ export default function ManifestPage(): React.ReactElement {
       />
 
       {groupBy === 'destination' ? (
-        <ByDestination stops={stops} showBoxMath={showBoxMath} holdScu={capMax} onTurnIn={(stop, item) => setTurnIn({ stop, item })} />
+        <ByDestination stops={stops} showBoxMath={showBoxMath} holdScu={capMax} offGrid={offGrid} onTurnIn={(stop, item) => setTurnIn({ stop, item })} />
       ) : (
         <ByContract contracts={derivedContracts} showBoxMath={showBoxMath} />
       )}
@@ -316,11 +319,13 @@ function ByDestination({
   stops,
   showBoxMath,
   holdScu,
+  offGrid,
   onTurnIn
 }: {
   stops: Stop[]
   showBoxMath: boolean
   holdScu: number
+  offGrid: Map<string, OffGridTally>
   onTurnIn: (stop: Stop, item: StopItem) => void
 }): React.ReactElement {
   const reorderStops = useStore((s) => s.reorderStops)
@@ -374,7 +379,7 @@ function ByDestination({
             outlineOffset: 6
           }}
         >
-          <StopHeader stop={stop} />
+          <StopHeader stop={stop} offCount={stop.items.reduce((n, it) => n + (offGrid.get(it.objectiveId)?.count ?? 0), 0)} />
           {!stop.pickupOnly && stop.items.map((item) => {
             // color tracks turn-in fullness
             const tiColor =
@@ -385,6 +390,7 @@ function ByDestination({
                   : item.turnedInScu <= 0
                     ? C.red
                     : C.amber
+            const off = offGrid.get(item.objectiveId)
             return (
             <div
               key={item.objectiveId}
@@ -425,11 +431,12 @@ function ByDestination({
                   {item.commodity}
                 </span>
                 <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{item.ref}]</span>
+                {off && <OffGridBadge variant="tag" />}
               </div>
               {showBoxMath ? (
-                <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
+                <div style={{ fontFamily: F.mono, fontSize: 13, color: off ? C.amber : '#b6bec0' }}>
                   <span style={{ color: C.faint }}>· </span>
-                  {item.boxStr || '-'}
+                  {off ? `${off.breakdown} off grid` : item.boxStr || '-'}
                 </div>
               ) : (
                 <div />
@@ -521,7 +528,7 @@ function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; sho
   )
 }
 
-function StopHeader({ stop }: { stop: Stop }): React.ReactElement {
+function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): React.ReactElement {
   const locations = useStore((s) => s.locations)
   const loc = useMemo(() => locations.find((l) => l.name === stop.destination), [locations, stop.destination])
   const external = stop.hasElevator ?? loc?.hasElevator
@@ -553,8 +560,38 @@ function StopHeader({ stop }: { stop: Stop }): React.ReactElement {
       >
         {stop.destination || stop.name}
       </span>
+      {offCount > 0 && <OffGridBadge variant="rollup" count={offCount} />}
       <ElevatorBadge external={external} />
     </div>
+  )
+}
+
+// red is the one alarm color on the manifest: a bucket carrying cargo off-grid
+function OffGridBadge({ variant, count }: { variant: 'tag' | 'rollup'; count?: number }): React.ReactElement {
+  const red = '#ec7470'
+  const rollup = variant === 'rollup'
+  return (
+    <span
+      title="Cargo riding off-grid (loose in the hold), not in a bay slot"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        flex: 'none',
+        color: red,
+        border: `1px solid rgba(236,116,112,0.55)`,
+        background: 'rgba(236,116,112,0.12)',
+        padding: rollup ? '3px 8px' : '2px 7px'
+      }}
+    >
+      <svg width={rollup ? 11 : 10} height={rollup ? 11 : 10} viewBox="0 0 24 24" fill="none" stroke={red} strokeWidth="2.3">
+        <rect x="3" y="3" width="8" height="8" rx="1" />
+        <path d="M13.5 13.5l7 7M20.5 13.5v7h-7" />
+      </svg>
+      <span style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em' }}>
+        OFF GRID{rollup && count ? ` · ${count}` : ''}
+      </span>
+    </span>
   )
 }
 

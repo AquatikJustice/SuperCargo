@@ -386,6 +386,41 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
   })
 }
 
+export interface OffGridTally {
+  count: number
+  scu: number
+  /** e.g. "5×8" */
+  breakdown: string
+}
+
+// which of an objective's boxes the user parked off-grid, from the loose key set
+// (keys are `objectiveId#slot`, slot indexing into boxList like the packer sees them)
+export function looseForObjective(
+  objectiveId: string,
+  boxes: HaulingContract['objectives'][number]['boxes'],
+  loose: ReadonlySet<string>
+): OffGridTally {
+  const off = boxList(boxes).filter((_, slot) => loose.has(`${objectiveId}#${slot}`))
+  return { count: off.length, scu: off.reduce((a, b) => a + b, 0), breakdown: listBreakdown(off) }
+}
+
+// off-grid tally per objective, only for objectives that actually have some
+export function offGridByObjective(
+  contracts: HaulingContract[],
+  loose: readonly string[]
+): Map<string, OffGridTally> {
+  const set = new Set(loose)
+  const out = new Map<string, OffGridTally>()
+  if (!set.size) return out
+  for (const c of activeContracts(contracts)) {
+    for (const o of c.objectives) {
+      const t = looseForObjective(o.id, o.boxes, set)
+      if (t.count) out.set(o.id, t)
+    }
+  }
+  return out
+}
+
 export interface ManifestTotals {
   scu: number
   boxes: number
