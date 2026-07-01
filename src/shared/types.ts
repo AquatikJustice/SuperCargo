@@ -177,6 +177,8 @@ export interface ManifestDoc {
   loadingIdx?: number
   /** boxes the user chose to overload off-grid, keyed by objectiveId#slot */
   loose?: string[]
+  /** missionIds the user dismissed; scan-session won't re-import them from the log */
+  dismissed?: string[]
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'

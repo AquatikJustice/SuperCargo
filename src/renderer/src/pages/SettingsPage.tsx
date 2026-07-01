@@ -55,6 +55,7 @@ export default function SettingsPage(): React.ReactElement {
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
   const scanSession = useStore((s) => s.scanSession)
+  const openScanReview = useStore((s) => s.openScanReview)
   const ocrEngine = useStore((s) => s.ocrEngine)
   const refreshOcrEngine = useStore((s) => s.refreshOcrEngine)
 
@@ -216,9 +217,10 @@ export default function SettingsPage(): React.ReactElement {
           <SmallBtn
             onClick={() => {
               setScanMsg('')
-              void scanSession().then((n) =>
-                setScanMsg(n > 0 ? `Imported ${n} contract${n === 1 ? '' : 's'}` : 'No active contracts found')
-              )
+              void scanSession().then((n) => {
+                if (n > 0) openScanReview()
+                else setScanMsg('No active contracts found')
+              })
             }}
           >
             SCAN

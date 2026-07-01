@@ -9,6 +9,7 @@ import CargoGridPage from './pages/CargoGridPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import CaptureModal from './components/CaptureModal'
+import ScanReviewModal from './components/ScanReviewModal'
 import CompactWindowApp from './components/CompactWindowApp'
 import Onboarding from './components/Onboarding'
 import UpdateBanner from './components/UpdateBanner'
@@ -88,6 +89,7 @@ function MainApp(): React.ReactElement {
       </div>
       <BottomNav />
       <CaptureModal />
+      <ScanReviewModal />
       {ready && !onboarded && <Onboarding />}
     </div>
   )

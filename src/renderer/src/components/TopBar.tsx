@@ -39,6 +39,8 @@ export default function TopBar(): React.ReactElement {
   const closeCompact = useStore((s) => s.closeCompact)
   const compactOpen = useStore((s) => s.compactOpen)
   const appVersion = useStore((s) => s.appVersion)
+  const reviewCount = useStore((s) => s.scanQueue.length)
+  const openScanReview = useStore((s) => s.openScanReview)
   const narrow = useNarrow()
 
   return (
@@ -84,6 +86,7 @@ export default function TopBar(): React.ReactElement {
       </div>
 
       <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+        {reviewCount > 0 && <ReviewPill count={reviewCount} onClick={() => openScanReview()} />}
         <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
         <ChromeButton
           onClick={() => (compactOpen ? closeCompact() : openCompact())}
@@ -96,6 +99,30 @@ export default function TopBar(): React.ReactElement {
         <WindowControls />
       </div>
     </div>
+  )
+}
+
+function ReviewPill({ count, onClick }: { count: number; onClick: () => void }): React.ReactElement {
+  return (
+    <Btn
+      onClick={onClick}
+      title="Review contracts found in your session"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        border: `1px solid ${C.acc}`,
+        background: 'rgba(255,210,30,0.10)',
+        padding: '5px 11px',
+        cursor: 'pointer'
+      }}
+      hoverStyle={{ background: 'rgba(255,210,30,0.18)' }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.acc, boxShadow: GLOW }} />
+      <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', color: C.acc }}>
+        {count} TO REVIEW
+      </span>
+    </Btn>
   )
 }
 

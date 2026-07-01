@@ -17,7 +17,8 @@ import type {
   HistoryStatus,
   CargoLayout,
   FrozenBox,
-  ManualPlacement
+  ManualPlacement,
+  ScannedContract
 } from '@shared/types'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
@@ -151,6 +152,11 @@ interface StoreState {
   isRouteAuto: boolean
   /** boxes overloaded off-grid this run, keyed by objectiveId#slot */
   looseBoxes: string[]
+  /** missionIds dismissed by the user, kept so scan-session won't re-import them */
+  dismissedMissions: string[]
+  /** contracts a session scan found but that aren't reviewed into the list yet */
+  scanQueue: ScannedContract[]
+  scanReviewOpen: boolean
   history: HistoryEntry[]
   appVersion: string
   update: UpdateState | null
@@ -260,7 +266,18 @@ interface StoreState {
 
   checkForUpdates: () => Promise<void>
 
+  /** pull active contracts from the log into the review queue; returns queued count */
   scanSession: () => Promise<number>
+  openScanReview: () => void
+  closeScanReview: () => void
+  /** commit a scanned mission to the manifest as-is with the chosen box size */
+  addScanItem: (missionId: string, maxBoxSize: number) => void
+  /** commit a scanned mission then open OCR capture to fill its details */
+  scanItemDetails: (missionId: string) => void
+  /** drop from the queue for now; a later scan will re-offer it */
+  skipScanItem: (missionId: string) => void
+  /** drop it and remember not to re-import it */
+  dismissScanItem: (missionId: string) => void
 
   runOcr: () => Promise<void>
   clearOcr: () => void
@@ -294,8 +311,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes })
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes, dismissedMissions } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes, dismissed: dismissedMissions })
   }
 
   // active ship's grids
@@ -445,6 +462,34 @@ export const useStore = create<StoreState>((set, get) => {
     }
   }
 
+  const dropScanItem = (missionId: string): void => {
+    const queue = get().scanQueue.filter((s) => s.accepted.missionId !== missionId)
+    set({ scanQueue: queue })
+    if (!queue.length) set({ scanReviewOpen: false })
+  }
+
+  // move a reviewed scan item into the live manifest, mirroring a fresh log accept
+  const commitScanContract = (
+    item: ScannedContract,
+    opts: { maxBoxSize?: number; boxSizeConfirmed?: boolean; pendingOcr?: boolean }
+  ): void => {
+    const { contracts, runId, history } = get()
+    if (contracts.some((c) => c.id === item.accepted.missionId)) return
+    // first contract of an empty manifest starts a new trip
+    if (contracts.length === 0) {
+      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, manualActive: false, loadingIdx: 0 })
+    }
+    const contract = makeLogContract(item.accepted, contracts.length)
+    if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
+    if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
+    contract.objectives = item.objectives.map((o) =>
+      makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, contract.maxBoxSize)
+    )
+    commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
+    set({ isRouteAuto: true })
+    scheduleReroute()
+  }
+
   return {
     ready: false,
     view: 'manifest',
@@ -461,6 +506,9 @@ export const useStore = create<StoreState>((set, get) => {
     route: null,
     isRouteAuto: true,
     looseBoxes: [],
+    dismissedMissions: [],
+    scanQueue: [],
+    scanReviewOpen: false,
     history: [],
     appVersion: '',
     update: null,
@@ -539,6 +587,7 @@ export const useStore = create<StoreState>((set, get) => {
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
         looseBoxes: manifest.loose ?? [],
+        dismissedMissions: manifest.dismissed ?? [],
         manualLayout: manifest.manualLayout ?? {},
         // resume walkthrough only with cargo
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
@@ -581,9 +630,11 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onWatcherStatus((s) => set({ watcher: s })))
       track(window.supercargo.onUpdate((u) => set({ update: u })))
       track(window.supercargo.onContractAccepted((e: ContractAcceptedEvent) => {
-        const { contracts } = get()
+        const { contracts, dismissedMissions } = get()
         // dedup relog re-emits
         if (contracts.some((c) => c.id === e.missionId)) return
+        // the user dismissed this one; the log keeps re-offering it, so keep ignoring
+        if (dismissedMissions.includes(e.missionId)) return
         // empty manifest = fresh trip
         if (contracts.length === 0) {
           const { runId, history } = get()
@@ -663,6 +714,7 @@ export const useStore = create<StoreState>((set, get) => {
           stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
           looseBoxes: doc.loose ?? [],
+          dismissedMissions: doc.dismissed ?? [],
           manualLayout: doc.manualLayout ?? {},
           layout: doc.layout ?? null
         })
@@ -1118,9 +1170,9 @@ export const useStore = create<StoreState>((set, get) => {
       const key = (o: { commodity: string; destination: string }): string =>
         `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}`
       const byId = new Map(scanned.map((s) => [s.accepted.missionId, s]))
+      // backfill objectives the live watcher missed on contracts we already have
       let changed = 0
-      // backfill objectives capture missed
-      let contracts = get().contracts.map((c) => {
+      const contracts = get().contracts.map((c) => {
         const s = byId.get(c.id)
         if (!s) return c
         const seen = new Set(c.objectives.map(key))
@@ -1132,32 +1184,60 @@ export const useStore = create<StoreState>((set, get) => {
           objectives: [
             ...c.objectives,
             ...missing.map((o) =>
-              makeObjective(
-                { commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination },
-                c.maxBoxSize
-              )
+              makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, c.maxBoxSize)
             )
           ]
         }
       })
-      // add contracts missing entirely
-      for (const s of scanned) {
-        if (contracts.some((c) => c.id === s.accepted.missionId)) continue
-        const contract = makeLogContract(s.accepted, contracts.length)
-        contract.objectives = s.objectives.map((o) =>
-          makeObjective(
-            { commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination },
-            contract.maxBoxSize
-          )
-        )
-        contracts = [...contracts, contract]
-        changed += 1
-      }
       if (changed > 0) {
         commit(contracts)
         scheduleReroute()
       }
-      return changed
+      // everything not already in the list and not dismissed goes to the review queue.
+      // the log can't hand us box size, and re-emits accepts without objectives, so we
+      // never inject blind; the user reviews each one before it lands.
+      const { dismissedMissions } = get()
+      const have = new Set(get().contracts.map((c) => c.id))
+      const queued = scanned.filter(
+        (s) => !have.has(s.accepted.missionId) && !dismissedMissions.includes(s.accepted.missionId)
+      )
+      set({ scanQueue: queued })
+      return queued.length
+    },
+
+    openScanReview: () => {
+      if (get().scanQueue.length) set({ scanReviewOpen: true })
+    },
+    closeScanReview: () => set({ scanReviewOpen: false }),
+
+    addScanItem: (missionId, maxBoxSize) => {
+      const item = get().scanQueue.find((s) => s.accepted.missionId === missionId)
+      if (item) {
+        commitScanContract(item, { maxBoxSize, boxSizeConfirmed: true })
+      }
+      dropScanItem(missionId)
+    },
+
+    scanItemDetails: (missionId) => {
+      const item = get().scanQueue.find((s) => s.accepted.missionId === missionId)
+      dropScanItem(missionId)
+      if (!item) return
+      // hold it hidden until the capture resolves, same as a live accept.
+      // leave scanReviewOpen alone: the capture modal masks the review while it's
+      // up, and it comes back for the rest of the queue once capture closes.
+      commitScanContract(item, { pendingOcr: true })
+      set({ captureOpen: true, captureTargetId: missionId, ocrResult: null, ocrStatus: 'idle' })
+    },
+
+    skipScanItem: (missionId) => dropScanItem(missionId),
+
+    dismissScanItem: (missionId) => {
+      const cur = get().dismissedMissions
+      if (!cur.includes(missionId)) {
+        set({ dismissedMissions: [...cur, missionId] })
+        persist()
+      }
+      dropScanItem(missionId)
     },
 
     runOcr: async () => {
