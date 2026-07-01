@@ -179,6 +179,8 @@ export interface ManifestDoc {
   loose?: string[]
   /** missionIds the user dismissed; scan-session won't re-import them from the log */
   dismissed?: string[]
+  /** objectiveIds the user pushed to a later trip */
+  deferred?: string[]
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'

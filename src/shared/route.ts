@@ -27,6 +27,8 @@ export interface RouteInput {
   fixedOrder?: number[]
   /** city node to LEO overhead */
   cityToLeo?: Map<number, number>
+  /** job indices the user pushed to a later trip */
+  deferred?: Set<number>
 }
 
 export interface PlannedStop {
@@ -425,11 +427,17 @@ function planMultiTrip(input: RouteInput): RouteResult {
   const cityBusy = (c: number): boolean =>
     aboard.some((j) => j.dest === c) || [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
 
+  // user-deferred cargo waits until everything else is delivered, so it rides a later trip
+  const deferred = input.deferred ?? new Set<number>()
+  const nonDeferredLeft = (): boolean =>
+    [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
+
   let guard = all.length * 20 + 200
   while ((pending.size || aboard.length) && guard-- > 0) {
+    const gateDeferred = nonDeferredLeft()
     const locs = new Set<number>()
     for (const j of aboard) locs.add(j.dest)
-    for (const idx of pending) locs.add((byIdx.get(idx) as IJob).pickup)
+    for (const idx of pending) if (!(gateDeferred && deferred.has(idx))) locs.add((byIdx.get(idx) as IJob).pickup)
 
     // nearest stop where something happens
     let best: { L: number; drops: IJob[]; loads: IJob[] } | null = null
@@ -440,6 +448,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       const here = [...pending]
         .map((i) => byIdx.get(i) as IJob)
         .filter((j) => j.pickup === L)
+        .filter((j) => !(gateDeferred && deferred.has(j.idx)))
         .sort((a, b) => b.scu - a.scu)
       const loads: IJob[] = []
       for (const j of here) {
@@ -572,15 +581,21 @@ function planManual(input: RouteInput): RouteResult {
   let started = false
   const stops: PlannedStop[] = []
 
+  const deferred = input.deferred ?? new Set<number>()
+  const nonDeferredLeft = (): boolean =>
+    [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
+
   let guard = all.length * (order.length + 2) + 200
   while ((pending.size || aboard.length) && guard-- > 0) {
     let progressed = false
     for (const L of order) {
+      const gateDeferred = nonDeferredLeft()
       const drops = aboard.filter((j) => j.dest === L)
       let free = cap - load + drops.reduce((a, j) => a + j.scu, 0)
       const here = [...pending]
         .map((i) => byIdx.get(i) as IJob)
         .filter((j) => j.pickup === L)
+        .filter((j) => !(gateDeferred && deferred.has(j.idx)))
         .sort((a, b) => b.scu - a.scu)
       const loads: IJob[] = []
       for (const j of here) {
@@ -681,6 +696,9 @@ export function planRoute(input: RouteInput): RouteResult {
   if (jobs.length === 0) return { ...empty(), order: input.fixedOrder ?? Array.from({ length: n }, (_, i) => i) }
 
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
+
+  // user-deferred cargo forces a later trip; the single-pass optimizer can't express that
+  if (input.deferred && input.deferred.size) return planMultiTrip(input)
 
   // a single pass that fits is optimal
   const single = bestOrder(input)

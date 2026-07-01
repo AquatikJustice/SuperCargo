@@ -380,12 +380,19 @@ export function computeRoutePlan(
   capacity: number,
   startLocation?: string,
   bays?: CargoGrid[],
-  manualOrder?: string[]
+  manualOrder?: string[],
+  deferred?: string[]
 ): RoutePlan | null {
   locations = withCityCoords(locations)
   const model = buildRouteModel(contracts, locations, startLocation, capacity)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
+
+  // objectives the user sent to a later trip -> their job indices
+  const deferSet = deferred && deferred.length ? new Set(deferred) : null
+  const deferredJobs = deferSet
+    ? new Set(model.jobInfo.flatMap((j, i) => (deferSet.has(j.objectiveId) ? [i] : [])))
+    : undefined
 
   // pair city nodes with their LEO
   const nodeByName = new Map(model.nodes.map((n, i) => [norm(n.label), i]))
@@ -421,7 +428,8 @@ export function computeRoutePlan(
     start: model.depot,
     bays,
     fixedOrder,
-    cityToLeo
+    cityToLeo,
+    deferred: deferredJobs
   })
 
   const refOf = (ji: number): StepRef => ({

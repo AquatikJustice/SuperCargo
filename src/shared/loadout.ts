@@ -74,6 +74,27 @@ export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): S
   return { count: boxes.length, scu: boxes.reduce((a, b) => a + b.size, 0), big: boxes.filter((b) => b.size >= BIG).length, boxes }
 }
 
+export interface BucketDecision {
+  kind: 'none' | 'digout' | 'overload'
+  /** overload only: this bucket's boxes that won't fit the grid */
+  overloadBoxes: PackBox[]
+}
+
+// what a pickup bucket needs the user to decide: it won't fit (overload), it buries
+// earlier-delivery cargo you'll dig out (digout), or nothing (just load it). The dig-out
+// COST the card shows is the whole-arrangement setAside, not this bucket's own boxes —
+// it counts the boxes you physically handle, which is the honest number.
+export function bucketDecision(
+  setAside: SetAside,
+  unplaced: PackBox[],
+  loadIds: ReadonlySet<string>
+): BucketDecision {
+  const overloadBoxes = unplaced.filter((b) => b.objectiveId != null && loadIds.has(b.objectiveId))
+  if (overloadBoxes.length) return { kind: 'overload', overloadBoxes }
+  const buries = setAside.boxes.some((b) => b.objectiveId != null && loadIds.has(b.objectiveId))
+  return { kind: buries ? 'digout' : 'none', overloadBoxes: [] }
+}
+
 const toOcc = (p: Placement, stopIdx: number): Occupied => ({
   gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, stopIdx
 })

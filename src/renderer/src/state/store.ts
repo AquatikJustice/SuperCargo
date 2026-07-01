@@ -152,6 +152,8 @@ interface StoreState {
   isRouteAuto: boolean
   /** boxes overloaded off-grid this run, keyed by objectiveId#slot */
   looseBoxes: string[]
+  /** objectiveIds the user pushed to a later trip ("come back for it") */
+  deferredObjectives: string[]
   /** missionIds dismissed by the user, kept so scan-session won't re-import them */
   dismissedMissions: string[]
   /** contracts a session scan found but that aren't reviewed into the list yet */
@@ -256,6 +258,8 @@ interface StoreState {
   reorderStops: (fromKey: string, toKey: string) => void
   setStartLocation: (loc: string) => void
   setBoxLoose: (key: string, loose: boolean) => void
+  /** push an objective to a later trip, or bring it back */
+  setObjectiveDeferred: (objectiveId: string, deferred: boolean) => void
   startNewRun: () => void
 
   // history
@@ -311,8 +315,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes, dismissedMissions } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes, dismissed: dismissedMissions })
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, dismissedMissions } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, dismissed: dismissedMissions })
   }
 
   // active ship's grids
@@ -336,7 +340,7 @@ export const useStore = create<StoreState>((set, get) => {
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
   const doReroute = async (): Promise<void> => {
-    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder } = get()
+    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder, deferredObjectives } = get()
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
@@ -347,7 +351,8 @@ export const useStore = create<StoreState>((set, get) => {
       capacity,
       startLocation,
       bays,
-      isRouteAuto ? undefined : stopOrder
+      isRouteAuto ? undefined : stopOrder,
+      deferredObjectives
     )
     set({ route: plan })
     // compact only displays the route
@@ -506,6 +511,7 @@ export const useStore = create<StoreState>((set, get) => {
     route: null,
     isRouteAuto: true,
     looseBoxes: [],
+    deferredObjectives: [],
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
@@ -587,6 +593,7 @@ export const useStore = create<StoreState>((set, get) => {
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
         looseBoxes: manifest.loose ?? [],
+        deferredObjectives: manifest.deferred ?? [],
         dismissedMissions: manifest.dismissed ?? [],
         manualLayout: manifest.manualLayout ?? {},
         // resume walkthrough only with cargo
@@ -714,6 +721,7 @@ export const useStore = create<StoreState>((set, get) => {
           stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
           looseBoxes: doc.loose ?? [],
+          deferredObjectives: doc.deferred ?? [],
           dismissedMissions: doc.dismissed ?? [],
           manualLayout: doc.manualLayout ?? {},
           layout: doc.layout ?? null
@@ -1157,6 +1165,15 @@ export const useStore = create<StoreState>((set, get) => {
       if (loose === has) return
       set({ looseBoxes: loose ? [...cur, key] : cur.filter((k) => k !== key) })
       persist()
+    },
+
+    setObjectiveDeferred: (objectiveId, deferred) => {
+      const cur = get().deferredObjectives
+      const has = cur.includes(objectiveId)
+      if (deferred === has) return
+      set({ deferredObjectives: deferred ? [...cur, objectiveId] : cur.filter((id) => id !== objectiveId) })
+      persist()
+      scheduleReroute()
     },
 
     checkForUpdates: async () => {

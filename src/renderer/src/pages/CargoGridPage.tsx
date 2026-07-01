@@ -13,7 +13,7 @@ import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type LoadEvent, type Occupied } from '@shared/packer'
-import { packSchedule, setAsideToUnload, looseSummary } from '@shared/loadout'
+import { packSchedule, setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -495,6 +495,9 @@ export default function CargoGridPage(): React.ReactElement {
   const boxKey = (b: { objectiveId?: string; slot?: number }): string => `${b.objectiveId}#${b.slot}`
 
   const looseBoxes = useStore((s) => s.looseBoxes)
+  const setBoxLoose = useStore((s) => s.setBoxLoose)
+  const setManualActive = useStore((s) => s.setManualActive)
+  const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -970,6 +973,11 @@ export default function CargoGridPage(): React.ReactElement {
               manual={manual}
               palette={palette}
               loose={looseNow}
+              setAside={setAside}
+              unplaced={result.unplaced}
+              onStashOffGrid={(boxes) => boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true))}
+              onPlaceManual={() => setManualActive(true)}
+              onComeBack={(ids) => ids.forEach((id) => setObjectiveDeferred(id, true))}
               onPlace={placeFromPalette}
               aboardScu={shownScu}
               done={done}
@@ -1265,6 +1273,11 @@ function LoadingPanel({
   manual,
   palette,
   loose,
+  setAside,
+  unplaced,
+  onStashOffGrid,
+  onPlaceManual,
+  onComeBack,
   onPlace,
   aboardScu,
   done,
@@ -1284,6 +1297,11 @@ function LoadingPanel({
   manual: boolean
   palette: PaletteItem[]
   loose: PackBox[]
+  setAside: SetAside
+  unplaced: PackBox[]
+  onStashOffGrid: (boxes: PackBox[]) => void
+  onPlaceManual: () => void
+  onComeBack: (objectiveIds: string[]) => void
   onPlace: (objectiveId: string, size: number) => void
   aboardScu: number
   done: boolean
@@ -1439,6 +1457,17 @@ function LoadingPanel({
                 )}
               </div>
               {!load && <GrabOffGrid loose={loose} dropIds={s.dropIds} />}
+              {load && isCurrent && (
+                <PickupDecision
+                  decision={bucketDecision(setAside, unplaced, new Set(s.loadIds))}
+                  setAside={setAside}
+                  destLabel={destLabelOf(s.boundFor)}
+                  loadIds={s.loadIds}
+                  onStashOffGrid={onStashOffGrid}
+                  onPlaceManual={onPlaceManual}
+                  onComeBack={onComeBack}
+                />
+              )}
             </div>
           )
         })}
@@ -1714,6 +1743,140 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
         {summary.count === 1 ? 'box' : 'boxes'} / {fmt(summary.scu)} SCU off-grid for this stop
       </div>
     </div>
+  )
+}
+
+// the pickup decision card: when a bucket buries earlier cargo (dig-out) or won't fit
+// (overload), surface the honest cost + the choices. Quiet (renders nothing) otherwise.
+function PickupDecision({
+  decision,
+  setAside,
+  destLabel,
+  loadIds,
+  onStashOffGrid,
+  onPlaceManual,
+  onComeBack
+}: {
+  decision: BucketDecision
+  setAside: SetAside
+  destLabel: string
+  loadIds: string[]
+  onStashOffGrid: (boxes: PackBox[]) => void
+  onPlaceManual: () => void
+  onComeBack: (objectiveIds: string[]) => void
+}): React.ReactElement | null {
+  const [choice, setChoice] = useState<string | null>(null)
+  if (decision.kind === 'none') return null
+
+  const dig = decision.kind === 'digout'
+  const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)
+  const offCount = decision.overloadBoxes.length
+  const bigNote = setAside.big ? `${setAside.big} big · ` : ''
+
+  const pick = (id: string, run: () => void): void => {
+    setChoice(id)
+    run()
+  }
+
+  const options = dig
+    ? [
+        { id: 'load', title: 'Load it now', desc: `Tightest trip. Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
+        { id: 'place', title: 'Place it myself', desc: 'Switch this bucket to manual placement. You might find a cleaner spot.', run: onPlaceManual },
+        { id: 'come', title: 'Come back for it', desc: 'Skip for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
+      ]
+    : [
+        { id: 'stash', title: 'Stash it off-grid', desc: `Rides in empty corners of the hold. ${offCount} boxes / ${fmt(offScu)} SCU off grid right here.`, run: () => onStashOffGrid(decision.overloadBoxes) },
+        { id: 'come', title: 'Come back for it', desc: 'Leave it for a later trip. Nothing goes off grid.', run: () => onComeBack(loadIds) }
+      ]
+
+  const confirmCopy: Record<string, string> = {
+    load: `Loading now. ${setAside.count} boxes will be set aside to dig out earlier stops.`,
+    place: 'Manual placement on. Place this bucket wherever it fits best.',
+    come: dig ? 'Skipped for now. Grab it on a later pass, no digging.' : 'Skipped for now. Nothing goes off grid from this pickup.',
+    stash: `Stashed off-grid. ${offCount} boxes / ${fmt(offScu)} SCU off grid from this stop.`
+  }
+
+  return (
+    <div style={{ marginTop: 10, border: `1px solid ${dig ? '#a99cd0' : '#c9b07e'}`, borderLeftWidth: 3, borderRadius: 6, background: 'rgba(255,255,255,0.02)', padding: '11px 13px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontFamily: F.display, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: C.amber }}>
+          {dig ? 'DIG-OUT' : "WON'T FIT"}
+        </span>
+        <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.ghost }}>· bound for {destLabel}</span>
+      </div>
+
+      <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#b7c0c3', marginBottom: 10 }}>
+        {dig
+          ? "Loading this now sits it on top of cargo you deliver sooner. To reach that cargo you'll set some boxes aside by hand."
+          : 'This won’t fit the grid. You can wedge it into empty corners of the hold, or leave it for a later trip.'}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)', marginBottom: 12 }}>
+        {dig ? <span style={{ color: C.amber, fontSize: 16, lineHeight: 1 }}>↺</span> : <OffGridGlyph />}
+        <div>
+          <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
+            {dig ? `SET ASIDE ${setAside.count} BOXES` : `${offCount} BOXES · ${fmt(offScu)} SCU OFF GRID`}
+          </div>
+          <div style={{ fontFamily: F.body, fontSize: 12, color: '#a8b0b3', marginTop: 2 }}>
+            {dig ? `${bigNote}${fmt(setAside.scu)} SCU moved by hand` : 'A few small boxes wedge in safely. A big pile does not.'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', color: C.ghost, marginBottom: 8 }}>
+        CHOOSE ONE
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {options.map((o) => (
+          <DecisionOption key={o.id} title={o.title} desc={o.desc} selected={choice === o.id} onClick={() => pick(o.id, o.run)} />
+        ))}
+      </div>
+
+      {choice && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11, paddingTop: 10, borderTop: `1px solid ${C.lineFaint}` }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.4" style={{ flex: 'none' }}>
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          <span style={{ fontFamily: F.body, fontSize: 12.5, color: '#c7d0d3' }}>{confirmCopy[choice]}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DecisionOption({ title, desc, selected, onClick }: { title: string; desc: string; selected: boolean; onClick: () => void }): React.ReactElement {
+  return (
+    <Btn
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 11,
+        textAlign: 'left',
+        border: `1px solid ${selected ? 'rgba(255,210,30,0.45)' : 'rgba(255,255,255,0.14)'}`,
+        background: selected ? 'rgba(255,210,30,0.10)' : 'transparent',
+        padding: '9px 12px',
+        cursor: 'pointer',
+        width: '100%'
+      }}
+      hoverStyle={selected ? {} : { border: `1px solid rgba(255,255,255,0.34)`, background: 'rgba(255,255,255,0.02)' }}
+    >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.02em', color: selected ? C.acc : C.text, textShadow: selected ? GLOW : 'none' }}>
+          {title}
+        </span>
+        <span style={{ display: 'block', fontFamily: F.body, fontSize: 12, color: selected ? '#a8b0b3' : '#98a0a3', marginTop: 2 }}>
+          {desc}
+        </span>
+      </span>
+      <span style={{ flex: 'none', width: 16, height: 16, marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', background: selected ? C.acc : 'transparent', border: selected ? 'none' : `1.5px solid rgba(255,255,255,0.3)` }}>
+        {selected && (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        )}
+      </span>
+    </Btn>
   )
 }
 
