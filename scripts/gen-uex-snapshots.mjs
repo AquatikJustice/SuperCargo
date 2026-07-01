@@ -165,6 +165,7 @@ Outpost Main Building
 Outpost Storage Shed
 Outpost Warehouse
 Patch City at the L3 Lagrange of Pyro III
+Port Olisar
 Pyro 5a Abandoned Outpost
 Pyro 5b Abandoned Outpost
 Pyro I Abandoned Outpost

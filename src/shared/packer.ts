@@ -406,82 +406,79 @@ export function packTimeline(
   const order = (a: PackBox, b: PackBox): number =>
     (loadStep.get(a.id) ?? 0) - (loadStep.get(b.id) ?? 0) || b.size - a.size
 
-  // delivery window plus load/drop steps.
-  const firstLoad = new Map<number, number>()
-  const lastDrop = new Map<number, number>()
+  // each box's k-th load pairs with its k-th drop = that leg's drop step.
   const loadSteps = new Map<string, number[]>()
   const dropSteps = new Map<string, number[]>()
   events.forEach((ev, i) => {
-    for (const b of ev.load) {
-      ;(loadSteps.get(b.id) ?? loadSteps.set(b.id, []).get(b.id)!).push(i)
-      if (!firstLoad.has(b.stopIdx)) firstLoad.set(b.stopIdx, i)
-    }
-    for (const id of ev.drop) {
-      ;(dropSteps.get(id) ?? dropSteps.set(id, []).get(id)!).push(i)
-      const s = boxOf.get(id)?.stopIdx
-      if (s !== undefined) lastDrop.set(s, i)
-    }
+    for (const b of ev.load) (loadSteps.get(b.id) ?? loadSteps.set(b.id, []).get(b.id)!).push(i)
+    for (const id of ev.drop) (dropSteps.get(id) ?? dropSteps.set(id, []).get(id)!).push(i)
   })
-  // group delivery boxes into legs by drop.
+  // a leg = one delivery's boxes that share a drop step; first = when it starts loading.
   const legAtLoad = new Map<string, number>() // `${id}@${loadStep}` -> drop step
-  const stopLegs = new Map<number, Map<number, PackBox[]>>() // stop -> drop step -> boxes
+  const legs = new Map<string, { stop: number; first: number; drop: number; boxes: PackBox[] }>()
   for (const [id, loads] of loadSteps) {
     const box = boxOf.get(id)!
     const drops = dropSteps.get(id) ?? []
-    const legs = stopLegs.get(box.stopIdx) ?? stopLegs.set(box.stopIdx, new Map()).get(box.stopIdx)!
     loads.forEach((ld, k) => {
       const dp = drops[k] ?? Infinity
+      const key = `${box.stopIdx}@${dp}`
       legAtLoad.set(`${id}@${ld}`, dp)
-      ;(legs.get(dp) ?? legs.set(dp, []).get(dp)!).push(box)
+      const leg = legs.get(key) ?? { stop: box.stopIdx, first: ld, drop: dp, boxes: [] }
+      leg.first = Math.min(leg.first, ld)
+      leg.boxes.push(box)
+      legs.set(key, leg)
     })
   }
 
   const byId = new Map(bays.map((b) => [b.grid.id, b]))
-  // share the hold if aboard windows overlap.
-  const together = (s: number, t: number): boolean =>
-    (firstLoad.get(s) ?? 0) <= (lastDrop.get(t) ?? Infinity) && (firstLoad.get(t) ?? 0) <= (lastDrop.get(s) ?? Infinity)
+  type Band = Map<string, { near: number; far: number }>
+  // one home per box, assigned in drop order so later deliveries sit deeper and
+  // peel out cleanly. cells carry the drop step of whatever holds them; once a
+  // delivery has departed its cells are reclaimed for a later one that loads
+  // after it's gone, so the hold only reserves what's genuinely aboard together.
+  const NEVER = 1 << 29
+  const dropAt = new Map(bays.map((b) => [b.grid.id, new Int32Array(b.occ.length).fill(-1)]))
+  const reclaim = (before: number): void => {
+    for (const b of bays) {
+      const dc = dropAt.get(b.grid.id)!
+      for (let i = 0; i < b.occ.length; i++)
+        if (b.occ[i] && dc[i] < before) {
+          b.occ[i] = 0
+          b.owner[i] = -1
+          dc[i] = -1
+          b.used--
+        }
+    }
+  }
 
-  // homes fixed once, in delivery order.
-  // leg reset clears only this delivery.
-  const placed = new Map<number, Placement[]>()
-  const band = new Map<number, Map<string, { near: number; far: number }>>()
   const home = new Map<string, Placement>() // `${id}@${drop step}` -> placement
-  for (const stop of [...stopLegs.keys()].sort((a, b) => a - b)) {
-    const legs = stopLegs.get(stop)!
-    const stopPlacements: Placement[] = []
-    const stopBand = new Map<string, { near: number; far: number }>()
-    for (const drop of [...legs.keys()].sort((a, b) => a - b)) {
-      for (const b of bays) {
-        b.occ.fill(0)
-        b.owner.fill(-1)
-        b.used = 0
-        let fmin = 0
-        for (const [t, bm] of band) {
-          if (!together(stop, t)) continue
-          const bd = bm.get(b.grid.id)
+  const placedLegs: { drop: number; band: Band }[] = []
+  const legOrder = [...legs.values()].sort((a, b) => a.drop - b.drop || a.stop - b.stop)
+  for (const leg of legOrder) {
+    reclaim(leg.first)
+    for (const b of bays) {
+      let fmin = 0
+      for (const pl of placedLegs)
+        if (pl.drop >= leg.first) {
+          const bd = pl.band.get(b.grid.id)
           if (bd) fmin = Math.max(fmin, bd.far)
         }
-        b.fmin = fmin
-        b.fmax = Infinity
-      }
-      for (const [t, pls] of placed)
-        if (together(stop, t))
-          for (const p of pls) {
-            const b = byId.get(p.gridId)
-            if (b) fill(b, p.x, p.y, p.z, p.w, p.l, p.h, t)
-          }
-      const w = placeWall(bays, legs.get(drop)!, stop, maxAxis, order)
-      for (const p of w.placements) home.set(`${p.box.id}@${drop}`, p)
-      stopPlacements.push(...w.placements)
-      for (const [gid, bd] of w.bands) {
-        const u = stopBand.get(gid) ?? { near: Infinity, far: 0 }
-        u.near = Math.min(u.near, bd.near)
-        u.far = Math.max(u.far, bd.far)
-        stopBand.set(gid, u)
-      }
+      b.fmin = fmin
+      b.fmax = Infinity
     }
-    placed.set(stop, stopPlacements)
-    band.set(stop, stopBand)
+    const w = placeWall(bays, leg.boxes, leg.stop, maxAxis, order)
+    const dropNum = isFinite(leg.drop) ? leg.drop : NEVER
+    for (const p of w.placements) {
+      home.set(`${p.box.id}@${leg.drop}`, p)
+      const g = byId.get(p.gridId)!.grid
+      const dc = dropAt.get(p.gridId)!
+      for (let dy = 0; dy < p.h; dy++)
+        for (let dz = 0; dz < p.l; dz++)
+          for (let dx = 0; dx < p.w; dx++) dc[cellIdx(g, p.x + dx, p.y + dy, p.z + dz)] = dropNum
+    }
+    const bnd: Band = new Map()
+    for (const [gid, bd] of w.bands) bnd.set(gid, { near: bd.near, far: bd.far })
+    placedLegs.push({ drop: dropNum, band: bnd })
   }
 
   // each step, what's aboard at its leg's home.

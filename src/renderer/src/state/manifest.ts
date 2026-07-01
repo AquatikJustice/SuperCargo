@@ -101,6 +101,10 @@ export interface DerivedContract {
 // hidden while capture modal open
 export const isHeld = (c: HaulingContract): boolean => !!c.pendingOcr
 
+// a terminal can be visited on more than one trip, so a pickup check-off is keyed by node + trip,
+// otherwise the same terminal's buttons toggle together across trips (#24)
+export const pickupVisitKey = (nodeKey: string, trip?: number): string => `${nodeKey}#${trip ?? 0}`
+
 export const activeContracts = (contracts: HaulingContract[]): HaulingContract[] =>
   contracts.filter((c) => c.status === 'active' && !isHeld(c))
 
@@ -313,8 +317,8 @@ export function deriveRouteStops(
         boxCount: boxes.length,
         destination: f.o.destination,
         split: (f.o.pickups?.length ?? 0) > 1,
-        pickupKey: step.nodeKey,
-        picked: (f.o.pickedUpAt ?? []).includes(step.nodeKey)
+        pickupKey: pickupVisitKey(step.nodeKey, step.trip),
+        picked: (f.o.pickedUpAt ?? []).includes(pickupVisitKey(step.nodeKey, step.trip))
       })
     }
     if (!items.length && !pickups.length) continue

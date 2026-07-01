@@ -1342,13 +1342,6 @@
       "body": "Hurston"
     },
     {
-      "name": "Port Olisar",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true
-    },
-    {
       "name": "Port Tressler",
       "code": "Port Tressler",
       "maxContainerSize": 32,

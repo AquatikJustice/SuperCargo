@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   installedModules: {},
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
+  ocrCaptureTarget: 'window',
   ocrEngine: 'tesseract',
   ocrDisplayId: '',
   ocrCrop: { x: 0.32, y: 0.2, w: 0.36, h: 0.6 },

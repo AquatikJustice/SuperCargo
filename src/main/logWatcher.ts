@@ -7,6 +7,7 @@ import type {
   ContractAcceptedEvent,
   ObjectiveEvent,
   ContractEndedEvent,
+  ContractPaidEvent,
   WatcherStatus
 } from '@shared/types'
 
@@ -17,6 +18,7 @@ export interface LogWatcherEvents {
   accepted: (e: ContractAcceptedEvent, isHauling: boolean) => void
   objective: (e: ObjectiveEvent) => void
   ended: (e: ContractEndedEvent) => void
+  paid: (e: ContractPaidEvent) => void
 }
 
 export class LogWatcher extends EventEmitter {
@@ -30,6 +32,7 @@ export class LogWatcher extends EventEmitter {
   private firstOpen = true
   private buffer = ''
   private markers = new Map<string, MarkerEntry>()
+  private lastCompleteId = ''
   private connected = false
 
   constructor(path: string, channel: string | null) {
@@ -96,6 +99,7 @@ export class LogWatcher extends EventEmitter {
       if (this.fd !== null) {
         this.closeFd()
         this.markers.clear()
+        this.lastCompleteId = ''
       }
       this.setConnected(false, 'Game.log not found')
       return
@@ -111,6 +115,7 @@ export class LogWatcher extends EventEmitter {
         // rotated mid-session, reset parser state
         this.closeFd()
         this.markers.clear()
+        this.lastCompleteId = ''
       }
       try {
         this.fd = fs.openSync(this.path, 'r')
@@ -172,6 +177,15 @@ export class LogWatcher extends EventEmitter {
         break
       case 'ended':
         this.emit('ended', parsed.event)
+        break
+      case 'completeNotice':
+        this.lastCompleteId = parsed.missionId
+        break
+      case 'awarded':
+        if (this.lastCompleteId) {
+          this.emit('paid', { missionId: this.lastCompleteId, amount: parsed.amount })
+          this.lastCompleteId = ''
+        }
         break
     }
   }

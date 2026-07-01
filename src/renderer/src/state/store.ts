@@ -8,6 +8,7 @@ import type {
   ContractAcceptedEvent,
   ObjectiveEvent,
   ContractEndedEvent,
+  ContractPaidEvent,
   Location,
   Commodity,
   OcrResult,
@@ -62,6 +63,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   installedModules: {},
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
+  ocrCaptureTarget: 'window',
   ocrEngine: 'tesseract',
   ocrDisplayId: '',
   ocrCrop: { x: 0.32, y: 0.2, w: 0.36, h: 0.6 },
@@ -147,6 +149,8 @@ interface StoreState {
   route: RoutePlan | null
   /** manual drag sets false */
   isRouteAuto: boolean
+  /** boxes overloaded off-grid this run, keyed by objectiveId#slot */
+  looseBoxes: string[]
   history: HistoryEntry[]
   appVersion: string
   update: UpdateState | null
@@ -245,6 +249,7 @@ interface StoreState {
   ) => void
   reorderStops: (fromKey: string, toKey: string) => void
   setStartLocation: (loc: string) => void
+  setBoxLoose: (key: string, loose: boolean) => void
   startNewRun: () => void
 
   // history
@@ -289,8 +294,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx })
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes })
   }
 
   // active ship's grids
@@ -316,7 +321,6 @@ export const useStore = create<StoreState>((set, get) => {
   const doReroute = async (): Promise<void> => {
     const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder } = get()
     const installed = settings.installedModules[settings.activeShip]
-    // route against grid bays
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
     // manual keeps order, auto re-solves
@@ -456,6 +460,7 @@ export const useStore = create<StoreState>((set, get) => {
     layout: null,
     route: null,
     isRouteAuto: true,
+    looseBoxes: [],
     history: [],
     appVersion: '',
     update: null,
@@ -533,6 +538,7 @@ export const useStore = create<StoreState>((set, get) => {
         order: nextOrder(active, manifest.order),
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
+        looseBoxes: manifest.loose ?? [],
         manualLayout: manifest.manualLayout ?? {},
         // resume walkthrough only with cargo
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
@@ -603,25 +609,17 @@ export const useStore = create<StoreState>((set, get) => {
         if (idx < 0) return
         const c = contracts[idx]
         // fix scu in place, no dupe
-        const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}`
-        const exIdx = c.objectives.findIndex(
-          (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}` === ek
+        // include scu so two deliveries of the same commodity to the same place both register (#27);
+        // the delivered total is fixed per objective, so a re-emit of the same one still dedups
+        const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}|${e.scuAmount}`
+        const exists = c.objectives.some(
+          (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}|${o.scuAmount}` === ek
         )
-        let objectives = c.objectives
-        if (exIdx >= 0) {
-          if (c.objectives[exIdx].scuAmount === e.scuAmount) return // unchanged
-          objectives = [...c.objectives]
-          objectives[exIdx] = {
-            ...objectives[exIdx],
-            scuAmount: e.scuAmount,
-            boxes: calculateBoxes(e.scuAmount, c.maxBoxSize)
-          }
-        } else {
-          objectives = [
-            ...c.objectives,
-            makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, c.maxBoxSize)
-          ]
-        }
+        if (exists) return
+        const objectives = [
+          ...c.objectives,
+          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, c.maxBoxSize)
+        ]
         const updated = [...contracts]
         updated[idx] = { ...c, objectives }
         commit(updated)
@@ -632,16 +630,27 @@ export const useStore = create<StoreState>((set, get) => {
         const contract = contracts.find((c) => c.id === e.missionId)
         if (!contract) return
         if (e.completion === 'Complete') {
+          pendingEnds.delete(e.missionId)
           archive(finalizeDelivery(contract), 'completed')
           commit(contracts.filter((c) => c.id !== e.missionId))
           set({ isRouteAuto: true })
           scheduleReroute()
           return
         }
+        // a shared mission fires a bogus "Player left" abandon mid-haul during party churn;
+        // the real end still arrives, so don't archive it
+        if (e.completion === 'Abandon' && /left/i.test(e.reason ?? '')) return
         // coalesce against a disconnect wipe
         if (e.completion === 'Abandon' || e.completion === 'Fail') {
           queueEnd(e.missionId, e.completion === 'Fail' ? 'failed' : 'abandoned')
         }
+      }))
+      track(window.supercargo.onContractPaid((e: ContractPaidEvent) => {
+        const history = get().history.map((h) =>
+          h.id === e.missionId ? { ...h, actualPayout: e.amount } : h
+        )
+        set({ history })
+        persistHistory(history)
       }))
       track(window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null })))
 
@@ -653,6 +662,7 @@ export const useStore = create<StoreState>((set, get) => {
           order: doc.order,
           stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
+          looseBoxes: doc.loose ?? [],
           manualLayout: doc.manualLayout ?? {},
           layout: doc.layout ?? null
         })
@@ -768,26 +778,38 @@ export const useStore = create<StoreState>((set, get) => {
     addObjectivesToContract: (contractId, objectives, maxBoxSize) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
-        // key on commodity+destination, not scu
-        const key = (commodity: string, destination: string): string =>
-          `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}`
-        const seen = new Set(c.objectives.map((o) => key(o.commodity, o.destination)))
-        const newObjs = objectives
+        // the modal seeds existing objectives into editable rows, so the submitted set is authoritative.
+        // replace rather than merge, but carry delivery progress for rows that survive unchanged.
+        const sig = (commodity: string, destination: string, scu: number): string =>
+          `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}|${scu}`
+        const prior = new Map<string, DeliveryObjective[]>()
+        for (const o of c.objectives) {
+          const k = sig(o.commodity, o.destination, o.scuAmount)
+          ;(prior.get(k) ?? prior.set(k, []).get(k)!).push(o)
+        }
+        const objectives2 = objectives
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
-          .filter((o) => !seen.has(key(o.commodity, o.destination)))
-          .map((o) => makeObjective(o, maxBoxSize))
-        // re-box in case maxBoxSize changed
-        const existing = c.objectives.map((o) => ({
-          ...o,
-          boxes: calculateBoxes(o.scuAmount, maxBoxSize)
-        }))
+          .map((o) => {
+            const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
+            const base = makeObjective(o, maxBoxSize)
+            return kept
+              ? {
+                  ...base,
+                  id: kept.id,
+                  delivered: kept.delivered,
+                  deliveredScu: kept.deliveredScu,
+                  turnedInScu: kept.turnedInScu,
+                  pickedUpAt: kept.pickedUpAt
+                }
+              : base
+          })
         // box size confirmed, release hold
         return {
           ...c,
           maxBoxSize,
           boxSizeConfirmed: true,
           pendingOcr: false,
-          objectives: [...existing, ...newObjs]
+          objectives: objectives2
         }
       })
       commit(contracts)
@@ -835,9 +857,11 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     updateHistoryReward: (id, reward) => {
-      // re-derive payout from completion %
+      // editing the reward is an explicit override; drop the logged payout and re-derive from completion %
       const history = get().history.map((h) =>
-        h.id === id ? { ...h, reward, payout: snapPayout(reward * payoutFactor(h.completionPct ?? 1)) } : h
+        h.id === id
+          ? { ...h, reward, actualPayout: undefined, payout: snapPayout(reward * payoutFactor(h.completionPct ?? 1)) }
+          : h
       )
       set({ history })
       persistHistory(history)
@@ -872,6 +896,7 @@ export const useStore = create<StoreState>((set, get) => {
         startLocation: '',
         stopOrder: [],
         isRouteAuto: true,
+        looseBoxes: [],
         loadingActive: false,
         manualActive: false,
         loadingIdx: 0
@@ -1072,6 +1097,14 @@ export const useStore = create<StoreState>((set, get) => {
       set({ startLocation: loc, isRouteAuto: true })
       persist()
       scheduleReroute()
+    },
+
+    setBoxLoose: (key, loose) => {
+      const cur = get().looseBoxes
+      const has = cur.includes(key)
+      if (loose === has) return
+      set({ looseBoxes: loose ? [...cur, key] : cur.filter((k) => k !== key) })
+      persist()
     },
 
     checkForUpdates: async () => {

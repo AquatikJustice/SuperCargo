@@ -297,6 +297,41 @@ export default function SettingsPage(): React.ReactElement {
           <SmallBtn onClick={() => void refreshOcrEngine()}>REFRESH</SmallBtn>
         </div>
       </div>
+      <div style={{ ...rowStyle, gridTemplateColumns: '210px 1fr', alignItems: 'start' }}>
+        <span style={{ ...keyStyle, paddingTop: 6 }}>Capture source</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {[
+            { id: 'window', label: 'STAR CITIZEN WINDOW' },
+            { id: 'display', label: 'FULL DISPLAY' }
+          ].map((o) => {
+            const active = (settings.ocrCaptureTarget ?? 'window') === o.id
+            return (
+              <Btn
+                key={o.id}
+                onClick={() => void updateSettings({ ocrCaptureTarget: o.id as 'window' | 'display' })}
+                style={{
+                  border: `1px solid ${active ? C.acc : 'rgba(255,255,255,0.16)'}`,
+                  background: active ? C.accFill : 'transparent',
+                  color: active ? C.text : C.body,
+                  textShadow: active ? GLOW : 'none',
+                  fontFamily: F.display,
+                  fontSize: 11,
+                  letterSpacing: '0.12em',
+                  padding: '6px 12px',
+                  cursor: 'pointer'
+                }}
+                hoverStyle={active ? {} : { border: `1px solid ${C.acc}` }}
+              >
+                {o.label}
+              </Btn>
+            )
+          })}
+          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, flexBasis: '100%', lineHeight: 1.6 }}>
+            Grabbing just the game window keeps SuperCargo out of the shot, so it works even on one monitor.
+            Switch to full display if you run the game in exclusive fullscreen.
+          </span>
+        </div>
+      </div>
       <div style={rowStyle}>
         <span style={keyStyle}>Capture display</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

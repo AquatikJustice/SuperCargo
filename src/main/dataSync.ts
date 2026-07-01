@@ -6,7 +6,7 @@ import * as crypto from 'node:crypto'
 import { app } from 'electron'
 import type { DataSyncResult } from '@shared/types'
 
-const RAW_BASE = 'https://raw.githubusercontent.com/AquatikJustice/SuperCargo/master/data/uex'
+const RAW_BASE = 'https://raw.githubusercontent.com/AquatikJustice/SuperCargo/main/data/uex'
 const FETCH_TIMEOUT_MS = 12000
 
 const SPECS = [

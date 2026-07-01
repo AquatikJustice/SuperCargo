@@ -6,13 +6,14 @@ import sairaFont from '@fontsource/saira/files/saira-latin-600-normal.woff?url'
 import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff?url'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
-import { packBoxes, deriveStops } from '../state/manifest'
+import { packBoxes, deriveStops, pickupVisitKey } from '../state/manifest'
 import { buildLoadingSteps, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type LoadEvent, type Occupied } from '@shared/packer'
+import { packSchedule, setAsideToUnload } from '@shared/loadout'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -103,6 +104,12 @@ function center(p: number, size: number, origin: number): number {
   return p + size / 2 - origin
 }
 
+// authored off-axis spin (e.g. Hull B's diamond), degrees -> radians for the bay group
+function bayRot(grid: CargoGrid): [number, number, number] | undefined {
+  const r = grid.rot
+  return r ? [(r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180] : undefined
+}
+
 type BoxMode = 'normal' | 'current' | 'loaded' | 'future'
 
 function Box({
@@ -133,9 +140,13 @@ function Box({
   const wx = (grid.x || 0) + pl.x
   const wy = (grid.y || 0) + pl.y
   const wz = (grid.z || 0) + pl.z
-  const cx = center(wx, pl.w, origin[0])
-  const cy = center(wy, pl.h, origin[1])
-  const cz = center(wz, pl.l, origin[2])
+  // place boxes relative to the bay center so a rotated bay carries its cargo with it
+  const bcx = center(grid.x || 0, grid.w, origin[0])
+  const bcy = center(grid.y || 0, grid.h, origin[1])
+  const bcz = center(grid.z || 0, grid.l, origin[2])
+  const cx = center(wx, pl.w, origin[0]) - bcx
+  const cy = center(wy, pl.h, origin[1]) - bcy
+  const cz = center(wz, pl.l, origin[2]) - bcz
   const loaded = mode === 'loaded'
   const color = loaded ? BOX_GRAY_LOADED : BOX_GRAY
   const stripeColor = loaded ? BOX_GRAY_LOADED : pl.box.color
@@ -149,7 +160,7 @@ function Box({
   const halfH = H / 2
   const belts = [{ y: halfH - STRIPE_MARGIN - STRIPE_T / 2, t: STRIPE_T }]
   return (
-    <group>
+    <group position={[bcx, bcy, bcz]} rotation={bayRot(grid)}>
       <RoundedBox
         args={[W, H, L]}
         radius={bevel}
@@ -320,7 +331,7 @@ function GridShell({
     center(grid.z || 0, grid.l, origin[2])
   ]
   return (
-    <group position={pos}>
+    <group position={pos} rotation={bayRot(grid)}>
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={refOnly ? C.amber : C.acc} transparent opacity={refOnly ? 0.5 : 0.32} />
       </lineSegments>
@@ -425,6 +436,7 @@ export default function CargoGridPage(): React.ReactElement {
   const setManual = useStore((s) => s.setManualActive)
   const loadIdx = useStore((s) => s.loadingIdx)
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
+  const setPickedUp = useStore((s) => s.setPickedUp)
   // freeze while walking
   const frozenSteps = useStore((s) => s.loadingSteps)
   const setFrozenSteps = useStore((s) => s.setLoadingSteps)
@@ -482,6 +494,7 @@ export default function CargoGridPage(): React.ReactElement {
   // survives the running pk-ids
   const boxKey = (b: { objectiveId?: string; slot?: number }): string => `${b.objectiveId}#${b.slot}`
 
+  const looseBoxes = useStore((s) => s.looseBoxes)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -490,13 +503,16 @@ export default function CargoGridPage(): React.ReactElement {
     const events = manual
       ? fullEvents.map((ev) => ({ load: ev.load.filter((b) => manualLayout[boxKey(b)]), drop: ev.drop }))
       : fullEvents
-    const snaps = packTimeline(grids, events, true, manual ? manualLayout : undefined).map((s) => ({
+    const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
+    const raw = manual ? packTimeline(grids, events, true, manualLayout) : packSchedule(grids, events, { loose: looseIds })
+    const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
+      loose: 'loose' in s ? s.loose : [],
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes])
 
   // hand-placed lock, rest auto-packs
   const splitManual = (
@@ -593,6 +609,10 @@ export default function CargoGridPage(): React.ReactElement {
     }
     return fromFrozen(plan)
   }, [grids, plan, loadingPack, loading, loadIdx])
+  const setAside = useMemo(
+    () => setAsideToUnload(grids.filter((g) => g.autoLoad !== false), result.placements),
+    [grids, result]
+  )
   const visiblePlacements = result.placements
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
@@ -871,12 +891,12 @@ export default function CargoGridPage(): React.ReactElement {
               ? '✓ FITS · PACKED TIGHT'
               : '✓ EVERYTHING FITS'}
         </span>
-        {!over && !result.peelOk && (
+        {!over && setAside.count > 0 && (
           <span
             style={{ fontFamily: F.body, fontSize: 13, color: '#d9a441', textShadow: GLOW }}
-            title="A few boxes are boxed in and will need a quick shuffle to pull out in delivery order. Everything still fits."
+            title="To unload in delivery order you'll set these boxes aside to reach the ones underneath. Everything still fits."
           >
-            ↺ {result.peelDebt.length} to shuffle
+            ↺ set aside {setAside.count} to unload{setAside.big ? ` (${setAside.big} big)` : ''}
           </span>
         )}
       </div>
@@ -938,7 +958,15 @@ export default function CargoGridPage(): React.ReactElement {
               turnedIn={turnedIn}
               onTurnIn={(entries) => turnInDestination(entries)}
               onUnmark={(ids) => unmarkTurnIn(ids)}
-              onLoaded={() => setLoadIdx((i) => i + 1)}
+              onLoaded={() => {
+                // loaded step ticks the manifest pickups, one-way
+                if (currentLoad?.kind === 'load')
+                  for (const oid of currentLoad.loadIds) {
+                    const cid = objMeta.get(oid)?.contractId
+                    if (cid) setPickedUp(cid, oid, pickupVisitKey(currentLoad.nodeKey, currentLoad.trip), true)
+                  }
+                setLoadIdx((i) => i + 1)
+              }}
               onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
               onExit={() => setLoading(false)}
               onRestart={() => setLoadIdx(0)}
@@ -1122,21 +1150,26 @@ export default function CargoGridPage(): React.ReactElement {
               const g = gridById.get(ghost.gridId)
               if (!g) return null
               const col = ghost.valid ? C.purple : C.red
+              const bcx = center(g.x || 0, g.w, origin[0])
+              const bcy = center(g.y || 0, g.h, origin[1])
+              const bcz = center(g.z || 0, g.l, origin[2])
               return (
-                <RoundedBox
-                  raycast={() => null}
-                  args={[ghost.w - GAP, ghost.h - GAP, ghost.l - GAP]}
-                  radius={Math.min(0.09, (Math.min(ghost.w, ghost.h, ghost.l) - GAP) / 2 - 0.02)}
-                  smoothness={3}
-                  steps={1}
-                  position={[
-                    center((g.x || 0) + ghost.x, ghost.w, origin[0]),
-                    center((g.y || 0) + ghost.y, ghost.h, origin[1]),
-                    center((g.z || 0) + ghost.z, ghost.l, origin[2])
-                  ]}
-                >
-                  <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.55} transparent opacity={0.45} depthWrite={false} />
-                </RoundedBox>
+                <group position={[bcx, bcy, bcz]} rotation={bayRot(g)}>
+                  <RoundedBox
+                    raycast={() => null}
+                    args={[ghost.w - GAP, ghost.h - GAP, ghost.l - GAP]}
+                    radius={Math.min(0.09, (Math.min(ghost.w, ghost.h, ghost.l) - GAP) / 2 - 0.02)}
+                    smoothness={3}
+                    steps={1}
+                    position={[
+                      center((g.x || 0) + ghost.x, ghost.w, origin[0]) - bcx,
+                      center((g.y || 0) + ghost.y, ghost.h, origin[1]) - bcy,
+                      center((g.z || 0) + ghost.z, ghost.l, origin[2]) - bcz
+                    ]}
+                  >
+                    <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.55} transparent opacity={0.45} depthWrite={false} />
+                  </RoundedBox>
+                </group>
               )
             })()}
           <OrbitControls ref={controlsRef} makeDefault enablePan enabled={!drag} target={initialView?.target ?? [0, 0, 0]} onEnd={saveView} />

@@ -23,6 +23,44 @@ function resolveDisplay(displayId: string): Electron.Display {
   return screen.getPrimaryDisplay()
 }
 
+const GAME_WINDOW = /star\s*citizen/i
+
+// exclusive fullscreen hands back a black frame; treat that as a miss so we fall back to display capture
+function isMostlyBlack(img: NativeImage): boolean {
+  const { width, height } = img.getSize()
+  if (width < 4 || height < 4) return true
+  const bmp = img.toBitmap() // BGRA
+  const step = Math.max(4, (Math.floor(bmp.length / 4 / 5000) || 1) * 4)
+  let lit = 0
+  let checked = 0
+  for (let i = 0; i + 2 < bmp.length; i += step) {
+    checked++
+    if (bmp[i] > 16 || bmp[i + 1] > 16 || bmp[i + 2] > 16) lit++
+  }
+  return checked > 0 && lit / checked < 0.01
+}
+
+// grab the game window's own surface, so our windows (or anything else) on top of it aren't in the shot
+export async function captureGameWindow(): Promise<NativeImage | null> {
+  const displays = screen.getAllDisplays()
+  const width = Math.max(...displays.map((d) => d.size.width * (d.scaleFactor || 1)))
+  const height = Math.max(...displays.map((d) => d.size.height * (d.scaleFactor || 1)))
+
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: Math.round(width), height: Math.round(height) }
+  })
+  const matches = sources.filter((s) => GAME_WINDOW.test(s.name) && !s.thumbnail.isEmpty())
+  if (!matches.length) return null
+  // biggest match is the game, not a tooltip or child window
+  const img = matches.reduce((a, b) => {
+    const sa = a.thumbnail.getSize()
+    const sb = b.thumbnail.getSize()
+    return sb.width * sb.height > sa.width * sa.height ? b : a
+  }).thumbnail
+  return isMostlyBlack(img) ? null : img
+}
+
 export async function captureDisplay(displayId: string): Promise<NativeImage | null> {
   const display = resolveDisplay(displayId)
   const scale = display.scaleFactor || 1

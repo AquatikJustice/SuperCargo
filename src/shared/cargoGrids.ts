@@ -35,6 +35,8 @@ export interface CargoGrid {
   exit?: { axis: 'x' | 'z'; dir: -1 | 1 }
   /** authored per-face markup (wall/exit/aisle), from synced grid-faces. */
   faces?: Partial<Record<BayDir, BayFaceKind>>
+  /** visual-only euler spin (degrees, about x/y/z) for off-axis layouts; packer ignores it. */
+  rot?: [number, number, number]
   source: 'sccargo' | 'datamine' | 'override' | 'curated'
 }
 
@@ -152,7 +154,7 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 // uex lists (markup tool -> data/uex/grid-faces.json). setGridFaces is called
 // once the roster loads; until then bays have no markup and the packer falls
 // back to a dense pack.
-type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h'>>
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot'>>
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
 
@@ -161,7 +163,7 @@ export function setGridFaces(ships: ShipMarkup[]): void {
   const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
   for (const s of ships) {
     const bays: Record<string, BayInfo> = {}
-    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h }
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
   }
@@ -222,6 +224,7 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
         ...(m.l !== undefined ? { l: m.l } : {}),
         ...(m.h !== undefined ? { h: m.h } : {}),
         ...(m.group !== undefined ? { group: m.group } : {}),
+        ...(m.rot !== undefined ? { rot: m.rot } : {}),
         faces: m.faces,
         exit: deriveExit(m.faces)
       }

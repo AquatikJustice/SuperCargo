@@ -71,6 +71,7 @@ function withBay(
   const empty = (x: BayMarkup): boolean =>
     (!x.faces || !Object.keys(x.faces).length) &&
     x.group === undefined &&
+    x.rot === undefined &&
     [x.x, x.y, x.z, x.w, x.l, x.h].every((v) => v === undefined)
   s.bays = s.bays.filter((x) => !empty(x))
   return next
@@ -87,7 +88,8 @@ function effective(g: CargoGrid, b?: BayMarkup): CargoGrid {
     ...(b.l !== undefined ? { l: b.l } : {}),
     ...(b.h !== undefined ? { h: b.h } : {}),
     ...(b.group !== undefined ? { group: b.group } : {}),
-    faces: b.faces
+    faces: b.faces,
+    rot: b.rot
   }
 }
 
@@ -105,9 +107,11 @@ function Bay({
   const cx = g.x + g.w / 2
   const cy = g.y + g.h / 2
   const cz = g.z + g.l / 2
+  const r = g.rot
   return (
     <mesh
       position={[cx, cy, cz]}
+      rotation={r ? [(r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180] : undefined}
       onClick={(e) => {
         e.stopPropagation()
         const additive = e.nativeEvent.ctrlKey || e.nativeEvent.metaKey || e.nativeEvent.shiftKey
@@ -251,6 +255,22 @@ function RotateButtons({ onRotate }: { onRotate: (a: Axis) => void }): JSX.Eleme
   )
 }
 
+function FineRotate({ angle, setAngle, onRotate }: { angle: number; setAngle: (n: number) => void; onRotate: (a: Axis, sign: 1 | -1) => void }): JSX.Element {
+  const btn = { fontSize: 12, background: '#2a323c', color: '#cfe3f5', border: '1px solid #28333f', padding: '4px 8px', cursor: 'pointer' } as const
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <span style={{ fontSize: 12, color: '#8aa3bd' }}>fine</span>
+      <input type="number" value={angle} onChange={(e) => setAngle(Number(e.target.value) || 0)} title="degrees per click"
+        style={{ width: 46, background: '#141b24', color: '#cfe3f5', border: '1px solid #28333f', padding: '2px 4px' }} />
+      <span style={{ fontSize: 12, color: '#5a6b7d' }}>°</span>
+      {(['x', 'y', 'z'] as Axis[]).map((a) => (
+        <button key={a} onClick={() => onRotate(a, 1)} onContextMenu={(e) => { e.preventDefault(); onRotate(a, -1) }}
+          style={btn} title={`spin ${a.toUpperCase()} by ±angle · right-click reverses`}>{a.toUpperCase()}</button>
+      ))}
+    </span>
+  )
+}
+
 function NumField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }): JSX.Element {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
@@ -272,6 +292,7 @@ function App(): JSX.Element {
   const [status, setStatus] = useState('loading…')
   const [view, setView] = useState(0)
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const [angle, setAngle] = useState(45)
 
   const pickBay = (id: string, additive: boolean): void =>
     setSel((s) => (additive ? (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]) : [id]))
@@ -373,6 +394,44 @@ function App(): JSX.Element {
       return next
     })
   }
+  // free-angle spin of the selection about its shared center; visual only, the box geometry
+  // stays axis-aligned (packer never sees it) and faces keep their local meaning.
+  const rotateBy = (axis: Axis, sign: 1 | -1): void => {
+    const picked = sel.map((id) => bays.find((b) => b.id === id)).filter(Boolean) as CargoGrid[]
+    if (!picked.length) return
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+    for (const g of picked) {
+      minX = Math.min(minX, g.x); maxX = Math.max(maxX, g.x + g.w)
+      minY = Math.min(minY, g.y); maxY = Math.max(maxY, g.y + g.h)
+      minZ = Math.min(minZ, g.z); maxZ = Math.max(maxZ, g.z + g.l)
+    }
+    const gx = (minX + maxX) / 2, gy = (minY + maxY) / 2, gz = (minZ + maxZ) / 2
+    const deg = angle * sign
+    const rad = (deg * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const ai = axis === 'x' ? 0 : axis === 'y' ? 1 : 2
+    setMarkup((m) => {
+      let next = m
+      for (const g of picked) {
+        const cx = g.x + g.w / 2 - gx, cy = g.y + g.h / 2 - gy, cz = g.z + g.l / 2 - gz
+        let nx = cx, ny = cy, nz = cz
+        if (axis === 'y') { nx = cx * cos + cz * sin; nz = -cx * sin + cz * cos }
+        else if (axis === 'x') { ny = cy * cos - cz * sin; nz = cy * sin + cz * cos }
+        else { nx = cx * cos - cy * sin; ny = cx * sin + cy * cos }
+        const r: [number, number, number] = [...(g.rot ?? [0, 0, 0])] as [number, number, number]
+        r[ai] = ((r[ai] + deg) % 360 + 360) % 360
+        const zeroed = r.every((v) => v === 0)
+        next = withBay(next, ship, g.id, (b) => {
+          b.x = gx + nx - g.w / 2
+          b.y = gy + ny - g.h / 2
+          b.z = gz + nz - g.l / 2
+          b.rot = zeroed ? undefined : r
+        })
+      }
+      return next
+    })
+  }
+
   // starboard follows the bow, right-hand rule
   const setBow = (fore: BayDir): void => {
     setMarkup((m) => {
@@ -442,7 +501,8 @@ function App(): JSX.Element {
           <span style={{ color: FACE_COLOR.aisle }}>aisle</span> / <span style={{ color: FACE_COLOR.wall }}>wall</span> / none.
           Right-click cycles backwards.
           Select a bay to move it (number fields, or arrow keys / PageUp-Down; Shift = ×5). Rotate with the
-          <b> X/Y/Z</b> buttons or keys (<b>R</b> = Y). Ctrl/Shift-click bays to select several and move them as one. Save writes
+          <b> X/Y/Z</b> buttons or keys (<b>R</b> = Y) for 90° snaps, or <b>fine °</b> for off-axis layouts like
+          Hull B's diamond (right-click reverses). Ctrl/Shift-click bays to select several and rotate them as one. Save writes
           <code> data/uex/grid-faces.json</code> and rehashes it.
         </p>
 
@@ -500,6 +560,7 @@ function App(): JSX.Element {
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <RotateButtons onRotate={rotateSelected} />
+              <FineRotate angle={angle} setAngle={setAngle} onRotate={rotateBy} />
               <button onClick={() => resetBay(one!)} style={{ fontSize: 12, background: '#2a323c', color: '#cfe3f5', border: '1px solid #28333f', padding: '4px 8px', cursor: 'pointer' }}>
                 reset position/size
               </button>
@@ -523,7 +584,10 @@ function App(): JSX.Element {
                 )
               })}
             </div>
-            <RotateButtons onRotate={rotateSelected} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <RotateButtons onRotate={rotateSelected} />
+              <FineRotate angle={angle} setAngle={setAngle} onRotate={rotateBy} />
+            </div>
           </div>
         ) : (
           <div style={{ fontSize: 12, color: '#5a6b7d', marginBottom: 12 }}>Select a bay to move it. Ctrl/Shift-click for several.</div>

@@ -257,20 +257,54 @@ function watchGridFacesDev(): void {
 
 let ocrBusy = false
 
-// keep overlay out of screenshot
-async function withCompactHidden<T>(fn: () => Promise<T>): Promise<T> {
-  const wasVisible =
-    !!compactWindow && !compactWindow.isDestroyed() && compactWindow.isVisible()
-  if (!wasVisible) return fn()
-  compactWindow!.hide()
-  await new Promise((r) => setTimeout(r, 150)) // let compositor drop the frame
+// the captured display, for deciding whether the main window is even in the shot
+function captureDisplayMatches(win: BrowserWindow): boolean {
+  const id = settings.ocrDisplayId
+  const target = id
+    ? screen.getAllDisplays().find((d) => String(d.id) === id) ?? screen.getPrimaryDisplay()
+    : screen.getPrimaryDisplay()
+  return screen.getDisplayMatching(win.getBounds()).id === target.id
+}
+
+// keep our own windows out of the screenshot: hide them for the grab, then restore.
+// the main window only needs hiding when it's on the display being captured (single-monitor case).
+async function withWindowsHidden<T>(fn: () => Promise<T>): Promise<T> {
+  const restore: Array<() => void> = []
+
+  if (compactWindow && !compactWindow.isDestroyed() && compactWindow.isVisible()) {
+    compactWindow.hide()
+    restore.push(() => {
+      if (compactWindow && !compactWindow.isDestroyed()) {
+        compactWindow.showInactive()
+        compactWindow.setAlwaysOnTop(true, 'screen-saver')
+      }
+    })
+  }
+
+  if (
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    mainWindow.isVisible() &&
+    !mainWindow.isMinimized() &&
+    captureDisplayMatches(mainWindow)
+  ) {
+    // if the game had focus (auto-capture), don't yank it back; if the app did, keep it
+    const wasFocused = mainWindow.isFocused()
+    mainWindow.hide()
+    restore.push(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (wasFocused) mainWindow.show()
+        else mainWindow.showInactive()
+      }
+    })
+  }
+
+  if (!restore.length) return fn()
+  await new Promise((r) => setTimeout(r, 150)) // let the compositor drop the frame
   try {
     return await fn()
   } finally {
-    if (compactWindow && !compactWindow.isDestroyed()) {
-      compactWindow.showInactive()
-      compactWindow.setAlwaysOnTop(true, 'screen-saver')
-    }
+    for (const r of restore) r()
   }
 }
 
@@ -280,7 +314,7 @@ async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   ocrBusy = true
   send(IPC.evtOcrStatus, 'recognizing')
   try {
-    const result = await withCompactHidden(() => runOcr(settings))
+    const result = await runOcr(settings, withWindowsHidden)
     send(IPC.evtOcrResult, { ...result, targetMissionId })
   } catch (e) {
     send(IPC.evtOcrResult, {
@@ -348,6 +382,7 @@ function startWatcher(): void {
   })
   watcher.on('objective', (e) => send(IPC.evtObjective, e))
   watcher.on('ended', (e) => send(IPC.evtContractEnded, e))
+  watcher.on('paid', (e) => send(IPC.evtContractPaid, e))
   watcher.start()
 }
 
@@ -503,7 +538,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ocrListDisplays, () => listDisplays())
   ipcMain.handle(IPC.ocrEngineInfo, () => engineInfo(settings))
   ipcMain.handle(IPC.ocrPreview, () => capturePreview(settings))
-  ipcMain.handle(IPC.ocrRun, () => runOcr(settings))
+  ipcMain.handle(IPC.ocrRun, () => runOcr(settings, withWindowsHidden))
   // only for genuinely-new hauling contracts
   ipcMain.on(IPC.ocrRequestCapture, (_e, missionId: unknown) => {
     scheduleAutoCapture(typeof missionId === 'string' ? missionId : undefined)

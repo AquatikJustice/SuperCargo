@@ -16,12 +16,18 @@ const PATTERN_OBJECTIVE =
   /Added notification "New Objective: Deliver\s+\d+\/(\d+)\s+SCU of\s+(.+?)\s+to\s+(.+?)[:."].*?MissionId: \[([^\]]+)\]/
 const PATTERN_END_MISSION =
   /<EndMission>.*MissionId\[([^\]]+)\].*CompletionType\[(\w+)\](?:.*?Reason\[([^\]]+)\])?/
+// the completion notice carries the real id; the Awarded line right after it has an all-zero id
+const PATTERN_COMPLETE =
+  /Added notification "Contract Complete:\s*.*?"\s*\[[^\]]*\].*?MissionId: \[([^\]]+)\]/
+const PATTERN_AWARD = /Added notification "Awarded\s+([\d,]+)\s+aUEC/
 
 export type ParsedLine =
   | { kind: 'marker'; missionId: string; generator: string; contractName: string; defId?: string }
   | { kind: 'accepted'; event: ContractAcceptedEvent; isHauling: boolean }
   | { kind: 'objective'; event: ObjectiveEvent }
   | { kind: 'ended'; event: ContractEndedEvent }
+  | { kind: 'completeNotice'; missionId: string }
+  | { kind: 'awarded'; amount: number }
   | null
 
 export function parseTimestamp(line: string): string | null {
@@ -88,6 +94,14 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
   if ((match = PATTERN_END_MISSION.exec(line))) {
     const [, missionId, completion, reason] = match
     return { kind: 'ended', event: { missionId, completion: completion as CompletionType, reason } }
+  }
+
+  if ((match = PATTERN_COMPLETE.exec(line))) {
+    return { kind: 'completeNotice', missionId: match[1] }
+  }
+
+  if ((match = PATTERN_AWARD.exec(line))) {
+    return { kind: 'awarded', amount: parseInt(match[1].replace(/,/g, ''), 10) }
   }
 
   return null

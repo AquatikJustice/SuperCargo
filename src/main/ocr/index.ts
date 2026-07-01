@@ -1,6 +1,7 @@
 import type { AppSettings, OcrEngineInfo, OcrResult } from '@shared/types'
 import { parseOcrText, matchObjectives, reorderColumns } from '@shared/ocrParse'
-import { captureDisplay, cropImage, toUpscaledPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
+import { captureGameWindow, captureDisplay, cropImage, toUpscaledPng, toGrayscalePng, toPreviewDataUrl } from '../capture'
+import type { NativeImage } from 'electron'
 import { loadCachedCommodities, loadCachedLocations } from '../uex'
 import * as telemetry from '../telemetry'
 import type { OcrEngine } from './engine'
@@ -37,15 +38,24 @@ export async function engineInfo(settings: AppSettings): Promise<OcrEngineInfo> 
 }
 
 export async function capturePreview(settings: AppSettings): Promise<string | null> {
-  const img = await captureDisplay(settings.ocrDisplayId)
+  let img = settings.ocrCaptureTarget === 'display' ? null : await captureGameWindow()
+  if (!img) img = await captureDisplay(settings.ocrDisplayId)
   return img ? toPreviewDataUrl(img) : null
 }
 
-export async function runOcr(settings: AppSettings): Promise<OcrResult> {
+// aroundCapture lets the caller hide its own windows for just the screenshot, not the whole OCR
+export async function runOcr(
+  settings: AppSettings,
+  aroundCapture: <T>(fn: () => Promise<T>) => Promise<T> = (fn) => fn()
+): Promise<OcrResult> {
   const engine = engineFor(settings.ocrEngine || 'tesseract')
   const base: OcrResult = { ok: false, engine: engine.id, ms: 0, confidence: 0, rawText: '', objectives: [] }
 
-  const full = await captureDisplay(settings.ocrDisplayId)
+  // window capture excludes overlapping windows, so it needs no hiding; fall back to the
+  // whole display (with the caller hiding our windows) when the game window isn't found
+  let full: NativeImage | null =
+    settings.ocrCaptureTarget === 'display' ? null : await captureGameWindow()
+  if (!full) full = await aroundCapture(() => captureDisplay(settings.ocrDisplayId))
   if (!full) return { ...base, error: 'screen capture failed (no source available)' }
 
   const cropped = cropImage(full, settings.ocrCrop)

@@ -15,6 +15,9 @@ const STATUS_COLOR: Record<HistoryStatus, string> = {
 
 type Filter = 'all' | 'completed' | 'abandoned'
 
+// the game's logged award beats the reward-derived estimate when we have it
+const netPayout = (h: HistoryEntry): number => h.actualPayout ?? h.payout
+
 function fmtDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '-'
@@ -54,7 +57,7 @@ export default function HistoryPage(): React.ReactElement {
         abandonedCount: entries.filter((e) => e.status === 'abandoned').length,
         failedCount: entries.filter((e) => e.status === 'failed').length,
         scu: done.reduce((a, e) => a + e.totalScu, 0),
-        earnings: done.reduce((a, e) => a + (e.payout || 0), 0),
+        earnings: done.reduce((a, e) => a + (netPayout(e) || 0), 0),
         latest: entries.reduce((m, e) => (e.endedAt > m ? e.endedAt : m), entries[0].endedAt)
       }
     })
@@ -64,7 +67,7 @@ export default function HistoryPage(): React.ReactElement {
   const abandoned = history.filter((h) => h.status === 'abandoned')
   const scuHauled = completed.reduce((a, h) => a + h.totalScu, 0)
   const boxesHauled = completed.reduce((a, h) => a + h.totalBoxes, 0)
-  const earnings = completed.reduce((a, h) => a + (h.payout || 0), 0)
+  const earnings = completed.reduce((a, h) => a + (netPayout(h) || 0), 0)
 
   if (history.length === 0) {
     return (
@@ -200,6 +203,7 @@ function exportRun(group: RunGroupData): void {
       status: e.status,
       completionPct: e.completionPct,
       payout: e.payout,
+      actualPayout: e.actualPayout,
       totalScu: e.totalScu,
       totalBoxes: e.totalBoxes,
       destinations: e.destinations
@@ -414,6 +418,8 @@ function RewardCell({ entry }: { entry: HistoryEntry }): React.ReactElement {
     )
   }
   const partial = (entry.completionPct ?? 1) < 1
+  const net = netPayout(entry)
+  const logged = entry.actualPayout !== undefined
   return (
     <Btn
       onClick={() => {
@@ -435,11 +441,15 @@ function RewardCell({ entry }: { entry: HistoryEntry }): React.ReactElement {
       hoverStyle={{ color: C.acc }}
     >
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
-        <span style={{ color: entry.payout ? C.text : C.faint }}>
-          {entry.payout ? `${fmt(entry.payout)} aUEC` : entry.reward ? '0 aUEC' : 'set -'}
+        <span style={{ color: net ? C.text : C.faint }}>
+          {net ? `${fmt(net)} aUEC` : entry.reward ? '0 aUEC' : 'set -'}
         </span>
-        {partial && entry.reward > 0 && (
-          <span style={{ fontSize: 10, color: C.faint }}>of {fmt(entry.reward)}</span>
+        {logged ? (
+          <span style={{ fontSize: 10, color: C.faint }}>paid{entry.reward > 0 ? ` · of ${fmt(entry.reward)}` : ''}</span>
+        ) : (
+          partial && entry.reward > 0 && (
+            <span style={{ fontSize: 10, color: C.faint }}>of {fmt(entry.reward)}</span>
+          )
         )}
       </span>
     </Btn>

@@ -88,6 +88,8 @@ export interface AppSettings {
 
   ocrCaptureDelay: number
   ocrAutoCapture: boolean
+  /** 'window' = grab just the Star Citizen window; 'display' = whole screen (hides our windows for the shot) */
+  ocrCaptureTarget: 'window' | 'display'
   ocrEngine: string
   /** '' = primary */
   ocrDisplayId: string
@@ -173,6 +175,8 @@ export interface ManifestDoc {
   loadingActive?: boolean
   manualActive?: boolean
   loadingIdx?: number
+  /** boxes the user chose to overload off-grid, keyed by objectiveId#slot */
+  loose?: string[]
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
@@ -207,6 +211,8 @@ export interface HistoryEntry {
   completionPct: number
   /** reward scaled by completionPct; earnings sum this */
   payout: number
+  /** actual aUEC from the game log when we saw it; wins over the estimate for earnings */
+  actualPayout?: number
   acceptedAt: string
   endedAt: string
   runId: string
@@ -245,6 +251,12 @@ export interface ContractEndedEvent {
   missionId: string
   completion: CompletionType
   reason?: string
+}
+
+export interface ContractPaidEvent {
+  missionId: string
+  /** actual aUEC the game awarded, already net of fees and any share split */
+  amount: number
 }
 
 export interface UexSyncResult {
@@ -321,6 +333,9 @@ export interface BayMarkup {
   w?: number
   l?: number
   h?: number
+  /** visual-only euler spin (degrees, about x/y/z) applied around the bay center at render
+   *  time. lets you author off-axis layouts (e.g. Hull B's diamond). the packer ignores it. */
+  rot?: [number, number, number]
 }
 
 /** authored markup for one ship: orientation + per-bay faces and layout fixes. */
