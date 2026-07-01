@@ -955,14 +955,23 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     startNewRun: () => {
-      const { runId, history } = get()
+      const { runId, history, contracts } = get()
+      // don't lose payouts: file anything already turned in, drop the untouched rest
+      contracts
+        .filter((c) => c.objectives.some((o) => o.turnedInScu !== undefined))
+        .forEach((c) => archive(finalizeDelivery(c), 'completed'))
       set({
         runId: newRunId([runId, ...history.map((h) => h.runId)]),
+        contracts: [],
+        order: [],
+        route: null,
         layout: null,
+        manualLayout: {},
         startLocation: '',
         stopOrder: [],
         isRouteAuto: true,
         looseBoxes: [],
+        deferredObjectives: [],
         loadingActive: false,
         manualActive: false,
         loadingIdx: 0

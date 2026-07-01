@@ -131,6 +131,10 @@ function RunChip(): React.ReactElement {
   const startNewRun = useStore((s) => s.startNewRun)
   const activeCount = useStore((s) => s.contracts.length)
   const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
+  const [confirm, setConfirm] = useState(false)
+  useEffect(() => {
+    if (!open) setConfirm(false)
+  }, [open])
 
   return (
     <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26 }}>
@@ -190,14 +194,18 @@ function RunChip(): React.ReactElement {
           </div>
           <Btn
             onClick={() => {
+              if (activeCount > 0 && !confirm) {
+                setConfirm(true)
+                return
+              }
               startNewRun()
               setOpen(false)
             }}
             style={{
               width: '100%',
               justifyContent: 'center',
-              border: `1px solid ${C.acc}`,
-              background: C.accFill,
+              border: `1px solid ${confirm ? C.red : C.acc}`,
+              background: confirm ? 'rgba(236,116,112,0.14)' : C.accFill,
               color: C.text,
               textShadow: GLOW,
               fontFamily: F.display,
@@ -207,13 +215,15 @@ function RunChip(): React.ReactElement {
               padding: '8px 12px',
               cursor: 'pointer'
             }}
-            hoverStyle={{ background: C.accFillStrong }}
+            hoverStyle={{ background: confirm ? 'rgba(236,116,112,0.22)' : C.accFillStrong }}
           >
-            START NEW RUN
+            {confirm ? 'CLEAR MANIFEST & START' : 'START NEW RUN'}
           </Btn>
           <p style={{ fontFamily: F.body, fontSize: 11, color: C.faint, lineHeight: 1.55, margin: '10px 0 0' }}>
             {activeCount > 0
-              ? `${activeCount} contract${activeCount === 1 ? '' : 's'} on the manifest will finish under this run. A new run also starts on its own once the manifest is empty.`
+              ? confirm
+                ? `Clears ${activeCount} contract${activeCount === 1 ? '' : 's'} off the manifest. Anything you've turned in gets filed to History first.`
+                : `Starts fresh and clears the ${activeCount} contract${activeCount === 1 ? '' : 's'} on the manifest.`
               : 'A new run also starts on its own when you accept a contract with an empty manifest.'}
           </p>
         </div>

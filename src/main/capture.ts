@@ -4,10 +4,17 @@ import { desktopCapturer, screen, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
 import type { CropRect, DisplayInfo } from '@shared/types'
 
+// Electron's numeric display id gets reassigned across a full PC reboot, so we key on
+// position+resolution instead — that stays put as long as the physical layout doesn't change.
+function displayKey(d: Electron.Display): string {
+  const b = d.bounds
+  return `${b.x}_${b.y}_${b.width}x${b.height}`
+}
+
 export function listDisplays(): DisplayInfo[] {
   const primaryId = screen.getPrimaryDisplay().id
   return screen.getAllDisplays().map((d, i) => ({
-    id: String(d.id),
+    id: displayKey(d),
     label: d.label || `Display ${i + 1} (${d.size.width}×${d.size.height})`,
     width: d.size.width,
     height: d.size.height,
@@ -17,7 +24,10 @@ export function listDisplays(): DisplayInfo[] {
 
 function resolveDisplay(displayId: string): Electron.Display {
   if (displayId) {
-    const found = screen.getAllDisplays().find((d) => String(d.id) === displayId)
+    // match the stable key, but still honor an old numeric id saved before this change
+    const found = screen
+      .getAllDisplays()
+      .find((d) => displayKey(d) === displayId || String(d.id) === displayId)
     if (found) return found
   }
   return screen.getPrimaryDisplay()
