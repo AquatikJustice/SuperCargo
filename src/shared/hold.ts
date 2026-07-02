@@ -31,8 +31,10 @@ export interface UnitVerdict {
 
 export interface Concession {
   boxId: string
-  /** peel = out of delivery-depth order, unloads around it need lift-outs; build = loads buried, a dig-out */
-  kind: 'peel' | 'build'
+  /** peel = out of delivery-depth order, unloads around it need lift-outs;
+   *  flank = pins a neighbor (game bug), plan a shuffle at its drop;
+   *  build = loads buried, a dig-out */
+  kind: 'peel' | 'flank' | 'build'
 }
 
 export interface HoldProofs {
@@ -128,6 +130,7 @@ const containsWindow = (a: Slot, b: Slot): boolean => a.load <= b.load && a.drop
 interface Relax {
   build?: boolean
   peel?: boolean
+  flank?: boolean
 }
 
 // slide in at its level, or lift over a single-height row: the operator
@@ -147,6 +150,29 @@ function canInsert(aboard: Slot[], t: Slot): boolean {
 
 const beats = (a: number[], b: number[]): boolean => {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]
+  return false
+}
+
+// the game bug: an oppositely-flanked box won't release. Placing t must not
+// complete a flank pair around any box that leaves while t is still aboard.
+function makesSandwich(rivals: Slot[], t: Slot): boolean {
+  const side = (a: Slot, b: Slot, onC: boolean, lo: boolean): boolean => {
+    const touch = onC
+      ? (lo ? a.c + a.cw === b.c : a.c === b.c + b.cw) && spans(a.d, a.d + a.dl, b.d, b.d + b.dl)
+      : (lo ? a.d + a.dl === b.d : a.d === b.d + b.dl) && spans(a.c, a.c + a.cw, b.c, b.c + b.cw)
+    return touch && spans(a.y, a.y + a.h, b.y, b.y + b.h)
+  }
+  for (const r of rivals) {
+    if (!r.anchor && r.drop >= t.drop) continue
+    for (const onC of [true, false]) {
+      const tLo = side(t, r, onC, true)
+      const tHi = side(t, r, onC, false)
+      if (!tLo && !tHi) continue
+      const otherSide = (lo: boolean): boolean =>
+        rivals.some((q) => q !== r && (q.anchor || q.drop > r.drop) && side(q, r, onC, lo))
+      if ((tLo && (tHi || otherSide(false))) || (tHi && otherSide(true))) return true
+    }
+  }
   return false
 }
 
@@ -191,6 +217,7 @@ function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: nu
             if (r.drop > t.drop && t.d + t.dl + pad > r.d) { ok = false; break }
           }
         if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
+        if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
         // stay inside the unit's depth zone first, then avoid new floor, low, shallow
         const key = [t.d >= zone ? 0 : 1, y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
@@ -254,13 +281,15 @@ function seatConceding(
     { gap, relax: {} },
     ...(gap > 0 ? [{ gap: 0, relax: {} }] : []),
     { gap: 0, relax: { peel: true }, kind: 'peel' as const },
-    { gap: 0, relax: { peel: true, build: true }, kind: 'build' as const }
+    { gap: 0, relax: { peel: true, flank: true }, kind: 'flank' as const },
+    { gap: 0, relax: { peel: true, flank: true, build: true }, kind: 'build' as const }
   ]
   const placed: Slot[] = []
   const conceded: Concession[] = []
   const failed: PackBox[] = []
   const strict = rungs.filter((r) => !r.kind)
   const lift = rungs.filter((r) => r.kind === 'peel')
+  const pin = rungs.filter((r) => r.kind === 'flank')
   const dig = rungs.filter((r) => r.kind === 'build')
   const stop = unit[0].stopIdx
   // keep a stop's cargo together: bays already holding this stop come first
@@ -287,7 +316,7 @@ function seatConceding(
       return false
     }
     const order = (): BayCtx[] => affinity(open).concat(bays.filter((b) => !open.includes(b)))
-    attempt(order(), strict) || attempt(order(), lift) || attempt(order(), dig)
+    attempt(order(), strict) || attempt(order(), lift) || attempt(order(), pin) || attempt(order(), dig)
     if (!got) {
       failed.push(box)
       continue
@@ -376,18 +405,6 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   const loadOf = (id: string): number => loadAt.get(id) ?? 0
   const dropOf = (id: string): number => dropAt.get(id) ?? events.length
 
-  const slots: Slot[] = []
-  const byBox = new Map<string, Slot>()
-  if (pins)
-    for (const [id, p] of pins) {
-      const bay = bayById.get(p.gridId)
-      if (!bay) continue
-      const box = boxOf.get(id) ?? p.box
-      const s = fromPlacement(bay, { ...p, box }, boxOf.has(id) ? loadOf(id) : 0, boxOf.has(id) ? dropOf(id) : NEVER, !boxOf.has(id))
-      slots.push(s)
-      byBox.set(box.id, s)
-    }
-
   const units = new Map<string, PackBox[]>()
   for (const b of boxOf.values()) {
     if (loose?.has(b.id) || pins?.has(b.id)) continue
@@ -399,36 +416,74 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     (a, b) => dropOf(a[0].id) - dropOf(b[0].id) || loadOf(a[0].id) - loadOf(b[0].id)
   )
 
-  const open: BayCtx[] = []
-  const verdicts: UnitVerdict[] = []
-  const concessions: Concession[] = []
-  for (const unit of ordered) {
-    const load = loadOf(unit[0].id)
-    const drop = dropOf(unit[0].id)
-    const stop = unit[0].stopIdx
-    // whole unit clean in one bay, then a fresh bay, then spilled, then per-box concessions
-    const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
-    const homes = open.filter(has).concat(open.filter((b) => !has(b)))
-    let placed: Slot[] | null = null
-    for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap))) break
-    if (!placed) {
-      const next = bays.find((b) => !open.includes(b))
-      if (next && (placed = seatUnit([next], slots, unit, load, drop, gap))) open.push(next)
-    }
-    if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap)
-    if (placed) {
-      slots.push(...placed)
-      for (const s of placed) byBox.set(s.box.id, s)
-      verdicts.push({ stop, load, ok: true, boxes: unit })
-    } else {
-      const got = seatConceding(bays, open, slots, unit, load, drop, gap)
-      slots.push(...got.placed)
-      for (const s of got.placed) byBox.set(s.box.id, s)
-      concessions.push(...got.conceded)
-      if (got.failed.length) verdicts.push({ stop, load, ok: false, boxes: got.failed, reason: 'space' })
-      else verdicts.push({ stop, load, ok: true, boxes: unit })
-    }
+  interface PassResult {
+    slots: Slot[]
+    byBox: Map<string, Slot>
+    verdicts: UnitVerdict[]
+    concessions: Concession[]
   }
+  const runPass = (queue: PackBox[][]): PassResult => {
+    const slots: Slot[] = []
+    const byBox = new Map<string, Slot>()
+    if (pins)
+      for (const [id, p] of pins) {
+        const bay = bayById.get(p.gridId)
+        if (!bay) continue
+        const box = boxOf.get(id) ?? p.box
+        const s = fromPlacement(bay, { ...p, box }, boxOf.has(id) ? loadOf(id) : 0, boxOf.has(id) ? dropOf(id) : NEVER, !boxOf.has(id))
+        slots.push(s)
+        byBox.set(box.id, s)
+      }
+    const open: BayCtx[] = []
+    const verdicts: UnitVerdict[] = []
+    const concessions: Concession[] = []
+    for (const unit of queue) {
+      const load = loadOf(unit[0].id)
+      const drop = dropOf(unit[0].id)
+      const stop = unit[0].stopIdx
+      // whole unit clean in one bay, then a fresh bay, then spilled, then per-box concessions
+      const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
+      const homes = open.filter(has).concat(open.filter((b) => !has(b)))
+      let placed: Slot[] | null = null
+      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap))) break
+      if (!placed) {
+        const next = bays.find((b) => !open.includes(b))
+        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap))) open.push(next)
+      }
+      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap)
+      if (placed) {
+        slots.push(...placed)
+        for (const s of placed) byBox.set(s.box.id, s)
+        verdicts.push({ stop, load, ok: true, boxes: unit })
+      } else {
+        const got = seatConceding(bays, open, slots, unit, load, drop, gap)
+        slots.push(...got.placed)
+        for (const s of got.placed) byBox.set(s.box.id, s)
+        concessions.push(...got.conceded)
+        if (got.failed.length) verdicts.push({ stop, load, ok: false, boxes: got.failed, reason: 'space' })
+        else verdicts.push({ stop, load, ok: true, boxes: unit })
+      }
+    }
+    return { slots, byBox, verdicts, concessions }
+  }
+
+  // the most window-constrained cargo shouldn't go last: on any homeless
+  // boxes, retry once with their units placed first
+  let pass = runPass(ordered)
+  if (pass.verdicts.some((v) => !v.ok)) {
+    const failedKeys = new Set(pass.verdicts.filter((v) => !v.ok).map((v) => `${v.stop}@${v.load}`))
+    const promoted = ordered
+      .filter((u) => failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`))
+      .concat(ordered.filter((u) => !failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`)))
+    const retry = runPass(promoted)
+    const homeless = (p: PassResult): number => p.verdicts.reduce((a, v) => a + (v.ok ? 0 : v.boxes.length), 0)
+    if (
+      homeless(retry) < homeless(pass) ||
+      (homeless(retry) === homeless(pass) && retry.concessions.length < pass.concessions.length)
+    )
+      pass = retry
+  }
+  const { slots, byBox, verdicts, concessions } = pass
 
   const snaps: LoadSnap[] = []
   for (let i = 0; i < events.length; i++) {
