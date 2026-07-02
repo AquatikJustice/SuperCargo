@@ -213,6 +213,19 @@ function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
   return tells
 }
 
+// scu aboard after each loading step (loads add, drops subtract), plus the run's
+// high-water mark. Feeds the live load bar: fill = series[currentStep], tick = peak.
+export function loadProfile(steps: LoadingStep[]): { series: number[]; peak: number } {
+  const series: number[] = []
+  let aboard = 0
+  for (const s of steps) {
+    const moved = s.lines.reduce((a, l) => a + l.scu, 0)
+    aboard += s.kind === 'load' ? moved : -moved
+    series.push(aboard)
+  }
+  return { series, peak: series.length ? Math.max(0, ...series) : 0 }
+}
+
 export function buildLoadingSteps(
   contracts: HaulingContract[],
   plan: RoutePlan,

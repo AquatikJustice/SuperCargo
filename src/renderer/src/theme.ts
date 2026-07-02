@@ -43,6 +43,15 @@ export function fmt(n: number): string {
   return n.toLocaleString('en-US')
 }
 
+// distances come in gigameters; show them in the game's own units, largest that reads >= 1
+export function fmtDistance(gm: number): string {
+  const m = Math.max(0, gm) * 1e9
+  if (m >= 1e9) return `${(m / 1e9).toFixed(1)} Gm`
+  if (m >= 1e6) return `${(m / 1e6).toFixed(1)} Mm`
+  if (m >= 1e3) return `${(m / 1e3).toFixed(1)} km`
+  return `${m.toFixed(1)} m`
+}
+
 export const ZOOM_MIN = 0.9
 export const ZOOM_MAX = 1.6
 export const ZOOM_STEP = 0.05

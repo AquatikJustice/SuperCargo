@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
-import { C, F, GLOW, fmt } from '../theme'
+import { C, F, GLOW, fmt, fmtDistance } from '../theme'
 import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, offGridByObjective, type Stop, type StopItem, type PickupItem, type OffGridTally } from '../state/manifest'
+import { buildLoadingSteps, loadProfile } from '../state/loading'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn } from '../components/ui'
+import LoadBar from '../components/LoadBar'
 import Typeahead from '../components/Typeahead'
 import TurnInModal from '../components/TurnInModal'
 
@@ -20,6 +22,8 @@ export default function ManifestPage(): React.ReactElement {
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const route = useStore((s) => s.route)
+  const loadingActive = useStore((s) => s.loadingActive)
+  const loadingIdx = useStore((s) => s.loadingIdx)
   const openCapture = useStore((s) => s.openCapture)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
@@ -44,14 +48,10 @@ export default function ManifestPage(): React.ReactElement {
 
   // usable bays only, no elevators or secure storage
   const capMax = gridCapacity(activeShip, installedModules[activeShip])
-  const trips = route?.trips ?? 0
-  const multiTrip = trips > 1
-  // peak load of the first trip, not the whole haul when it splits
-  const trip1Load = route ? Object.values(route.trip1Scu).reduce((a, b) => a + b, 0) : 0
-  const remaining = Math.max(0, totals.scu - trip1Load)
-  const capPct = capMax > 0 ? Math.min(100, Math.round((trip1Load / capMax) * 100)) : 0
-  const room = Math.max(0, capMax - trip1Load)
-  const capColor = capPct <= 50 ? C.green : capPct <= 80 ? C.amber : C.red
+  const loadSteps = useMemo(() => (route ? buildLoadingSteps(contracts, route, order) : []), [route, contracts, order])
+  const { series, peak } = useMemo(() => loadProfile(loadSteps), [loadSteps])
+  // what's on the ship right now: 0 until you're actually walking the load
+  const aboard = loadingActive && series.length ? series[Math.max(0, Math.min(loadingIdx, series.length - 1))] : 0
 
   if (totals.contracts === 0) {
     return (
@@ -83,28 +83,9 @@ export default function ManifestPage(): React.ReactElement {
         <SummaryStat label="TOTAL SCU" value={fmt(totals.scu)} first />
         <SummaryStat label="BOXES" value={fmt(totals.boxes)} />
         <SummaryStat label="STOPS" value={String(stops.length)} />
+        <SummaryStat label="DISTANCE" value={route ? fmtDistance(route.totalDistance) : '—'} />
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
-            <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim }}>
-              {multiTrip ? `TRIP 1 OF ${trips}` : 'PEAK LOAD'}
-            </span>
-            <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
-              {multiTrip ? (
-                <>
-                  {fmt(trip1Load)} SCU aboard
-                  <span style={{ color: C.amber }}> · {fmt(remaining)} on later trips</span>
-                </>
-              ) : (
-                <>
-                  {fmt(trip1Load)} / {fmt(capMax)} SCU
-                  <span style={{ color: C.dim }}> · room for {fmt(room)}</span>
-                </>
-              )}
-            </span>
-          </div>
-          <div style={{ height: 4, background: 'rgba(255,255,255,0.10)', width: '100%' }}>
-            <div style={{ height: '100%', width: `${Math.min(100, capPct)}%`, background: capColor }} />
-          </div>
+          <LoadBar current={aboard} peak={peak} capacity={capMax} />
         </div>
       </div>
 

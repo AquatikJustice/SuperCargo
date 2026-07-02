@@ -7,7 +7,7 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, deriveStops, pickupVisitKey } from '../state/manifest'
-import { buildLoadingSteps, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
@@ -20,6 +20,7 @@ import { Btn } from '../components/ui'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
 import TurnInModal, { type TurnInItem } from '../components/TurnInModal'
+import LoadBar from '../components/LoadBar'
 
 const GAP = 0.08
 
@@ -979,7 +980,7 @@ export default function CargoGridPage(): React.ReactElement {
               onPlaceManual={() => setManualActive(true)}
               onComeBack={(ids) => ids.forEach((id) => setObjectiveDeferred(id, true))}
               onPlace={placeFromPalette}
-              aboardScu={shownScu}
+              capacity={result.capacity}
               done={done}
               idx={loadIdx}
               total={loadSteps.length}
@@ -1279,7 +1280,7 @@ function LoadingPanel({
   onPlaceManual,
   onComeBack,
   onPlace,
-  aboardScu,
+  capacity,
   done,
   idx,
   total,
@@ -1303,7 +1304,7 @@ function LoadingPanel({
   onPlaceManual: () => void
   onComeBack: (objectiveIds: string[]) => void
   onPlace: (objectiveId: string, size: number) => void
-  aboardScu: number
+  capacity: number
   done: boolean
   idx: number
   total: number
@@ -1316,6 +1317,8 @@ function LoadingPanel({
   onRestart: () => void
 }): React.ReactElement {
   const isDrop = step?.kind === 'drop'
+  const { series, peak } = useMemo(() => loadProfile(steps), [steps])
+  const aboard = done || !series.length ? 0 : series[Math.max(0, Math.min(idx, series.length - 1))]
   // split bucket: only last trip
   const isFinalChunk = (l: LoadingStep['lines'][number]): boolean => l.tripPos >= l.tripTotal
   const dropLines = isDrop ? step!.lines.filter(isFinalChunk) : []
@@ -1406,12 +1409,15 @@ function LoadingPanel({
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
         </span>
-        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{fmt(aboardScu)} SCU aboard</span>
         {!isLoad && (
           <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
             NEXT just previews · nothing locks until the game finishes the contract
           </span>
         )}
+      </div>
+
+      <div style={{ padding: '0 16px 10px', flex: 'none' }}>
+        <LoadBar current={aboard} peak={peak} capacity={capacity} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
