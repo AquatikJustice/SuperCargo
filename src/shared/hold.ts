@@ -60,6 +60,17 @@ interface BayCtx {
   h: number
   onZ: boolean
   dir: -1 | 1
+  /** stacks hug the high side of the cross axis */
+  wallHigh: boolean
+}
+
+function wallIsHigh(grid: CargoGrid, onZ: boolean): boolean {
+  const f = grid.faces
+  if (!f) return false
+  const hi = onZ ? f['x+'] : f['z+']
+  const lo = onZ ? f['x-'] : f['z-']
+  if (hi === 'wall' || lo === 'aisle') return true
+  return false
 }
 
 interface Slot {
@@ -87,7 +98,8 @@ function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
     dl: onZ ? grid.l : grid.w,
     h: grid.h,
     onZ,
-    dir: exit.dir
+    dir: exit.dir,
+    wallHigh: wallIsHigh(grid, onZ)
   }
 }
 
@@ -193,7 +205,7 @@ function findSpot(
   zone: number
 ): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
-  let bestKey: number[] = [Infinity, Infinity, Infinity, Infinity, Infinity]
+  let bestKey: number[] = new Array(7).fill(Infinity)
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   for (let c = 0; c + cwf <= bay.cw; c++) {
@@ -225,6 +237,11 @@ function findSpot(
         let ok = true
         if (!relax.peel)
           for (const r of rivals) {
+            // a depth row belongs to one stop wall-to-wall; no crossing another bucket's rows
+            if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) {
+              ok = false
+              break
+            }
             if (!laneClash(t, r)) continue
             const pad = r.stop !== t.stop ? gap : 0
             // earlier drop peels first, so it sits nearer the exit
@@ -234,10 +251,12 @@ function findSpot(
         if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
         if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
-        // in the depth zone, glued to own stop, stack HIGH before claiming
-        // new floor (floor is the scarce resource), low, shallow, tight
+        // in the depth zone, glued to own stop, stack HIGH before claiming new
+        // floor (floor is the scarce resource), stretch across the bay not into
+        // its depth, low, shallow, tight to the wall side
         const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
-        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
+        const cWall = bay.wallHigh ? bay.cw - (t.c + cwf) : t.c
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, dlf, t.y, t.d, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key

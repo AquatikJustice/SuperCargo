@@ -380,6 +380,7 @@ export default function CargoGridPage(): React.ReactElement {
   const installedModules = useStore((s) => s.settings.installedModules)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
+  const clearAllPickedUp = useStore((s) => s.clearAllPickedUp)
   const gridFacesSyncedAt = useStore((s) => s.gridFacesSyncedAt)
 
   // clear old frozen layout
@@ -1010,7 +1011,12 @@ export default function CargoGridPage(): React.ReactElement {
                 setLoadIdx((i) => Math.max(0, i - 1))
               }}
               onExit={() => setLoading(false)}
-              onRestart={() => setLoadIdx(0)}
+              onRestart={() => {
+                // starting over untouches every pickup and turn-in
+                clearAllPickedUp()
+                unmarkTurnIn(contracts.flatMap((c) => c.objectives.map((o) => o.id)))
+                setLoadIdx(0)
+              }}
             />
           </div>
         )}

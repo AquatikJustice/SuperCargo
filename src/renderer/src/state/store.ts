@@ -242,6 +242,7 @@ interface StoreState {
   unmarkTurnIn: (objectiveIds: string[]) => void
   /** toggle a pickup checkoff */
   setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
+  clearAllPickedUp: () => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
   /** maxBoxSize change re-boxes everything */
   editContract: (
@@ -819,12 +820,7 @@ export const useStore = create<StoreState>((set, get) => {
         // pre-placed. Frozen plan, pickup ticks, and hand placements all go
         set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {} })
         persist()
-        const cleared = get().contracts.map((c) =>
-          c.objectives.some((o) => o.pickedUpAt?.length)
-            ? { ...c, objectives: c.objectives.map((o) => (o.pickedUpAt?.length ? { ...o, pickedUpAt: [] } : o)) }
-            : c
-        )
-        if (cleared.some((c, i) => c !== get().contracts[i])) commit(cleared)
+        get().clearAllPickedUp()
         scheduleReroute()
       }
     },
@@ -1051,6 +1047,15 @@ export const useStore = create<StoreState>((set, get) => {
         }
       })
       commit(updated)
+    },
+
+    clearAllPickedUp: () => {
+      const updated = get().contracts.map((c) =>
+        c.objectives.some((o) => o.pickedUpAt?.length)
+          ? { ...c, objectives: c.objectives.map((o) => (o.pickedUpAt?.length ? { ...o, pickedUpAt: [] } : o)) }
+          : c
+      )
+      if (updated.some((c, i) => c !== get().contracts[i])) commit(updated)
     },
 
     unmarkTurnIn: (objectiveIds) => {
