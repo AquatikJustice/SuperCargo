@@ -997,7 +997,18 @@ export default function CargoGridPage(): React.ReactElement {
                   }
                 setLoadIdx((i) => i + 1)
               }}
-              onBack={() => setLoadIdx((i) => Math.max(0, i - 1))}
+              onBack={() => {
+                // stepping back re-opens the step you land on: pickups un-tick,
+                // turn-ins un-mark, so rewinding resets the manifest as you go
+                const prev = loadSteps[loadIdx - 1]
+                if (prev?.kind === 'load')
+                  for (const oid of prev.loadIds) {
+                    const cid = objMeta.get(oid)?.contractId
+                    if (cid) setPickedUp(cid, oid, pickupVisitKey(prev.nodeKey, prev.trip), false)
+                  }
+                else if (prev?.kind === 'drop') unmarkTurnIn(prev.lines.map((l) => l.objectiveId))
+                setLoadIdx((i) => Math.max(0, i - 1))
+              }}
               onExit={() => setLoading(false)}
               onRestart={() => setLoadIdx(0)}
             />

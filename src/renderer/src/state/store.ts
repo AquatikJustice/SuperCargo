@@ -815,9 +815,16 @@ export const useStore = create<StoreState>((set, get) => {
         patch.installedModules !== undefined &&
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
-        // a different hold voids the frozen loading plan; the walk re-freezes
-        // off the fresh route instead of showing the old ship's steps
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0 })
+        // a different hold means a fresh walk: nothing pre-done, nothing
+        // pre-placed. Frozen plan, pickup ticks, and hand placements all go
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {} })
+        persist()
+        const cleared = get().contracts.map((c) =>
+          c.objectives.some((o) => o.pickedUpAt?.length)
+            ? { ...c, objectives: c.objectives.map((o) => (o.pickedUpAt?.length ? { ...o, pickedUpAt: [] } : o)) }
+            : c
+        )
+        if (cleared.some((c, i) => c !== get().contracts[i])) commit(cleared)
         scheduleReroute()
       }
     },
