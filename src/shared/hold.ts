@@ -133,19 +133,13 @@ interface Relax {
   flank?: boolean
 }
 
-// slide in at its level, or lift over a single-height row: the operator
-// stands on the deck with a straight beam, so anything taller than one
-// box blocks both sight of the spot and the beam path
+// slide in at its level, or lower it down an open-topped column: a pit
+// between stacks is fine, a spot with cargo overhead is not
 function canInsert(aboard: Slot[], t: Slot): boolean {
   if (!aboard.some((r) => laneClash(t, r) && r.d < t.d)) return true
-  const overCol = aboard.some(
+  return !aboard.some(
     (r) => spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && spans(r.d, r.d + r.dl, t.d, t.d + t.dl) && r.y >= t.y + t.h
   )
-  if (overCol) return false
-  let frontTop = 0
-  for (const r of aboard)
-    if (spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && r.d < t.d) frontTop = Math.max(frontTop, r.y + r.h)
-  return frontTop <= 1
 }
 
 const beats = (a: number[], b: number[]): boolean => {
@@ -213,7 +207,8 @@ function findSpot(
         t.y = y
         if (rivals.some((r) => cellsClash(t, r))) continue
         if (y > 0) {
-          // every support cell must be held the box's whole window
+          // rests only on its own stop's boxes (or anchors), held the whole window;
+          // different stops never stack on each other
           let held = true
           for (let dc = 0; dc < cwf && held; dc++)
             for (let dd = 0; dd < dlf && held; dd++) {
@@ -223,7 +218,7 @@ function findSpot(
                   c + dc >= r.c && c + dc < r.c + r.cw &&
                   d + dd >= r.d && d + dd < r.d + r.dl
               )
-              if (!under || !(under.anchor || containsWindow(under, t))) held = false
+              if (!under || !(under.anchor || (under.stop === t.stop && containsWindow(under, t)))) held = false
             }
           if (!held) continue
         }
@@ -239,9 +234,10 @@ function findSpot(
         if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
         if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
-        // in the depth zone, glued to own stop, floor before stacking, shallow, tight
+        // in the depth zone, glued to own stop, stack HIGH before claiming
+        // new floor (floor is the scarce resource), low, shallow, tight
         const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
-        const key = [t.d >= zone ? 0 : 1, glued, t.y, t.d, t.c]
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -362,13 +358,11 @@ function extractIssues(slots: Slot[], step: number): Strand[] {
   const whyStuck = (r: Slot, others: Slot[]): string[] | null => {
     const blockers = new Set<string>()
     if (others.some((q) => laneClash(q, r) && q.d < r.d)) {
+      // blocked at its level; lifts out the open top unless something hangs over it
       const overCol = others.filter(
         (q) => spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && spans(q.d, q.d + q.dl, r.d, r.d + r.dl) && q.y >= r.y + r.h
       )
-      let frontTop = 0
-      for (const q of others)
-        if (spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && q.d < r.d) frontTop = Math.max(frontTop, q.y + q.h)
-      if (overCol.length || frontTop > 1) {
+      if (overCol.length) {
         for (const q of overCol) blockers.add(q.box.id)
         for (const q of others) if (spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && q.d < r.d) blockers.add(q.box.id)
       }
@@ -640,7 +634,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             q.bay === s.bay && q.y + q.h === s.y &&
             s.c + dc >= q.c && s.c + dc < q.c + q.cw &&
             s.d + dd >= q.d && s.d + dd < q.d + q.dl &&
-            (q.anchor || containsWindow(q, s))
+            (q.anchor || (q.stop === s.stop && containsWindow(q, s)))
         )
         if (!under) {
           floatOk = false

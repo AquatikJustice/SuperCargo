@@ -117,7 +117,10 @@ function solveExact(input: RouteInput): number[] | null | 'too-big' {
   const ensure = (mask: number): { cost: Float64Array; par: Int32Array } => {
     let e = dp.get(mask)
     if (!e) {
-      e = { cost: new Float64Array(n).fill(Infinity), par: new Int32Array(n).fill(-1) }
+      e = {
+        cost: new Float64Array(n).fill(Infinity),
+        par: new Int32Array(n).fill(-1)
+      }
       dp.set(mask, e)
     }
     return e
@@ -340,17 +343,28 @@ function indexedJobs(jobs: RouteJob[]): IJob[] {
   const out: IJob[] = []
   jobs.forEach((j, idx) => {
     if (j.pickup !== j.dest && j.scu > 0)
-      out.push({ pickup: j.pickup, dest: j.dest, scu: j.scu, idx, boxes: j.boxes ?? [] })
+      out.push({
+        pickup: j.pickup,
+        dest: j.dest,
+        scu: j.scu,
+        idx,
+        boxes: j.boxes ?? []
+      })
   })
   return out
 }
 
-const oracleJobs = (js: IJob[]): OracleJob[] => js.map((j) => ({ id: j.idx, dest: j.dest, boxes: j.boxes }))
+const oracleJobs = (js: IJob[]): OracleJob[] =>
+  js.map((j) => ({ id: j.idx, dest: j.dest, boxes: j.boxes }))
 
 const distinctNodes = (stops: PlannedStop[]): number[] => {
   const seen = new Set<number>()
   const out: number[] = []
-  for (const s of stops) if (!seen.has(s.node)) { seen.add(s.node); out.push(s.node) }
+  for (const s of stops)
+    if (!seen.has(s.node)) {
+      seen.add(s.node)
+      out.push(s.node)
+    }
   return out
 }
 
@@ -390,157 +404,197 @@ function materialize(
   return { stops, totalDistance: total, peakLoad: peak }
 }
 
-// over-capacity hauls: split into revisiting trips
+// walk stop by stop asking the live hold; then the whole pass is checked by
+// the layout engine, and pickups it can't house yet are sent later in the
+// run until everything has a home
 function planMultiTrip(input: RouteInput): RouteResult {
   const { dist } = input
   const cap = input.capacity
   const all = indexedJobs(input.jobs)
-  const unfittable = all.filter((j) => j.scu > cap).map((j) => j.idx)
+  const baseUnfittable = all.filter((j) => j.scu > cap).map((j) => j.idx)
   const byIdx = new Map(all.filter((j) => j.scu <= cap).map((j) => [j.idx, j]))
-  const pending = new Set(byIdx.keys())
-  const aboard: IJob[] = []
-  let load = 0
-  let cur = input.start ?? (pending.size ? (byIdx.get([...pending][0]) as IJob).pickup : 0)
-
-  const stops: PlannedStop[] = []
-  let total = 0
-  let peak = 0
-  let trip = 0
-  let started = false
-
-  const oracle = input.bays ? holdOracle(input.bays) : null
   const cityToLeo = input.cityToLeo
   // LEO to the cities below it
   const leoCities = new Map<number, number[]>()
   if (cityToLeo)
     for (const [c, leo] of cityToLeo) leoCities.set(leo, [...(leoCities.get(leo) ?? []), c])
-  const cityBusy = (c: number): boolean =>
-    aboard.some((j) => j.dest === c) || [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
+  const userDeferred = input.deferred ?? new Set<number>()
 
-  // user-deferred cargo waits until everything else is delivered, so it rides a later trip
-  const deferred = input.deferred ?? new Set<number>()
-  const nonDeferredLeft = (): boolean =>
-    [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
+  interface Walk {
+    stops: PlannedStop[]
+    total: number
+    peak: number
+    unfittable: number[]
+  }
+  const walkOnce = (lateSet: ReadonlySet<number>): Walk => {
+    const unfittable = [...baseUnfittable]
+    const pending = new Set(byIdx.keys())
+    const aboard: IJob[] = []
+    let load = 0
+    let cur = input.start ?? (pending.size ? (byIdx.get([...pending][0]) as IJob).pickup : 0)
 
-  let guard = all.length * 20 + 200
-  while ((pending.size || aboard.length) && guard-- > 0) {
-    const gateDeferred = nonDeferredLeft()
-    const locs = new Set<number>()
-    for (const j of aboard) locs.add(j.dest)
-    for (const idx of pending) if (!(gateDeferred && deferred.has(idx))) locs.add((byIdx.get(idx) as IJob).pickup)
+    const stops: PlannedStop[] = []
+    let total = 0
+    let peak = 0
+    let trip = 0
+    let started = false
 
-    // nearest stop where something happens
-    let best: { L: number; drops: IJob[]; loads: IJob[] } | null = null
-    let bestD = Infinity
-    for (const L of locs) {
-      const drops = aboard.filter((j) => j.dest === L)
-      let free = cap - load + drops.reduce((a, j) => a + j.scu, 0)
-      const here = [...pending]
-        .map((i) => byIdx.get(i) as IJob)
-        .filter((j) => j.pickup === L)
-        .filter((j) => !(gateDeferred && deferred.has(j.idx)))
-        .sort((a, b) => b.scu - a.scu)
-      const loads: IJob[] = []
-      for (const j of here) {
-        if (j.scu <= free) {
-          loads.push(j)
-          free -= j.scu
-        }
-      }
-      if (!drops.length && !loads.length) continue
-      // defer drops with cargo still inbound
-      let penalty = 0
-      if (drops.length) {
-        const free = cap - load
-        for (const idx of pending) {
-          const j = byIdx.get(idx) as IJob
-          if (j.dest !== L || j.scu > free) continue
-          if (dist[cur][j.pickup] + dist[j.pickup][L] - dist[cur][L] < REVISIT_DETOUR_GM) {
-            penalty += REVISIT_DETOUR_GM
-            break
+    const oracle = input.bays ? holdOracle(input.bays) : null
+    const cityBusy = (c: number): boolean =>
+      aboard.some((j) => j.dest === c) ||
+      [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
+
+    // deferred cargo (the user's, or what the layout couldn't house) waits
+    // until everything else is delivered
+    const deferred = new Set([...userDeferred, ...lateSet])
+    const nonDeferredLeft = (): boolean =>
+      [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
+
+    let guard = all.length * 20 + 200
+    while ((pending.size || aboard.length) && guard-- > 0) {
+      const gateDeferred = nonDeferredLeft()
+      const locs = new Set<number>()
+      for (const j of aboard) locs.add(j.dest)
+      for (const idx of pending)
+        if (!(gateDeferred && deferred.has(idx))) locs.add((byIdx.get(idx) as IJob).pickup)
+
+      // nearest stop where something happens
+      let best: { L: number; drops: IJob[]; loads: IJob[] } | null = null
+      let bestD = Infinity
+      for (const L of locs) {
+        const drops = aboard.filter((j) => j.dest === L)
+        let free = cap - load + drops.reduce((a, j) => a + j.scu, 0)
+        const here = [...pending]
+          .map((i) => byIdx.get(i) as IJob)
+          .filter((j) => j.pickup === L)
+          .filter((j) => !(gateDeferred && deferred.has(j.idx)))
+          .sort((a, b) => b.scu - a.scu)
+        const loads: IJob[] = []
+        for (const j of here) {
+          if (j.scu <= free) {
+            loads.push(j)
+            free -= j.scu
           }
         }
-      }
-      // defer descents and busy LEOs
-      if (cityToLeo && cityToLeo.has(L) && cur !== cityToLeo.get(L)) penalty += CITY_DESCENT_GM
-      if ((leoCities.get(L) ?? []).some(cityBusy)) penalty += LEO_DEFER_GM
-      const d = dist[cur][L] + penalty
-      if (d < bestD) {
-        bestD = d
-        best = { L, drops, loads }
-      }
-    }
-    if (!best) break
-
-    // bump the biggest loads until the rest fit the live hold
-    if (oracle && best.loads.length) {
-      const remain = aboard.filter((j) => !best!.drops.some((d) => d.idx === j.idx))
-      // rank by distance, like the grid
-      const ranked = [...new Set([...remain, ...best.loads].map((j) => j.dest))].sort(
-        (a, b) => dist[best!.L][a] - dist[best!.L][b]
-      )
-      const rankMap = new Map(ranked.map((d, i) => [d, i]))
-      const rankOf = (dest: number): number => rankMap.get(dest) ?? ranked.length
-      const dropping = new Set(best.drops.map((j) => j.idx))
-      const keep = best.loads.slice()
-      while (keep.length && !oracle.canTake(oracleJobs(keep), rankOf, dropping)) keep.shift()
-      // nothing fits: drop unfittable, else deliver first
-      if (!keep.length && !best.drops.length) {
-        if (!aboard.length) {
-          const small = best.loads[best.loads.length - 1]
-          unfittable.push(small.idx)
-          pending.delete(small.idx)
-          continue
-        }
-        let L2 = aboard[0].dest
-        let d2 = dist[cur][L2]
-        for (const j of aboard) {
-          const d = dist[cur][j.dest]
-          if (d < d2) {
-            d2 = d
-            L2 = j.dest
+        if (!drops.length && !loads.length) continue
+        // defer drops with cargo still inbound
+        let penalty = 0
+        if (drops.length) {
+          const free = cap - load
+          for (const idx of pending) {
+            const j = byIdx.get(idx) as IJob
+            if (j.dest !== L || j.scu > free) continue
+            if (dist[cur][j.pickup] + dist[j.pickup][L] - dist[cur][L] < REVISIT_DETOUR_GM) {
+              penalty += REVISIT_DETOUR_GM
+              break
+            }
           }
         }
-        best = { L: L2, drops: aboard.filter((j) => j.dest === L2), loads: [] }
-      } else {
-        best = { L: best.L, drops: best.drops, loads: keep }
+        // defer descents and busy LEOs
+        if (cityToLeo && cityToLeo.has(L) && cur !== cityToLeo.get(L)) penalty += CITY_DESCENT_GM
+        if ((leoCities.get(L) ?? []).some(cityBusy)) penalty += LEO_DEFER_GM
+        const d = dist[cur][L] + penalty
+        if (d < bestD) {
+          bestD = d
+          best = { L, drops, loads }
+        }
       }
-    }
+      if (!best) break
 
-    total += dist[cur][best.L]
-    const dropJobs: number[] = []
-    for (const j of best.drops) {
-      load -= j.scu
-      dropJobs.push(j.idx)
-    }
-    if (best.drops.length) {
-      const dropped = new Set(best.drops.map((j) => j.idx))
-      for (let i = aboard.length - 1; i >= 0; i--) if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
-      oracle?.release(dropJobs)
-    }
-
-    const pickJobs: number[] = []
-    if (best.loads.length) {
-      if (started && load === 0) trip++
-      started = true
-      if (oracle) {
-        const ranked = [...new Set([...aboard, ...best.loads].map((j) => j.dest))].sort(
+      // bump the biggest loads until the rest fit the live hold
+      if (oracle && best.loads.length) {
+        const remain = aboard.filter((j) => !best!.drops.some((d) => d.idx === j.idx))
+        // rank by distance, like the grid
+        const ranked = [...new Set([...remain, ...best.loads].map((j) => j.dest))].sort(
           (a, b) => dist[best!.L][a] - dist[best!.L][b]
         )
         const rankMap = new Map(ranked.map((d, i) => [d, i]))
-        oracle.take(oracleJobs(best.loads), (dest) => rankMap.get(dest) ?? ranked.length)
+        const rankOf = (dest: number): number => rankMap.get(dest) ?? ranked.length
+        const dropping = new Set(best.drops.map((j) => j.idx))
+        const keep = best.loads.slice()
+        while (keep.length && !oracle.canTake(oracleJobs(keep), rankOf, dropping)) keep.shift()
+        // nothing fits: drop unfittable, else deliver first
+        if (!keep.length && !best.drops.length) {
+          if (!aboard.length) {
+            const small = best.loads[best.loads.length - 1]
+            unfittable.push(small.idx)
+            pending.delete(small.idx)
+            continue
+          }
+          let L2 = aboard[0].dest
+          let d2 = dist[cur][L2]
+          for (const j of aboard) {
+            const d = dist[cur][j.dest]
+            if (d < d2) {
+              d2 = d
+              L2 = j.dest
+            }
+          }
+          best = {
+            L: L2,
+            drops: aboard.filter((j) => j.dest === L2),
+            loads: []
+          }
+        } else {
+          best = { L: best.L, drops: best.drops, loads: keep }
+        }
       }
-      for (const j of best.loads) {
-        load += j.scu
-        aboard.push(j)
-        pending.delete(j.idx)
-        pickJobs.push(j.idx)
+
+      total += dist[cur][best.L]
+      const dropJobs: number[] = []
+      for (const j of best.drops) {
+        load -= j.scu
+        dropJobs.push(j.idx)
       }
+      if (best.drops.length) {
+        const dropped = new Set(best.drops.map((j) => j.idx))
+        for (let i = aboard.length - 1; i >= 0; i--)
+          if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
+        oracle?.release(dropJobs)
+      }
+
+      const pickJobs: number[] = []
+      if (best.loads.length) {
+        if (started && load === 0) trip++
+        started = true
+        if (oracle) {
+          const ranked = [...new Set([...aboard, ...best.loads].map((j) => j.dest))].sort(
+            (a, b) => dist[best!.L][a] - dist[best!.L][b]
+          )
+          const rankMap = new Map(ranked.map((d, i) => [d, i]))
+          oracle.take(oracleJobs(best.loads), (dest) => rankMap.get(dest) ?? ranked.length)
+        }
+        for (const j of best.loads) {
+          load += j.scu
+          aboard.push(j)
+          pending.delete(j.idx)
+          pickJobs.push(j.idx)
+        }
+      }
+      if (load > peak) peak = load
+      stops.push({ node: best.L, pickJobs, dropJobs, loadAfter: load, trip })
+      cur = best.L
     }
-    if (load > peak) peak = load
-    stops.push({ node: best.L, pickJobs, dropJobs, loadAfter: load, trip })
-    cur = best.L
+
+    return { stops, total, peak, unfittable }
   }
+
+  let walk = walkOnce(new Set())
+  if (input.bays) {
+    const late = new Set<number>()
+    let best = { walk, homeless: Number.MAX_SAFE_INTEGER }
+    for (let round = 0; ; round++) {
+      const plan = planHold(input.bays, passEvents(walk.stops, all), {})
+      const bad = new Set<number>()
+      for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
+      if (bad.size < best.homeless) best = { walk, homeless: bad.size }
+      if (!bad.size || round >= 2) break
+      for (const i of bad) late.add(i)
+      walk = walkOnce(late)
+    }
+    walk = best.walk
+  }
+  const { stops, total, peak, unfittable } = walk
 
   return {
     order: distinctNodes(stops),
@@ -621,7 +675,8 @@ function planManual(input: RouteInput): RouteResult {
       }
       if (drops.length) {
         const dropped = new Set(dropJobs)
-        for (let i = aboard.length - 1; i >= 0; i--) if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
+        for (let i = aboard.length - 1; i >= 0; i--)
+          if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
         oracle?.release(dropJobs)
       }
       const pickJobs: number[] = []
@@ -637,7 +692,14 @@ function planManual(input: RouteInput): RouteResult {
         }
       }
       if (load > peak) peak = load
-      stops.push({ node: L, pickJobs, dropJobs, loadAfter: load, trip, deferJobs })
+      stops.push({
+        node: L,
+        pickJobs,
+        dropJobs,
+        loadAfter: load,
+        trip,
+        deferJobs
+      })
       cur = L
       progressed = true
     }
@@ -670,19 +732,23 @@ const empty = (): RouteResult => ({
   unfittable: []
 })
 
-// can the layout engine house every box across the whole pass? An optimal
-// order survives a few declared digs; only a homeless box rejects it
-function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
+// a pass's stops as load/drop events the layout engine can judge
+function passEvents(stops: PlannedStop[], jobs: IJob[]): LoadEvent[] {
   const byIdx = new Map(jobs.map((j) => [j.idx, j]))
   const rank = new Map<number, number>()
   for (const s of stops) if (s.dropJobs.length && !rank.has(s.node)) rank.set(s.node, rank.size)
-  const events: LoadEvent[] = []
-  for (const s of stops) {
+  return stops.map((s) => {
     const load: PackBox[] = []
     for (const ji of s.pickJobs) {
       const j = byIdx.get(ji) as IJob
       j.boxes.forEach((size, k) =>
-        load.push({ id: `${ji}#${k}`, size, color: '', dest: '', stopIdx: rank.get(j.dest) ?? rank.size })
+        load.push({
+          id: `${ji}#${k}`,
+          size,
+          color: '',
+          dest: '',
+          stopIdx: rank.get(j.dest) ?? rank.size
+        })
       )
     }
     const drop: string[] = []
@@ -690,16 +756,25 @@ function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]):
       const j = byIdx.get(ji) as IJob
       j.boxes.forEach((_, k) => drop.push(`${ji}#${k}`))
     }
-    events.push({ load, drop })
-  }
-  return planHold(bays, events, {}).snaps.every((s) => s.unplaced.length === 0)
+    return { load, drop }
+  })
+}
+
+// can the layout engine house every box across the whole pass? An optimal
+// order survives a few declared digs; only a homeless box rejects it
+function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
+  return planHold(bays, passEvents(stops, jobs), {}).snaps.every((s) => s.unplaced.length === 0)
 }
 
 export function planRoute(input: RouteInput): RouteResult {
   const { n, capacity } = input
   if (n === 0) return empty()
   const jobs = indexedJobs(input.jobs)
-  if (jobs.length === 0) return { ...empty(), order: input.fixedOrder ?? Array.from({ length: n }, (_, i) => i) }
+  if (jobs.length === 0)
+    return {
+      ...empty(),
+      order: input.fixedOrder ?? Array.from({ length: n }, (_, i) => i)
+    }
 
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
 
