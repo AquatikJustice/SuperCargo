@@ -1,6 +1,7 @@
 // capacitated pickup-and-delivery planner
 
-import { holdOracle, type OracleJob } from './hold'
+import { holdOracle, planHold, type OracleJob } from './hold'
+import type { LoadEvent, PackBox } from './packer'
 import type { CargoGrid } from './cargoGrids'
 
 export interface RouteJob {
@@ -669,21 +670,29 @@ const empty = (): RouteResult => ({
   unfittable: []
 })
 
-// does the whole pass physically load, stop by stop?
+// can the layout engine house every box across the whole pass? An optimal
+// order survives a few declared digs; only a homeless box rejects it
 function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
   const byIdx = new Map(jobs.map((j) => [j.idx, j]))
   const rank = new Map<number, number>()
   for (const s of stops) if (s.dropJobs.length && !rank.has(s.node)) rank.set(s.node, rank.size)
-  const rankOf = (dest: number): number => rank.get(dest) ?? rank.size
-  const oracle = holdOracle(bays)
+  const events: LoadEvent[] = []
   for (const s of stops) {
-    if (s.dropJobs.length) oracle.release(s.dropJobs)
-    if (s.pickJobs.length) {
-      const loads = s.pickJobs.map((i) => byIdx.get(i) as IJob)
-      if (!oracle.take(oracleJobs(loads), rankOf)) return false
+    const load: PackBox[] = []
+    for (const ji of s.pickJobs) {
+      const j = byIdx.get(ji) as IJob
+      j.boxes.forEach((size, k) =>
+        load.push({ id: `${ji}#${k}`, size, color: '', dest: '', stopIdx: rank.get(j.dest) ?? rank.size })
+      )
     }
+    const drop: string[] = []
+    for (const ji of s.dropJobs) {
+      const j = byIdx.get(ji) as IJob
+      j.boxes.forEach((_, k) => drop.push(`${ji}#${k}`))
+    }
+    events.push({ load, drop })
   }
-  return true
+  return planHold(bays, events, {}).snaps.every((s) => s.unplaced.length === 0)
 }
 
 export function planRoute(input: RouteInput): RouteResult {

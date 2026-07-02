@@ -153,6 +153,16 @@ const beats = (a: number[], b: number[]): boolean => {
   return false
 }
 
+const touches = (a: Slot, b: Slot): boolean => {
+  const oc = spans(a.c, a.c + a.cw, b.c, b.c + b.cw)
+  const od = spans(a.d, a.d + a.dl, b.d, b.d + b.dl)
+  const oy = spans(a.y, a.y + a.h, b.y, b.y + b.h)
+  const tc = a.c + a.cw === b.c || b.c + b.cw === a.c
+  const td = a.d + a.dl === b.d || b.d + b.dl === a.d
+  const ty = a.y + a.h === b.y || b.y + b.h === a.y
+  return (tc && od && oy) || (td && oc && oy) || (ty && oc && od)
+}
+
 // the game bug: an oppositely-flanked box won't release. Placing t must not
 // complete a flank pair around any box that leaves while t is still aboard.
 function makesSandwich(rivals: Slot[], t: Slot): boolean {
@@ -177,7 +187,17 @@ function makesSandwich(rivals: Slot[], t: Slot): boolean {
 }
 
 // lowest legal resting spot for one box in one bay, or null
-function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: number, hf: number, gap: number, relax: Relax, zone: number): Slot | null {
+function findSpot(
+  bay: BayCtx,
+  rivals: Slot[],
+  probe: Slot,
+  cwf: number,
+  dlf: number,
+  hf: number,
+  gap: number,
+  relax: Relax,
+  zone: number
+): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
   let bestKey: number[] = [Infinity, Infinity, Infinity, Infinity, Infinity]
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
@@ -219,8 +239,9 @@ function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: nu
         if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
         if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
-        // stay inside the unit's depth zone first, then avoid new floor, low, shallow
-        const key = [t.d >= zone ? 0 : 1, y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
+        // in the depth zone, glued to own stop, floor before stacking, shallow, tight
+        const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
+        const key = [t.d >= zone ? 0 : 1, glued, t.y, t.d, t.c]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -229,7 +250,7 @@ function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: nu
       }
     }
   }
-  return best
+  return best ? { slot: best, key: bestKey } : null
 }
 
 const unitOrder = (a: PackBox, b: PackBox): number =>
@@ -242,12 +263,12 @@ function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: 
   let zone = 0
   for (const s of rivals) if (!s.anchor && s.drop < probe.drop) zone = Math.max(zone, s.d + s.dl)
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
-  let best: Slot | null = null
+  let best: { slot: Slot; key: number[] } | null = null
   for (const [cwf, dlf] of faces) {
     const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone)
-    if (s && (!best || s.d < best.d || (s.d === best.d && s.y < best.y))) best = s
+    if (s && (!best || beats(s.key, best.key))) best = s
   }
-  return best
+  return best?.slot ?? null
 }
 
 // whole unit into one bay set, no concessions
