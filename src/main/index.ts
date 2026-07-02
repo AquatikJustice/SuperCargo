@@ -41,9 +41,10 @@ function createWindow(): void {
     height: ws.height,
     x: ws.x,
     y: ws.y,
-    // below ~700 the manifest grid columns collide (ref spills over the box breakdown); the
-    // compact overlay is the skinny companion, the main window stays a full workspace
-    minWidth: 760,
+    // the content pages are dense fixed-column tables (contracts, history); below ~960 their
+    // columns crowd and wrap into a mess. the compact overlay is the skinny companion, the
+    // main window stays a full workspace.
+    minWidth: 960,
     minHeight: 560,
     show: false,
     frame: false,

@@ -41,7 +41,9 @@ export default function TopBar(): React.ReactElement {
   const appVersion = useStore((s) => s.appVersion)
   const reviewCount = useStore((s) => s.scanQueue.length)
   const openScanReview = useStore((s) => s.openScanReview)
-  const narrow = useNarrow(820)
+  // stay compact up to the window's min width so the floor lands in the clean icon-only bar;
+  // above it the full bar returns and the ship name ellipsizes if the wide layout is tight
+  const narrow = useNarrow(960)
 
   return (
     <div
