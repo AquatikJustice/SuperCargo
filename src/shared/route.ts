@@ -1,6 +1,6 @@
 // capacitated pickup-and-delivery planner
 
-import { packCargo, type PackBox } from './packer'
+import { holdOracle, type OracleJob } from './hold'
 import type { CargoGrid } from './cargoGrids'
 
 export interface RouteJob {
@@ -344,18 +344,7 @@ function indexedJobs(jobs: RouteJob[]): IJob[] {
   return out
 }
 
-// rankOf must match the grid's delivery-order stacking
-function loadFits(jobs: IJob[], bays: CargoGrid[], rankOf?: (dest: number) => number): boolean {
-  const boxes: PackBox[] = []
-  let n = 0
-  for (const j of jobs) {
-    const stopIdx = rankOf ? rankOf(j.dest) : 0
-    for (const size of j.boxes)
-      boxes.push({ id: String(n++), size, color: '', dest: '', stopIdx, objectiveId: '' })
-  }
-  if (!boxes.length) return true
-  return packCargo(bays, boxes).unplaced.length === 0
-}
+const oracleJobs = (js: IJob[]): OracleJob[] => js.map((j) => ({ id: j.idx, dest: j.dest, boxes: j.boxes }))
 
 const distinctNodes = (stops: PlannedStop[]): number[] => {
   const seen = new Set<number>()
@@ -418,7 +407,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
   let trip = 0
   let started = false
 
-  const bays = input.bays
+  const oracle = input.bays ? holdOracle(input.bays) : null
   const cityToLeo = input.cityToLeo
   // LEO to the cities below it
   const leoCities = new Map<number, number[]>()
@@ -482,8 +471,8 @@ function planMultiTrip(input: RouteInput): RouteResult {
     }
     if (!best) break
 
-    // bump the biggest loads until the rest pack
-    if (bays && best.loads.length) {
+    // bump the biggest loads until the rest fit the live hold
+    if (oracle && best.loads.length) {
       const remain = aboard.filter((j) => !best!.drops.some((d) => d.idx === j.idx))
       // rank by distance, like the grid
       const ranked = [...new Set([...remain, ...best.loads].map((j) => j.dest))].sort(
@@ -491,8 +480,9 @@ function planMultiTrip(input: RouteInput): RouteResult {
       )
       const rankMap = new Map(ranked.map((d, i) => [d, i]))
       const rankOf = (dest: number): number => rankMap.get(dest) ?? ranked.length
+      const dropping = new Set(best.drops.map((j) => j.idx))
       const keep = best.loads.slice()
-      while (keep.length && !loadFits([...remain, ...keep], bays, rankOf)) keep.shift()
+      while (keep.length && !oracle.canTake(oracleJobs(keep), rankOf, dropping)) keep.shift()
       // nothing fits: drop unfittable, else deliver first
       if (!keep.length && !best.drops.length) {
         if (!aboard.length) {
@@ -525,12 +515,20 @@ function planMultiTrip(input: RouteInput): RouteResult {
     if (best.drops.length) {
       const dropped = new Set(best.drops.map((j) => j.idx))
       for (let i = aboard.length - 1; i >= 0; i--) if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
+      oracle?.release(dropJobs)
     }
 
     const pickJobs: number[] = []
     if (best.loads.length) {
       if (started && load === 0) trip++
       started = true
+      if (oracle) {
+        const ranked = [...new Set([...aboard, ...best.loads].map((j) => j.dest))].sort(
+          (a, b) => dist[best!.L][a] - dist[best!.L][b]
+        )
+        const rankMap = new Map(ranked.map((d, i) => [d, i]))
+        oracle.take(oracleJobs(best.loads), (dest) => rankMap.get(dest) ?? ranked.length)
+      }
       for (const j of best.loads) {
         load += j.scu
         aboard.push(j)
@@ -572,7 +570,7 @@ function planManual(input: RouteInput): RouteResult {
   const byIdx = new Map(all.filter((j) => j.scu <= cap).map((j) => [j.idx, j]))
   const pending = new Set(byIdx.keys())
   const aboard: IJob[] = []
-  const bays = input.bays
+  const oracle = input.bays ? holdOracle(input.bays) : null
   let load = 0
   let cur = input.start ?? order[0] ?? 0
   let total = 0
@@ -604,10 +602,10 @@ function planManual(input: RouteInput): RouteResult {
           free -= j.scu
         }
       }
-      // bump the biggest until the rest pack
-      if (bays && loads.length) {
-        const remain = aboard.filter((j) => !drops.some((d) => d.idx === j.idx))
-        while (loads.length && !loadFits([...remain, ...loads], bays, rankOf)) loads.shift()
+      // bump the biggest until the rest fit the live hold
+      if (oracle && loads.length) {
+        const dropping = new Set(drops.map((j) => j.idx))
+        while (loads.length && !oracle.canTake(oracleJobs(loads), rankOf, dropping)) loads.shift()
       }
       if (!drops.length && !loads.length) continue
 
@@ -623,11 +621,13 @@ function planManual(input: RouteInput): RouteResult {
       if (drops.length) {
         const dropped = new Set(dropJobs)
         for (let i = aboard.length - 1; i >= 0; i--) if (dropped.has(aboard[i].idx)) aboard.splice(i, 1)
+        oracle?.release(dropJobs)
       }
       const pickJobs: number[] = []
       if (loads.length) {
         if (started && load === 0) trip++
         started = true
+        oracle?.take(oracleJobs(loads), rankOf)
         for (const j of loads) {
           load += j.scu
           aboard.push(j)
@@ -669,24 +669,21 @@ const empty = (): RouteResult => ({
   unfittable: []
 })
 
-// does the pass's peak load physically pack?
+// does the whole pass physically load, stop by stop?
 function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
   const byIdx = new Map(jobs.map((j) => [j.idx, j]))
   const rank = new Map<number, number>()
   for (const s of stops) if (s.dropJobs.length && !rank.has(s.node)) rank.set(s.node, rank.size)
   const rankOf = (dest: number): number => rank.get(dest) ?? rank.size
-  const aboard = new Set<number>()
-  let peak: IJob[] = []
-  let bestLoad = -1
+  const oracle = holdOracle(bays)
   for (const s of stops) {
-    for (const ji of s.dropJobs) aboard.delete(ji)
-    for (const ji of s.pickJobs) aboard.add(ji)
-    if (s.loadAfter > bestLoad) {
-      bestLoad = s.loadAfter
-      peak = [...aboard].map((i) => byIdx.get(i) as IJob)
+    if (s.dropJobs.length) oracle.release(s.dropJobs)
+    if (s.pickJobs.length) {
+      const loads = s.pickJobs.map((i) => byIdx.get(i) as IJob)
+      if (!oracle.take(oracleJobs(loads), rankOf)) return false
     }
   }
-  return loadFits(peak, bays, rankOf)
+  return true
 }
 
 export function planRoute(input: RouteInput): RouteResult {

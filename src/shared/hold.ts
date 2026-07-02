@@ -388,6 +388,90 @@ function extractIssues(slots: Slot[], step: number): Strand[] {
   }
 }
 
+// Live fit oracle for the route walk. Cargo placed at pickup stays put;
+// deliveries free real space. Answers use the same physics as planHold but
+// only clean and lift-tier placements, so "won't fit" nudges the walk to
+// deliver first and come back rather than plan a dig.
+export interface OracleJob {
+  id: number
+  dest: number
+  boxes: number[]
+}
+
+export interface HoldOracle {
+  canTake(jobs: OracleJob[], rankOf: (dest: number) => number, dropping?: ReadonlySet<number>): boolean
+  /** joinPrev keeps this take on the same stop as the previous one */
+  take(jobs: OracleJob[], rankOf: (dest: number) => number, joinPrev?: boolean): boolean
+  release(jobIds: number[]): void
+}
+
+const FUT = 1 << 20
+
+export function holdOracle(grids: CargoGrid[]): HoldOracle {
+  const bays = grids.filter((g) => g.autoLoad !== false).map((g, i) => bayCtx(g, i))
+  let slots: Slot[] = []
+  const byJob = new Map<number, Slot[]>()
+  let seq = 0
+  const rungs: Array<{ gap: number; relax: Relax }> = [{ gap: 0, relax: {} }, { gap: 0, relax: { peel: true } }]
+
+  const placeAll = (
+    jobs: OracleJob[],
+    rankOf: (dest: number) => number,
+    dropping?: ReadonlySet<number>
+  ): Slot[][] | null => {
+    const gone = new Set<Slot>()
+    if (dropping) for (const id of dropping) for (const s of byJob.get(id) ?? []) gone.add(s)
+    const work = slots.filter((s) => !gone.has(s))
+    for (const s of work) s.drop = FUT + rankOf(s.stop)
+    const placed: Slot[][] = []
+    for (const job of jobs) {
+      const mine: Slot[] = []
+      const sizes = [...job.boxes].sort((a, b) => b - a)
+      for (let k = 0; k < sizes.length; k++) {
+        const box: PackBox = { id: `o${job.id}#${k}`, size: sizes[k], color: '', dest: '', stopIdx: job.dest }
+        const probe: Slot = {
+          box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0,
+          load: seq, drop: FUT + rankOf(job.dest), stop: job.dest, anchor: false
+        }
+        let got: Slot | null = null
+        outer: for (const rung of rungs)
+          for (const bay of bays) {
+            const rivals = work.filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
+            got = bestFace(bay, rivals, probe, rung.gap, rung.relax)
+            if (got) break outer
+          }
+        if (!got) return null
+        work.push(got)
+        mine.push(got)
+      }
+      placed.push(mine)
+    }
+    return placed
+  }
+
+  return {
+    canTake: (jobs, rankOf, dropping) => placeAll(jobs, rankOf, dropping) !== null,
+    take(jobs, rankOf, joinPrev) {
+      const placed = placeAll(jobs, rankOf)
+      if (!placed) return false
+      if (!joinPrev) seq++
+      jobs.forEach((job, i) => {
+        byJob.set(job.id, placed[i])
+        slots.push(...placed[i])
+      })
+      return true
+    },
+    release(jobIds) {
+      const gone = new Set<Slot>()
+      for (const id of jobIds) {
+        for (const s of byJob.get(id) ?? []) gone.add(s)
+        byJob.delete(id)
+      }
+      slots = slots.filter((s) => !gone.has(s))
+    }
+  }
+}
+
 export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts = {}): HoldPlan {
   const { loose, pins, gap = 0, frames } = opts
   const openable = grids.filter((g) => g.autoLoad !== false)
