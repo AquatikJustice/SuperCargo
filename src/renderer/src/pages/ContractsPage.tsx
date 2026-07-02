@@ -37,6 +37,7 @@ export default function ContractsPage(): React.ReactElement {
   const commodityNames = useMemo(() => commodities.map((c) => c.name), [commodities])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
   const [editTurnIn, setEditTurnIn] = useState<TurnInTarget | null>(null)
+  const [confirmFile, setConfirmFile] = useState<string | null>(null)
 
   return (
     <div style={{ padding: PAGE_PADDING }}>
@@ -92,7 +93,10 @@ export default function ContractsPage(): React.ReactElement {
             return (
               <div key={c.id} style={{ borderBottom: `1px solid ${C.lineFaint}` }}>
                 <HoverDiv
-                  onClick={() => setExpanded(isOpen ? null : c.id)}
+                  onClick={() => {
+                    setExpanded(isOpen ? null : c.id)
+                    setConfirmFile(null)
+                  }}
                   style={{ display: 'grid', gridTemplateColumns: COLS, gap: 18, alignItems: 'center', padding: '16px 0', cursor: 'pointer' }}
                   hoverStyle={{ background: 'rgba(255,255,255,0.02)' }}
                 >
@@ -241,7 +245,39 @@ export default function ContractsPage(): React.ReactElement {
 
                     <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
-                      {c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
+                      {c.dataSource === 'manual' ? (
+                        // the game log has no mission id for a hand-added contract, so it can never
+                        // auto-file (#21). manual close-out is the only way to finish it.
+                        <>
+                          <Btn
+                            onClick={() => {
+                              if (confirmFile !== c.id) {
+                                setConfirmFile(c.id)
+                                return
+                              }
+                              fileCompleted(c.id)
+                              setConfirmFile(null)
+                            }}
+                            style={{
+                              border: `1px solid ${confirmFile === c.id ? C.amber : 'rgba(255,255,255,0.16)'}`,
+                              background: confirmFile === c.id ? 'rgba(230,182,94,0.12)' : 'transparent',
+                              color: confirmFile === c.id ? C.amber : C.dim,
+                              fontFamily: F.display,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: '0.14em',
+                              padding: '7px 13px',
+                              cursor: 'pointer'
+                            }}
+                            hoverStyle={{ border: `1px solid ${C.green}`, color: confirmFile === c.id ? C.amber : C.green }}
+                          >
+                            {confirmFile === c.id ? 'CONFIRM · FILE COMPLETE' : 'MARK COMPLETE'}
+                          </Btn>
+                          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
+                            manual contracts don't file from your game log, close it out here when it's done
+                          </span>
+                        </>
+                      ) : c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
                         <>
                           <ActionBtn label="FILE TO HISTORY" color={C.green} onClick={() => fileCompleted(c.id)} />
                           <ActionBtn

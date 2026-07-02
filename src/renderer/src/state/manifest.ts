@@ -1,6 +1,6 @@
 // no react/zustand, keeps it testable
 
-import type { HaulingContract, HistoryEntry, HistoryStatus } from '@shared/types'
+import type { DataSource, HaulingContract, HistoryEntry, HistoryStatus } from '@shared/types'
 import type { RoutePlan } from './route'
 import { boxBreakdown, boxCount, boxList, listBreakdown } from '@shared/box'
 import { payoutFactor, snapPayout } from '@shared/payout'
@@ -96,6 +96,7 @@ export interface DerivedContract {
   blueprint: boolean
   blueprints: string[]
   reputation?: number
+  dataSource: DataSource
 }
 
 // hidden while capture modal open
@@ -381,7 +382,8 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       totSCU: objectives.reduce((a, o) => a + o.scu, 0),
       blueprint: !!c.blueprint,
       blueprints: c.blueprints ?? [],
-      reputation: c.reputation
+      reputation: c.reputation,
+      dataSource: c.dataSource
     }
   })
 }
