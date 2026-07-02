@@ -49,7 +49,6 @@ export default function ManifestPage(): React.ReactElement {
   // peak load of the first trip, not the whole haul when it splits
   const trip1Load = route ? Object.values(route.trip1Scu).reduce((a, b) => a + b, 0) : 0
   const remaining = Math.max(0, totals.scu - trip1Load)
-  const here = route?.startStop || startLocation || activeShip
   const capPct = capMax > 0 ? Math.min(100, Math.round((trip1Load / capMax) * 100)) : 0
   const room = Math.max(0, capMax - trip1Load)
   const capColor = capPct <= 50 ? C.green : capPct <= 80 ? C.amber : C.red
@@ -67,7 +66,7 @@ export default function ManifestPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING }}>
       <PageHeader
         title="CARGO MANIFEST"
-        subtitle={`${totals.contracts} active contracts · ${totals.dests} delivery stops`}
+        subtitle={`${totals.contracts} active contracts · ${stops.length} stops`}
         right={<GroupToggle groupBy={groupBy} setGroupBy={setGroupBy} />}
       />
 
@@ -83,11 +82,11 @@ export default function ManifestPage(): React.ReactElement {
       >
         <SummaryStat label="TOTAL SCU" value={fmt(totals.scu)} first />
         <SummaryStat label="BOXES" value={fmt(totals.boxes)} />
-        <SummaryStat label="DESTINATIONS" value={String(totals.dests)} />
+        <SummaryStat label="STOPS" value={String(stops.length)} />
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim }}>
-              {multiTrip ? `TRIP 1 OF ${trips}` : 'LOADED'} · {here}
+              {multiTrip ? `TRIP 1 OF ${trips}` : 'PEAK LOAD'}
             </span>
             <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
               {multiTrip ? (

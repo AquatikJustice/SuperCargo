@@ -426,7 +426,6 @@ export function offGridByObjective(
 export interface ManifestTotals {
   scu: number
   boxes: number
-  dests: number
   contracts: number
 }
 
@@ -434,7 +433,6 @@ export function deriveTotals(stops: Stop[], contracts: HaulingContract[]): Manif
   return {
     scu: stops.reduce((a, s) => a + s.totSCU, 0),
     boxes: stops.reduce((a, s) => a + s.totBoxes, 0),
-    dests: stops.length,
     contracts: activeContracts(contracts).length
   }
 }
