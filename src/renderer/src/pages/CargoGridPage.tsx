@@ -7,12 +7,12 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, deriveStops, pickupVisitKey } from '../state/manifest'
-import { buildLoadingSteps, loadProfile, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, buildLoadEvents, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
-import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type LoadEvent, type Occupied } from '@shared/packer'
+import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type Occupied } from '@shared/packer'
 import { packSchedule, setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
@@ -1561,55 +1561,6 @@ function destLabelOf(destination: string): string {
   const d = splitDestination(destination)
   return d.code ? `${d.code} · ${d.name}` : d.name || destination
 }
-
-// drops lag a step
-function buildLoadEvents(loadSteps: LoadingStep[], source: PackBox[]): LoadEvent[] {
-  const pool = new Map<string, PackBox[]>()
-  for (const b of source) {
-    const arr = pool.get(b.objectiveId!) ?? []
-    arr.push(b)
-    pool.set(b.objectiveId!, arr)
-  }
-  for (const arr of pool.values()) arr.sort((a, b) => b.size - a.size)
-  const aboard = new Map<string, Set<string>>()
-  // exact sizes, match the breakdown
-  const take = (objId: string, sizes: number[]): PackBox[] => {
-    const have = aboard.get(objId) ?? new Set<string>()
-    const avail = pool.get(objId) ?? []
-    const got: PackBox[] = []
-    for (const sz of [...sizes].sort((a, b) => b - a)) {
-      const b = avail.find((x) => x.size === sz && !have.has(x.id))
-      if (b) {
-        have.add(b.id)
-        got.push(b)
-      }
-    }
-    aboard.set(objId, have)
-    return got
-  }
-  const release = (objId: string, scu: number): string[] => {
-    const have = aboard.get(objId)
-    if (!have) return []
-    const gone: string[] = []
-    let acc = 0
-    for (const b of pool.get(objId) ?? []) {
-      if (!have.has(b.id) || acc >= scu) continue
-      have.delete(b.id)
-      gone.push(b.id)
-      acc += b.size
-    }
-    return gone
-  }
-  const events: LoadEvent[] = []
-  let pendingDrop: string[] = []
-  for (const s of loadSteps) {
-    const load = s.kind === 'load' ? s.lines.flatMap((l) => take(l.objectiveId, l.loadBoxes)) : []
-    events.push({ load, drop: pendingDrop })
-    pendingDrop = s.kind === 'drop' ? s.lines.flatMap((l) => release(l.objectiveId, l.scu)) : []
-  }
-  return events
-}
-
 
 function LoadLineRow({ line, color }: { line: LoadingStep['lines'][number]; color?: string }): React.ReactElement {
   return (
