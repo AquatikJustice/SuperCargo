@@ -99,11 +99,34 @@ const toOcc = (p: Placement, stopIdx: number): Occupied => ({
   gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, stopIdx
 })
 
-// Incremental loadout: walk the load/drop events in order. Each box gets placed
-// once into the space free at that moment and never moves until it's delivered,
-// when its cells reopen for later cargo. The packer only ever reserves what's
-// genuinely free, so it never invents an over-capacity wall. A box only goes
-// unplaced when the hold is honestly full right then.
+// far edge of a placement measured from its bay's exit: the depth the NEXT box behind
+// it must clear. Later-delivery cargo has to sit past this to peel out cleanly.
+function farDepth(g: CargoGrid, p: Placement): number {
+  const e = g.exit ?? DEFAULT_EXIT
+  return e.axis === 'z' ? (e.dir === -1 ? p.z + p.l : g.l - p.z) : e.dir === -1 ? p.x + p.w : g.w - p.x
+}
+
+// a fake occupancy sealing off every cell shallower than depth D, so packInto is forced
+// to lay the box behind the earlier-delivery cargo (it has no fmin knob of its own).
+function shallowBlock(g: CargoGrid, D: number): Occupied | null {
+  const e = g.exit ?? DEFAULT_EXIT
+  const d = Math.min(D, e.axis === 'z' ? g.l : g.w)
+  if (d <= 0) return null
+  const base = { gridId: g.id, y: 0, h: g.h, stopIdx: -1 }
+  if (e.axis === 'z')
+    return e.dir === -1
+      ? { ...base, x: 0, z: 0, w: g.w, l: d }
+      : { ...base, x: 0, z: g.l - d, w: g.w, l: d }
+  return e.dir === -1
+    ? { ...base, x: 0, z: 0, w: d, l: g.l }
+    : { ...base, x: g.w - d, z: 0, w: d, l: g.l }
+}
+
+// Interval loadout: assign every box ONE permanent slot up front, in delivery order.
+// Two boxes only contend for cells if their aboard windows overlap, so a delivered
+// box's space is reclaimed for later cargo (no false over-capacity). Each box is laid
+// BEHIND the earlier-delivery cargo it shares the hold with (via a per-bay depth floor),
+// so the arrangement peels cleanly at every step and nothing ever has to move.
 export interface ScheduleOpts {
   /** box ids the user chose to overload off-grid */
   loose?: ReadonlySet<string>
@@ -113,46 +136,64 @@ export interface ScheduleOpts {
 
 export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: ScheduleOpts = {}): LoadSnap[] {
   const { loose, pins } = opts
-  const placeOf = new Map<string, Placement>()
-  const occById = new Map<string, Occupied[]>()
-  const looseAboard = new Map<string, PackBox>()
+  const gridById = new Map(grids.map((g) => [g.id, g]))
 
-  const reserved = (): Occupied[] => {
-    const o: Occupied[] = []
-    for (const v of occById.values()) o.push(...v)
-    return o
-  }
-  const place = (b: PackBox): boolean => {
-    const res = packInto(grids, reserved(), [b])
-    const p = res.placements[0]
-    if (!p) return false
-    placeOf.set(b.id, p)
-    occById.set(b.id, [toOcc(p, b.stopIdx)])
-    return true
+  const boxOf = new Map<string, PackBox>()
+  for (const ev of events) for (const b of ev.load) boxOf.set(b.id, b)
+
+  // aboard window [load, drop) per box, from the first time each id loads / drops
+  const loadAt = new Map<string, number>()
+  const dropAt = new Map<string, number>()
+  events.forEach((ev, i) => {
+    for (const b of ev.load) if (!loadAt.has(b.id)) loadAt.set(b.id, i)
+    for (const id of ev.drop) if (loadAt.has(id) && !dropAt.has(id)) dropAt.set(id, i)
+  })
+  const loadOf = (id: string): number => loadAt.get(id) ?? 0
+  const dropOf = (id: string): number => dropAt.get(id) ?? events.length
+  const overlap = (a: string, b: string): boolean =>
+    loadOf(a) < dropOf(b) && loadOf(b) < dropOf(a)
+
+  const assigned = new Map<string, Placement>()
+  if (pins) for (const [id, p] of pins) { const b = boxOf.get(id); if (b) assigned.set(id, { ...p, box: b }) }
+
+  // earliest delivery first (shallowest), biggest first within a stop to keep walls tight
+  const queue = [...boxOf.values()]
+    .filter((b) => !loose?.has(b.id) && !pins?.has(b.id))
+    .sort((a, b) => a.stopIdx - b.stopIdx || b.size - a.size)
+
+  for (const box of queue) {
+    const concurrent = [...assigned.values()].filter((p) => overlap(p.box.id, box.id))
+    const seed = concurrent.map((p) => toOcc(p, p.box.stopIdx))
+    // floor each bay to the deepest concurrent EARLIER-delivery cargo so this box sits behind it
+    const floor = new Map<string, number>()
+    for (const p of concurrent) {
+      if (p.box.stopIdx >= box.stopIdx) continue
+      const g = gridById.get(p.gridId)
+      if (g) floor.set(p.gridId, Math.max(floor.get(p.gridId) ?? 0, farDepth(g, p)))
+    }
+    for (const [gid, D] of floor) {
+      const block = shallowBlock(gridById.get(gid)!, D)
+      if (block) seed.push(block)
+    }
+    const p = packInto(grids, seed, [box]).placements[0]
+    if (p) assigned.set(box.id, p)
   }
 
   const snaps: LoadSnap[] = []
-  let pending: PackBox[] = [] // picked up but no room yet; retried each step
-  for (const ev of events) {
-    for (const id of ev.drop) {
-      placeOf.delete(id)
-      occById.delete(id)
-      looseAboard.delete(id)
+  for (let i = 0; i < events.length; i++) {
+    const placements: Placement[] = []
+    const unplaced: PackBox[] = []
+    const looseNow: PackBox[] = []
+    for (const box of boxOf.values()) {
+      if (loadOf(box.id) > i || dropOf(box.id) <= i) continue // not aboard now
+      if (loose?.has(box.id)) looseNow.push(box)
+      else {
+        const p = assigned.get(box.id)
+        if (p) placements.push(p)
+        else unplaced.push(box)
+      }
     }
-    // pins reserve their cells first so the auto boxes pack around them
-    const autos: PackBox[] = []
-    for (const b of [...pending, ...ev.load]) {
-      const pin = pins?.get(b.id)
-      if (pin) {
-        placeOf.set(b.id, { ...pin, box: b })
-        occById.set(b.id, [toOcc(pin, b.stopIdx)])
-      } else if (loose?.has(b.id)) looseAboard.set(b.id, b)
-      else autos.push(b)
-    }
-    pending = []
-    for (const b of autos) if (!place(b)) pending.push(b)
-
-    snaps.push({ placements: [...placeOf.values()], unplaced: [...pending], loose: [...looseAboard.values()] })
+    snaps.push({ placements, unplaced, loose: looseNow })
   }
   return snaps
 }
