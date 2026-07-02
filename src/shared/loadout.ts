@@ -106,20 +106,22 @@ function farDepth(g: CargoGrid, p: Placement): number {
   return e.axis === 'z' ? (e.dir === -1 ? p.z + p.l : g.l - p.z) : e.dir === -1 ? p.x + p.w : g.w - p.x
 }
 
-// a fake occupancy sealing off every cell shallower than depth D, so packInto is forced
-// to lay the box behind the earlier-delivery cargo (it has no fmin knob of its own).
-function shallowBlock(g: CargoGrid, D: number): Occupied | null {
+// a fake occupancy sealing the shallow space IN ONE PLACEMENT'S LANE, from the exit up to the
+// far edge of that box, full height. Forces later-delivery cargo to sit behind this box so it
+// peels clean, but only in the lane this box actually occupies. Other lanes stay usable, so a
+// late-delivery box can still fill genuinely-empty shallow space instead of hitting a false wall.
+function laneShadow(g: CargoGrid, p: Placement): Occupied | null {
   const e = g.exit ?? DEFAULT_EXIT
-  const d = Math.min(D, e.axis === 'z' ? g.l : g.w)
-  if (d <= 0) return null
+  const D = Math.min(farDepth(g, p), e.axis === 'z' ? g.l : g.w)
+  if (D <= 0) return null
   const base = { gridId: g.id, y: 0, h: g.h, stopIdx: -1 }
   if (e.axis === 'z')
     return e.dir === -1
-      ? { ...base, x: 0, z: 0, w: g.w, l: d }
-      : { ...base, x: 0, z: g.l - d, w: g.w, l: d }
+      ? { ...base, x: p.x, z: 0, w: p.w, l: D }
+      : { ...base, x: p.x, z: g.l - D, w: p.w, l: D }
   return e.dir === -1
-    ? { ...base, x: 0, z: 0, w: d, l: g.l }
-    : { ...base, x: g.w - d, z: 0, w: d, l: g.l }
+    ? { ...base, x: 0, z: p.z, w: D, l: p.l }
+    : { ...base, x: g.w - D, z: p.z, w: D, l: p.l }
 }
 
 // Interval loadout: assign every box ONE permanent slot up front, in delivery order.
@@ -160,29 +162,64 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   const assigned = new Map<string, Placement>()
   if (pins) for (const [id, p] of pins) { const b = boxOf.get(id); if (b) assigned.set(id, { ...p, box: b }) }
 
-  // earliest delivery first (shallowest), biggest first within a stop to keep walls tight
-  const queue = [...boxOf.values()]
-    .filter((b) => !loose?.has(b.id) && !pins?.has(b.id))
-    .sort((a, b) => a.stopIdx - b.stopIdx || b.size - a.size)
+  // Superbucket units: boxes sharing a delivery stop AND a load step, so they share an aboard
+  // window. The frozen wall-packer lays a whole unit as one contiguous block (bucketId keeps a
+  // contract's boxes together); nothing floats inside a unit; two stops never share a unit.
+  const units = new Map<string, PackBox[]>()
+  for (const b of boxOf.values()) {
+    if (loose?.has(b.id) || pins?.has(b.id)) continue
+    const key = `${b.stopIdx}@${loadOf(b.id)}`
+    ;(units.get(key) ?? units.set(key, []).get(key)!).push(b)
+  }
+  const ordered = [...units.values()].sort(
+    (a, b) => a[0].stopIdx - b[0].stopIdx || loadOf(a[0].id) - loadOf(b[0].id)
+  )
 
-  for (const box of queue) {
-    const concurrent = [...assigned.values()].filter((p) => overlap(p.box.id, box.id))
-    // tag valid supporters with this box's stop so packInto's restY lets it rest on them;
-    // everything else stays a collision-only obstacle it can't sit on (owner -1)
-    const seed = concurrent.map((p) => toOcc(p, contains(p.box.id, box.id) ? box.stopIdx : -1))
-    // floor each bay to the deepest concurrent EARLIER-delivery cargo so this box sits behind it
-    const floor = new Map<string, number>()
+  // Fill bays deliberately: keep a growing set of OPEN bays and only crack a new one when the
+  // open ones can't seat a unit. That consolidates cargo into the fewest bays and leaves the
+  // rest genuinely empty, instead of the packer grabbing the shallowest open bay every call.
+  const seedFor = (bays: CargoGrid[], rep: string, stopIdx: number): Occupied[] => {
+    const inBay = new Set(bays.map((g) => g.id))
+    const concurrent = [...assigned.values()].filter((p) => inBay.has(p.gridId) && overlap(p.box.id, rep))
+    const seed = concurrent.map((p) => toOcc(p, contains(p.box.id, rep) ? stopIdx : -1))
+    // shadow each earlier-delivery box's own lane so this cargo peels out behind it, lane by lane
     for (const p of concurrent) {
-      if (p.box.stopIdx >= box.stopIdx) continue
+      if (p.box.stopIdx >= stopIdx) continue
       const g = gridById.get(p.gridId)
-      if (g) floor.set(p.gridId, Math.max(floor.get(p.gridId) ?? 0, farDepth(g, p)))
+      if (g) { const block = laneShadow(g, p); if (block) seed.push(block) }
     }
-    for (const [gid, D] of floor) {
-      const block = shallowBlock(gridById.get(gid)!, D)
-      if (block) seed.push(block)
+    return seed
+  }
+
+  const openable = grids.filter((g) => g.autoLoad !== false)
+  const open: CargoGrid[] = []
+  const fits = (bays: CargoGrid[], rep: string, stopIdx: number, unit: PackBox[]): Placement[] | null => {
+    const res = packInto(bays, seedFor(bays, rep, stopIdx), unit)
+    return res.unplaced.length ? null : res.placements
+  }
+  for (const unit of ordered) {
+    const rep = unit[0].id
+    const stopIdx = unit[0].stopIdx
+    // keep a Superbucket in ONE bay when it fits there: try each open bay alone (fill order),
+    // then a fresh bay. Only when no single bay holds it does it spill across bays.
+    let placed: Placement[] | null = null
+    for (const b of open) if ((placed = fits([b], rep, stopIdx, unit))) break
+    if (!placed) {
+      const next = openable.find((g) => !open.includes(g))
+      if (next) { open.push(next); placed = fits([next], rep, stopIdx, unit) }
     }
-    const p = packInto(grids, seed, [box]).placements[0]
-    if (p) assigned.set(box.id, p)
+    if (!placed) {
+      if (!open.length && openable.length) open.push(openable[0])
+      for (;;) {
+        const res = packInto(open, seedFor(open, rep, stopIdx), unit)
+        placed = res.placements
+        if (!res.unplaced.length) break
+        const next = openable.find((g) => !open.includes(g))
+        if (!next) break
+        open.push(next)
+      }
+    }
+    for (const p of placed ?? []) assigned.set(p.box.id, p)
   }
 
   const snaps: LoadSnap[] = []
