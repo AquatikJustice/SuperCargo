@@ -814,7 +814,12 @@ export const useStore = create<StoreState>((set, get) => {
       const modulesChanged =
         patch.installedModules !== undefined &&
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
-      if (shipChanged || modulesChanged) scheduleReroute()
+      if (shipChanged || modulesChanged) {
+        // a different hold voids the frozen loading plan; the walk re-freezes
+        // off the fresh route instead of showing the old ship's steps
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0 })
+        scheduleReroute()
+      }
     },
 
     addManualContract: (input) => {
