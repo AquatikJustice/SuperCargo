@@ -152,6 +152,10 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   const dropOf = (id: string): number => dropAt.get(id) ?? events.length
   const overlap = (a: string, b: string): boolean =>
     loadOf(a) < dropOf(b) && loadOf(b) < dropOf(a)
+  // a can hold b up only if it's aboard the whole time b is: loaded no later, gone no earlier.
+  // "same delivery stop" isn't enough (multi-pickup boxes share a stop but load at different
+  // steps), so a box stacked on a later-loading neighbour would hang in the air until it arrives.
+  const contains = (a: string, b: string): boolean => loadOf(a) <= loadOf(b) && dropOf(a) >= dropOf(b)
 
   const assigned = new Map<string, Placement>()
   if (pins) for (const [id, p] of pins) { const b = boxOf.get(id); if (b) assigned.set(id, { ...p, box: b }) }
@@ -163,7 +167,9 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
 
   for (const box of queue) {
     const concurrent = [...assigned.values()].filter((p) => overlap(p.box.id, box.id))
-    const seed = concurrent.map((p) => toOcc(p, p.box.stopIdx))
+    // tag valid supporters with this box's stop so packInto's restY lets it rest on them;
+    // everything else stays a collision-only obstacle it can't sit on (owner -1)
+    const seed = concurrent.map((p) => toOcc(p, contains(p.box.id, box.id) ? box.stopIdx : -1))
     // floor each bay to the deepest concurrent EARLIER-delivery cargo so this box sits behind it
     const floor = new Map<string, number>()
     for (const p of concurrent) {
