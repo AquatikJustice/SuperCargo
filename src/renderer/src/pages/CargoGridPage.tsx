@@ -13,7 +13,8 @@ import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type Occupied } from '@shared/packer'
-import { packSchedule, setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
+import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
+import { planHold } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -508,7 +509,7 @@ export default function CargoGridPage(): React.ReactElement {
       ? fullEvents.map((ev) => ({ load: ev.load.filter((b) => manualLayout[boxKey(b)]), drop: ev.drop }))
       : fullEvents
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
-    const raw = manual ? packTimeline(grids, events, true, manualLayout) : packSchedule(grids, events, { loose: looseIds })
+    const raw = manual ? packTimeline(grids, events, true, manualLayout) : planHold(grids, events, { loose: looseIds }).snaps
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
