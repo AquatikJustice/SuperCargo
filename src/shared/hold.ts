@@ -130,8 +130,10 @@ interface Relax {
   peel?: boolean
 }
 
-// slide in at its level, or lift over the front stack and drop down
-function canInsert(bay: BayCtx, aboard: Slot[], t: Slot): boolean {
+// slide in at its level, or lift over a single-height row: the operator
+// stands on the deck with a straight beam, so anything taller than one
+// box blocks both sight of the spot and the beam path
+function canInsert(aboard: Slot[], t: Slot): boolean {
   if (!aboard.some((r) => laneClash(t, r) && r.d < t.d)) return true
   const overCol = aboard.some(
     (r) => spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && spans(r.d, r.d + r.dl, t.d, t.d + t.dl) && r.y >= t.y + t.h
@@ -140,15 +142,20 @@ function canInsert(bay: BayCtx, aboard: Slot[], t: Slot): boolean {
   let frontTop = 0
   for (const r of aboard)
     if (spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && r.d < t.d) frontTop = Math.max(frontTop, r.y + r.h)
-  return frontTop + t.h <= bay.h
+  return frontTop <= 1
+}
+
+const beats = (a: number[], b: number[]): boolean => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i]
+  return false
 }
 
 // lowest legal resting spot for one box in one bay, or null
-function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: number, hf: number, gap: number, relax: Relax): Slot | null {
+function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: number, hf: number, gap: number, relax: Relax, zone: number): Slot | null {
   let best: Slot | null = null
-  let bestKey: number[] = [Infinity, Infinity, Infinity, Infinity]
+  let bestKey: number[] = [Infinity, Infinity, Infinity, Infinity, Infinity]
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
-  const aboard = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
+  const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   for (let c = 0; c + cwf <= bay.cw; c++) {
     for (let d = 0; d + dlf <= bay.dl; d++) {
       const t: Slot = { ...probe, bay: bay.idx, c, d, y: 0, cw: cwf, dl: dlf, h: hf }
@@ -183,15 +190,11 @@ function findSpot(bay: BayCtx, rivals: Slot[], probe: Slot, cwf: number, dlf: nu
             if (r.drop < t.drop && r.d + r.dl + pad > t.d) { ok = false; break }
             if (r.drop > t.drop && t.d + t.dl + pad > r.d) { ok = false; break }
           }
-        if (ok && !relax.build && !canInsert(bay, aboard, t)) ok = false
+        if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
         if (!ok) continue
-        const key = [y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
-        if (
-          key[0] < bestKey[0] ||
-          (key[0] === bestKey[0] &&
-            (key[1] < bestKey[1] ||
-              (key[1] === bestKey[1] && (key[2] < bestKey[2] || (key[2] === bestKey[2] && key[3] < bestKey[3])))))
-        ) {
+        // stay inside the unit's depth zone first, then avoid new floor, low, shallow
+        const key = [t.d >= zone ? 0 : 1, y === 0 ? cwf * dlf : 0, t.y, t.d, t.c]
+        if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
         }
@@ -208,10 +211,13 @@ const unitOrder = (a: PackBox, b: PackBox): number =>
 function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: Relax): Slot | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
+  // the unit's reserved depth zone starts past every co-aboard earlier delivery
+  let zone = 0
+  for (const s of rivals) if (!s.anchor && s.drop < probe.drop) zone = Math.max(zone, s.d + s.dl)
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: Slot | null = null
   for (const [cwf, dlf] of faces) {
-    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax)
+    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone)
     if (s && (!best || s.d < best.d || (s.d === best.d && s.y < best.y))) best = s
   }
   return best
@@ -256,6 +262,12 @@ function seatConceding(
   const strict = rungs.filter((r) => !r.kind)
   const lift = rungs.filter((r) => r.kind === 'peel')
   const dig = rungs.filter((r) => r.kind === 'build')
+  const stop = unit[0].stopIdx
+  // keep a stop's cargo together: bays already holding this stop come first
+  const affinity = (list: BayCtx[]): BayCtx[] => {
+    const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
+    return list.filter(has).concat(list.filter((b) => !has(b)))
+  }
   for (const box of [...unit].sort(unitOrder)) {
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
     let got: Slot | null = null
@@ -274,7 +286,7 @@ function seatConceding(
         }
       return false
     }
-    const order = (): BayCtx[] => open.concat(bays.filter((b) => !open.includes(b)))
+    const order = (): BayCtx[] => affinity(open).concat(bays.filter((b) => !open.includes(b)))
     attempt(order(), strict) || attempt(order(), lift) || attempt(order(), dig)
     if (!got) {
       failed.push(box)
@@ -292,7 +304,7 @@ interface Strand {
 }
 
 // can this drop set physically come out, given the flanking bug
-function extractIssues(slots: Slot[], step: number, bayH: number[]): Strand[] {
+function extractIssues(slots: Slot[], step: number): Strand[] {
   const aboard = slots.filter((s) => s.load <= step && s.drop > step)
   const leaving = slots.filter((s) => s.drop === step)
   const out = new Set<Slot>()
@@ -306,7 +318,7 @@ function extractIssues(slots: Slot[], step: number, bayH: number[]): Strand[] {
       let frontTop = 0
       for (const q of others)
         if (spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && q.d < r.d) frontTop = Math.max(frontTop, q.y + q.h)
-      if (overCol.length || frontTop + r.h > bayH[r.bay]) {
+      if (overCol.length || frontTop > 1) {
         for (const q of overCol) blockers.add(q.box.id)
         for (const q of others) if (spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && q.d < r.d) blockers.add(q.box.id)
       }
@@ -395,8 +407,10 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     const drop = dropOf(unit[0].id)
     const stop = unit[0].stopIdx
     // whole unit clean in one bay, then a fresh bay, then spilled, then per-box concessions
+    const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
+    const homes = open.filter(has).concat(open.filter((b) => !has(b)))
     let placed: Slot[] | null = null
-    for (const b of open) if ((placed = seatUnit([b], slots, unit, load, drop, gap))) break
+    for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap))) break
     if (!placed) {
       const next = bays.find((b) => !open.includes(b))
       if (next && (placed = seatUnit([next], slots, unit, load, drop, gap))) open.push(next)
@@ -435,12 +449,11 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
 
   const issues: string[] = []
   const conceded = new Set(concessions.map((c) => c.boxId))
-  const bayH = bays.map((b) => b.h)
   const dropSteps = new Set<number>()
   for (const s of slots) if (!s.anchor && s.drop < NEVER && s.drop < events.length) dropSteps.add(s.drop)
   let extractOk = true
   for (const step of dropSteps) {
-    const stuck = extractIssues(slots, step, bayH).filter(
+    const stuck = extractIssues(slots, step).filter(
       (st) => !conceded.has(st.id) && !st.blockers.some((b) => conceded.has(b))
     )
     if (stuck.length) {
@@ -452,7 +465,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   for (const s of slots) {
     if (s.anchor || conceded.has(s.box.id)) continue
     const aboard = slots.filter((q) => q !== s && q.bay === s.bay && q.load < s.load && q.drop > s.load)
-    if (!canInsert(bays[s.bay], aboard, s)) {
+    if (!canInsert(aboard, s)) {
       buildOk = false
       issues.push(`box ${s.box.id} loads behind cargo already aboard`)
     }
