@@ -68,8 +68,9 @@ function MainApp(): React.ReactElement {
         color: C.textBody,
         overflow: 'hidden',
         border: '2px solid rgba(255,210,30,0.6)',
-        borderRadius: 18,
-        boxShadow: 'inset 0 0 48px rgba(255,210,30,0.05)'
+        // no glow box-shadow here: a blurred shadow on the full window re-rasterizes every
+        // resize frame, which makes dragging the edges crawl (see global.css perf note)
+        borderRadius: 18
       }}
     >
       <TopBar />
