@@ -286,7 +286,9 @@ export function buildRouteModel(
   const jobInfo: JobInfo[] = []
   for (const c of activeContracts(contracts)) {
     for (const o of c.objectives) {
-      if (o.delivered) continue
+      // turnedInScu set = already submitted in-game, so it needs no more pickups or drop-offs;
+      // without this a reroute (e.g. after accepting new contracts) re-adds its now-done stations
+      if (o.delivered || o.turnedInScu !== undefined) continue
       const destNode = nodeFor(o.destination, true)
       // dedupe, repeats halve scu
       const rawPickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
