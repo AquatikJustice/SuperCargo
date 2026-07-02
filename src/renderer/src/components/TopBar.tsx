@@ -41,7 +41,7 @@ export default function TopBar(): React.ReactElement {
   const appVersion = useStore((s) => s.appVersion)
   const reviewCount = useStore((s) => s.scanQueue.length)
   const openScanReview = useStore((s) => s.openScanReview)
-  const narrow = useNarrow()
+  const narrow = useNarrow(820)
 
   return (
     <div
@@ -57,7 +57,9 @@ export default function TopBar(): React.ReactElement {
         gap: 12
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      {/* left group yields and the ship name ellipsizes before anything can overlap the controls
+          (no overflow:hidden here - it would clip the ship/run dropdowns) */}
+      <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 'none' }}>
           <Logo />
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -137,7 +139,7 @@ function RunChip(): React.ReactElement {
   }, [open])
 
   return (
-    <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26 }}>
+    <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26, flex: 'none' }}>
       <Btn
         onClick={() => setOpen((o) => !o)}
         title="Current run - start a new one"
@@ -166,7 +168,7 @@ function RunChip(): React.ReactElement {
           fill="none"
           stroke={C.acc}
           strokeWidth="2.4"
-          style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', flex: 'none' }}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -275,17 +277,19 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           fontSize: 14,
           padding: '5px 11px',
           cursor: 'pointer',
-          whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+          overflow: 'hidden'
         }}
         hoverStyle={{ border: `1px solid ${C.acc}`, textShadow: GLOW }}
       >
         {activeNeedsGrid && (
-          <span title="This ship's cargo grid isn't optimized for the loading system yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1 }}>
+          <span title="This ship's cargo grid isn't optimized for the loading system yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1, flex: 'none' }}>
             ⚠
           </span>
         )}
-        <span>{shipName}</span>
-        <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim }}>{scu} SCU</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{shipName}</span>
+        {!narrow && <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, flex: 'none' }}>{scu} SCU</span>}
         <svg
           width="11"
           height="11"
@@ -293,7 +297,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           fill="none"
           stroke={C.acc}
           strokeWidth="2.4"
-          style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', flex: 'none' }}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
