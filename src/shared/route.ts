@@ -791,7 +791,97 @@ function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]):
   return planHold(bays, passEvents(stops, jobs), {}).snaps.every((s) => s.unplaced.length === 0)
 }
 
+// a later visit that exists only to fetch cargo collapses into an earlier
+// visit of the same node when the hold takes those boxes cleanly there:
+// fewer stops beats distance, so if the space exists this was simply the
+// better route all along
+function pullForward(res: RouteResult, input: RouteInput): RouteResult {
+  if (!res.feasible || !input.bays || res.stops.length < 2) return res
+  const jobs = indexedJobs(input.jobs)
+  const scuOf = new Map(jobs.map((j) => [j.idx, j.scu]))
+  // each probe is a full layout judge; keep a hard budget so a wave-heavy
+  // multitrip route can't turn a reroute into seconds. An accepted merge
+  // deletes a real visit, so it buys more probing
+  let judges = 0
+  let budget = 7
+  const judge = (stops: PlannedStop[]): { lost: number; conc: number } => {
+    judges++
+    const plan = planHold(input.bays!, passEvents(stops, jobs), {})
+    const ids = new Set<string>()
+    for (const s of plan.snaps) for (const b of s.unplaced) ids.add(b.id)
+    return { lost: ids.size, conc: plan.concessions.length }
+  }
+  let stops = res.stops
+  let dist = res.totalDistance
+  let peak = res.peakLoad
+  let base: { lost: number; conc: number } | null = null
+  let changed = true
+  while (changed && judges < budget) {
+    changed = false
+    // fetch-only revisits, cheapest cargo first; a merge that busts raw
+    // capacity on the legs between is dead on arithmetic alone, no judge
+    const cands: Array<{ j: number; i: number; scu: number }> = []
+    for (let j = stops.length - 1; j > 0; j--) {
+      const s2 = stops[j]
+      if (!s2.pickJobs.length || s2.dropJobs.length || s2.deferJobs?.length) continue
+      const scu = s2.pickJobs.reduce((a, p) => a + (scuOf.get(p) ?? 0), 0)
+      let tries = 0
+      for (let i = j - 1; i >= 0 && tries < 2; i--) {
+        if (stops[i].node !== s2.node) continue
+        tries++
+        if (input.capacity > 0) {
+          let bust = false
+          for (let k = i; k < j && !bust; k++) if (stops[k].loadAfter + scu > input.capacity) bust = true
+          if (bust) continue
+        }
+        cands.push({ j, i, scu })
+      }
+    }
+    cands.sort((a, b) => a.scu - b.scu)
+    for (const c of cands) {
+      if (judges >= budget) break
+      base = base ?? judge(stops)
+      const s2 = stops[c.j]
+      const cand = stops.map((s) => ({ ...s, pickJobs: [...s.pickJobs], dropJobs: [...s.dropJobs] }))
+      cand[c.i].pickJobs.push(...s2.pickJobs)
+      cand.splice(c.j, 1)
+      const v = judge(cand)
+      if (v.lost > base.lost || v.conc > base.conc) continue
+      let load = 0
+      let trip = 0
+      let started = false
+      let hi = 0
+      for (const s of cand) {
+        for (const d of s.dropJobs) load -= scuOf.get(d) ?? 0
+        for (const p of s.pickJobs) load += scuOf.get(p) ?? 0
+        if (load > 0) started = true
+        s.loadAfter = load
+        s.trip = trip
+        if (load > hi) hi = load
+        if (started && load === 0) trip++
+      }
+      const prev = stops[c.j - 1].node
+      const next = c.j + 1 < stops.length ? stops[c.j + 1].node : null
+      dist += (next != null ? input.dist[prev][next] - input.dist[s2.node][next] : 0) - input.dist[prev][s2.node]
+      stops = cand
+      peak = hi
+      base = v
+      budget += 4
+      changed = true
+      break
+    }
+  }
+  if (stops === res.stops) return res
+  return { ...res, stops, totalDistance: dist, peakLoad: peak }
+}
+
 export function planRoute(input: RouteInput): RouteResult {
+  const res = solveRoute(input)
+  // a hand-ordered route is the user's word; leave it alone
+  return res.method === 'manual' ? res : pullForward(res, input)
+}
+
+function solveRoute(input: RouteInput): RouteResult {
   const { n, capacity } = input
   if (n === 0) return empty()
   const jobs = indexedJobs(input.jobs)
