@@ -193,7 +193,6 @@ function Box({
   const L = pl.l - GAP
   // separates adjacent boxes
   const bevel = Math.min(0.09, Math.min(W, H, L) / 2 - 0.02)
-  const halfH = H / 2
   // the band hugs the face away from the bay's floor, whatever axis that is
   const floorFace = grid.floor ?? 'y-'
   const upAx = axOf(floorFace[0])
@@ -281,47 +280,47 @@ function Box({
           const sd = splitDestination(pl.box.dest)
           const loc = sd.code || sd.name
           if (!loc) return null
-          const overhead = upAx === 1 && grow === 1
-          const bandBottom = overhead ? bandOff - STRIPE_T / 2 : halfH
-          const lowY = overhead ? (bandBottom - halfH) / 2 : 0
-          const availH = overhead ? bandBottom + halfH : H * 0.72
+          // text lives on the four faces parallel to the bay's up axis and
+          // reads with its top toward the band, whatever axis that is
+          const availH = exts[upAx] - STRIPE_MARGIN - STRIPE_T
+          const lowU = (-grow * (STRIPE_MARGIN + STRIPE_T)) / 2
           const eps = 0.015
-          const hw = W / 2
-          const hl = L / 2
-          // big as fits, capped
+          const u = new THREE.Vector3(upAx === 0 ? grow : 0, upAx === 1 ? grow : 0, upAx === 2 ? grow : 0)
           const fit = (fw: number): number =>
             Math.min(0.34, availH * 0.8, (fw * 0.92) / Math.max(3, loc.length * 0.62))
-          const faces: Array<[[number, number, number], [number, number, number], number]> = [
-            [[cx, cy + lowY, cz + hl + eps], [0, 0, 0], W],
-            [[cx, cy + lowY, cz - hl - eps], [0, Math.PI, 0], W],
-            [[cx + hw + eps, cy + lowY, cz], [0, Math.PI / 2, 0], L],
-            [[cx - hw - eps, cy + lowY, cz], [0, -Math.PI / 2, 0], L]
-          ]
-          return faces.map(([p, r, fw], i) => {
-            const fs = fit(fw)
-            return (
-              <Text
-                key={`loc-${i}`}
-                font={locationFont}
-                position={p}
-                rotation={r}
-                fontSize={fs}
-                anchorX="center"
-                anchorY="middle"
-              >
-                {loc}
-                <meshStandardMaterial
-                  color="#cfd2d4"
-                  emissive="#cfd2d4"
-                  emissiveIntensity={0.1}
-                  roughness={0.9}
-                  metalness={0}
-                  transparent
-                  opacity={0.92}
-                />
-              </Text>
-            )
-          })
+          const c = new THREE.Vector3(cx, cy, cz)
+          return ([0, 1, 2].filter((a) => a !== upAx) as Ax[]).flatMap((na) =>
+            [1, -1].map((sign) => {
+              const n = new THREE.Vector3(na === 0 ? sign : 0, na === 1 ? sign : 0, na === 2 ? sign : 0)
+              const right = new THREE.Vector3().crossVectors(u, n)
+              const rot = new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, u, n))
+              const rightAx = right.x !== 0 ? 0 : right.y !== 0 ? 1 : 2
+              const fs = fit(exts[rightAx])
+              const p = c.clone().addScaledVector(n, exts[na] / 2 + eps).addScaledVector(u, lowU)
+              return (
+                <Text
+                  key={`loc-${na}-${sign}`}
+                  font={locationFont}
+                  position={[p.x, p.y, p.z]}
+                  rotation={[rot.x, rot.y, rot.z]}
+                  fontSize={fs}
+                  anchorX="center"
+                  anchorY="middle"
+                >
+                  {loc}
+                  <meshStandardMaterial
+                    color="#cfd2d4"
+                    emissive="#cfd2d4"
+                    emissiveIntensity={0.1}
+                    roughness={0.9}
+                    metalness={0}
+                    transparent
+                    opacity={0.92}
+                  />
+                </Text>
+              )
+            })
+          )
         })()}
       {label &&
         (() => {
@@ -1609,6 +1608,41 @@ export default function CargoGridPage(): React.ReactElement {
           {shownGrids.map((g) => (
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
+          {shownGrids.map((g) => {
+            // spun/re-floored bays get a solid floor plate: it reads as the
+            // surface cargo mounts to, and it eats clicks that would otherwise
+            // pass through the open wireframe and grab a box behind it
+            if (!g.rot && (g.floor ?? 'y-') === 'y-') return null
+            const floor = g.floor ?? 'y-'
+            const up = axOf(floor[0])
+            const grow = floor[1] === '-' ? 1 : -1
+            const size = sizeOf(g)
+            const t = 0.12
+            const args: [number, number, number] = [up === 0 ? t : g.w, up === 1 ? t : g.h, up === 2 ? t : g.l]
+            const off = [0, 0, 0]
+            off[up] = -grow * (size[up] / 2 - t / 2)
+            return (
+              <group
+                key={`floor-${g.id}`}
+                position={[center(g.x || 0, g.w, origin[0]), center(g.y || 0, g.h, origin[1]), center(g.z || 0, g.l, origin[2])]}
+                rotation={bayRot(g)}
+              >
+                <mesh
+                  position={[off[0], off[1], off[2]]}
+                  receiveShadow
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  onPointerMove={(e) => {
+                    e.stopPropagation()
+                    if (drag) handleDragMove(e.point.x + origin[0], e.point.z + origin[2], e.ray)
+                  }}
+                >
+                  <boxGeometry args={args} />
+                  <meshStandardMaterial color="#131a20" roughness={1} metalness={0} transparent opacity={0.94} />
+                </mesh>
+              </group>
+            )
+          })}
           <OrientationLabels frame={frame} half={shipHalf} shipCenter={shipCenter} />
           {loading && planFootprint.map((f) => {
             const g = gridById.get(f.gridId)
@@ -1727,9 +1761,37 @@ export default function CargoGridPage(): React.ReactElement {
             (() => {
               const dims = BOX_DIMS[drag.box.size]
               if (!dims) return null
+              const gg = ghost ? gridById.get(ghost.gridId) : undefined
+              // on a spun or re-floored bay the ground projection parallaxes away
+              // from the cursor, so the held box rides the ghost spot instead
+              if (ghost && gg && !ghost.members && (gg.rot || (gg.floor ?? 'y-') !== 'y-')) {
+                const floor = gg.floor ?? 'y-'
+                const up = axOf(floor[0])
+                const grow = floor[1] === '-' ? 1 : -1
+                const lift = [0, 0, 0]
+                lift[up] = grow * 0.35
+                const bcx = center(gg.x || 0, gg.w, origin[0])
+                const bcy = center(gg.y || 0, gg.h, origin[1])
+                const bcz = center(gg.z || 0, gg.l, origin[2])
+                return (
+                  <group position={[bcx, bcy, bcz]} rotation={bayRot(gg)}>
+                    <mesh
+                      raycast={() => null}
+                      position={[
+                        center((gg.x || 0) + ghost.x, ghost.w, origin[0]) - bcx + lift[0],
+                        center((gg.y || 0) + ghost.y, ghost.h, origin[1]) - bcy + lift[1],
+                        center((gg.z || 0) + ghost.z, ghost.l, origin[2]) - bcz + lift[2]
+                      ]}
+                    >
+                      <boxGeometry args={[ghost.w - GAP, ghost.h - GAP, ghost.l - GAP]} />
+                      <meshStandardMaterial color={drag.box.color} roughness={0.6} metalness={0} emissive={C.green} emissiveIntensity={0.1} />
+                      <Edges color={C.green} />
+                    </mesh>
+                  </group>
+                )
+              }
               const held: { key: string; box: PackBox; dx: number; dz: number; w: number; l: number; h: number }[] =
                 group ?? [{ key: drag.key, box: drag.box, dx: 0, dz: 0, w: dragRot ? dims.l : dims.w, l: dragRot ? dims.w : dims.l, h: dims.h }]
-              const gg = ghost ? gridById.get(ghost.gridId) : undefined
               return held.map((m) => {
                 const spot = ghost && ghost.members ? ghost.members.find((s) => s.key === m.key) : ghost
                 // hair above the landing spot
