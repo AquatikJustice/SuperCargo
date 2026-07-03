@@ -770,6 +770,9 @@ export default function CargoGridPage(): React.ReactElement {
   const [group, setGroup] = useState<GroupMember[] | null>(null)
   const [sel, setSel] = useState<Set<string>>(() => new Set())
   const [ghost, setGhost] = useState<Ghost | null>(null)
+  // where the plan had each dragged box before you grabbed it
+  type Origin = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number }
+  const [origins, setOrigins] = useState<Origin[] | null>(null)
   // ship-coord cursor; held box follows
   const [dragPos, setDragPos] = useState<{ x: number; z: number } | null>(null)
   const [dragRot, setDragRot] = useState(false)
@@ -880,6 +883,7 @@ export default function CargoGridPage(): React.ReactElement {
     })
     setGroup(null)
     setGhost(null)
+    setOrigins(null)
     setDragPos(null)
     lastPt.current = null
   }
@@ -919,9 +923,11 @@ export default function CargoGridPage(): React.ReactElement {
         }))
       )
       setDragRot(pl.rotated)
+      setOrigins(picked.map(({ p }) => ({ gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h })))
     } else {
       if (sel.size) setSel(new Set())
       setDragRot(loadedPins[key]?.rotated ?? pl.rotated)
+      setOrigins([{ gridId: g.id, x: pl.x, y: pl.y, z: pl.z, w: pl.w, l: pl.l, h: pl.h }])
     }
     setDrag({ key, box: pl.box })
     const sx = (g.x || 0) + pl.x + pl.w / 2
@@ -940,6 +946,7 @@ export default function CargoGridPage(): React.ReactElement {
         setDrag(null)
         setGroup(null)
         setGhost(null)
+        setOrigins(null)
         setDragPos(null)
       }
     }
@@ -1289,6 +1296,38 @@ export default function CargoGridPage(): React.ReactElement {
                     <meshStandardMaterial color={m.box.color} roughness={0.6} metalness={0} emissive={C.green} emissiveIntensity={0.1} />
                     <Edges color={C.green} />
                   </mesh>
+                )
+              })
+            })()}
+          {drag &&
+            origins &&
+            (() => {
+              const byGrid = new Map<string, Origin[]>()
+              for (const o of origins) (byGrid.get(o.gridId) ?? byGrid.set(o.gridId, []).get(o.gridId)!).push(o)
+              return [...byGrid].map(([gid, spots]) => {
+                const g = gridById.get(gid)
+                if (!g) return null
+                const bcx = center(g.x || 0, g.w, origin[0])
+                const bcy = center(g.y || 0, g.h, origin[1])
+                const bcz = center(g.z || 0, g.l, origin[2])
+                return (
+                  <group key={gid} position={[bcx, bcy, bcz]} rotation={bayRot(g)}>
+                    {spots.map((s, i) => (
+                      <mesh
+                        key={i}
+                        raycast={() => null}
+                        position={[
+                          center((g.x || 0) + s.x, s.w, origin[0]) - bcx,
+                          center((g.y || 0) + s.y, s.h, origin[1]) - bcy,
+                          center((g.z || 0) + s.z, s.l, origin[2]) - bcz
+                        ]}
+                      >
+                        <boxGeometry args={[s.w - GAP, s.h - GAP, s.l - GAP]} />
+                        <meshBasicMaterial transparent opacity={0.04} depthWrite={false} color={C.ghost} />
+                        <Edges color={C.ghost} />
+                      </mesh>
+                    ))}
+                  </group>
                 )
               })
             })()}
