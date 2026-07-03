@@ -806,10 +806,15 @@ export const useStore = create<StoreState>((set, get) => {
         patch.installedModules !== undefined &&
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
-        // a different hold means a fresh walk: nothing pre-done, nothing
-        // pre-placed, nothing pre-decided. Frozen plan, pickup ticks,
-        // locked aboard-spots, deferrals, and stashes all go
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadedPins: {}, deferredObjectives: [], grabbedObjectives: [], looseBoxes: [], looseSpots: {}, looseAt: {} })
+        // a different hold means a fresh EVERYTHING: the walk closes, the
+        // frozen plan dies, and the route re-solves for the new capacity.
+        // Leaving loadingActive on let the page re-freeze the old ship's
+        // route before the reroute landed (peaks over the new hold's cap)
+        set({
+          loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadingActive: false,
+          loadedPins: {}, deferredObjectives: [], grabbedObjectives: [],
+          looseBoxes: [], looseSpots: {}, looseAt: {}, isRouteAuto: true
+        })
         persist()
         get().clearAllPickedUp()
         scheduleReroute()
