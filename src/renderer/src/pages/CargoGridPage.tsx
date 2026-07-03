@@ -282,7 +282,9 @@ function Box({
           // text lives on the four faces parallel to the bay's up axis and
           // reads with its top toward the band, whatever axis that is
           const availH = exts[upAx] - STRIPE_MARGIN - STRIPE_T
-          const lowU = (-grow * (STRIPE_MARGIN + STRIPE_T)) / 2
+          // u already carries the grow sign; putting it here too cancels it
+          // and slides the text INTO the band on plus-face floors
+          const lowU = -(STRIPE_MARGIN + STRIPE_T) / 2
           const eps = 0.015
           const u = new THREE.Vector3(upAx === 0 ? grow : 0, upAx === 1 ? grow : 0, upAx === 2 ? grow : 0)
           const fit = (fw: number): number =>
