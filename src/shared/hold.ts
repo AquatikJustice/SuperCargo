@@ -1029,6 +1029,69 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   }
   tidyTiny(pass)
 
+  // pins are immovable in c/d, but gravity still applies: dragging the box
+  // out from under a hand-placed (or loaded) stack must not leave it hanging.
+  // The floating pin and everything resting on it fall together, straight
+  // down, onto the nearest legal support
+  const settlePins = (p: PassResult): void => {
+    const holds = (r: Slot, t: Slot): boolean =>
+      r.anchor || ((r.stop === t.stop || !!r.pinned) && containsWindow(r, t) && r.box.size >= t.box.size)
+    const seated = (rivals: Slot[], t: Slot, atY: number): boolean => {
+      if (atY === 0) return true
+      for (let dc = 0; dc < t.cw; dc++)
+        for (let dd = 0; dd < t.dl; dd++) {
+          const under = rivals.find(
+            (r) =>
+              r.y + r.h === atY &&
+              t.c + dc >= r.c && t.c + dc < r.c + r.cw &&
+              t.d + dd >= r.d && t.d + dd < r.d + r.dl
+          )
+          if (!under || !holds(under, t)) return false
+        }
+      return true
+    }
+    for (const s of [...p.slots].sort((a, b) => a.y - b.y)) {
+      if (!s.pinned || s.anchor || s.y === 0) continue
+      const rivals = p.slots.filter((q) => q !== s && q.bay === s.bay && windowsOverlap(q, s))
+      if (seated(rivals, s, s.y)) continue
+      const tower: Slot[] = [s]
+      for (let grew = true; grew; ) {
+        grew = false
+        for (const q of p.slots) {
+          if (tower.includes(q) || q.anchor || q.bay !== s.bay) continue
+          const riding = tower.some(
+            (t) =>
+              q.y === t.y + t.h && windowsOverlap(q, t) &&
+              spans(q.c, q.c + q.cw, t.c, t.c + t.cw) && spans(q.d, q.d + q.dl, t.d, t.d + t.dl)
+          )
+          if (riding) {
+            tower.push(q)
+            grew = true
+          }
+        }
+      }
+      const rest = new Set(tower)
+      let delta = Infinity
+      for (const t of tower) {
+        const others = p.slots.filter((q) => !rest.has(q) && q.bay === t.bay && windowsOverlap(q, t))
+        let top = 0
+        for (const r of others)
+          if (r.y + r.h <= t.y && holds(r, t) &&
+              spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && spans(r.d, r.d + r.dl, t.d, t.d + t.dl))
+            top = Math.max(top, r.y + r.h)
+        delta = Math.min(delta, t.y - top)
+      }
+      if (!isFinite(delta) || delta <= 0) continue
+      const landing = tower.every((t) => {
+        const others = p.slots.filter((q) => !rest.has(q) && q.bay === t.bay && windowsOverlap(q, t))
+        const probe = { ...t, y: t.y - delta }
+        return !others.some((q) => cellsClash(probe, q)) && seated(others, probe, probe.y)
+      })
+      if (landing) for (const t of tower) t.y -= delta
+    }
+  }
+  settlePins(pass)
+
   const { slots, byBox, verdicts } = pass
   const concessions = pass.concessions.filter((c) => !movedIds.has(c.boxId))
 
