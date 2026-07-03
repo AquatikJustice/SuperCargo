@@ -33,7 +33,9 @@ export interface CargoGrid {
   /** the face cargo peels out toward (the ramp/exit); DERIVED from `faces`. when
    *  set, the packer fills the deep end first so earlier drops sit nearest it. */
   exit?: { axis: 'x' | 'z'; dir: -1 | 1 }
-  /** authored per-face markup (wall/exit/aisle), from synced grid-faces. */
+  /** the face cargo rests on; DERIVED from `faces`. Absent = deck (y-) */
+  floor?: BayDir
+  /** authored per-face markup (wall/exit/aisle/floor), from synced grid-faces. */
   faces?: Partial<Record<BayDir, BayFaceKind>>
   /** visual-only euler spin (degrees, about x/y/z) for off-axis layouts; packer ignores it. */
   rot?: [number, number, number]
@@ -204,6 +206,12 @@ function deriveExit(faces?: Partial<Record<BayDir, BayFaceKind>>): CargoGrid['ex
   return aisle ? DIR_TO_EXIT[aisle] : undefined
 }
 
+// the face cargo rests on; stacking grows away from it. Absent = deck (y-)
+function deriveFloor(faces?: Partial<Record<BayDir, BayFaceKind>>): BayDir | undefined {
+  if (!faces) return undefined
+  return (Object.keys(faces) as BayDir[]).find((d) => faces[d] === 'floor')
+}
+
 /** All grids for a ship (for the view), optionally limited to installed modules. */
 export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const rec = CARGO_GRIDS[ship]
@@ -226,7 +234,8 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
         ...(m.group !== undefined ? { group: m.group } : {}),
         ...(m.rot !== undefined ? { rot: m.rot } : {}),
         faces: m.faces,
-        exit: deriveExit(m.faces)
+        exit: deriveExit(m.faces),
+        ...(deriveFloor(m.faces) ? { floor: deriveFloor(m.faces) } : {})
       }
     })
 }

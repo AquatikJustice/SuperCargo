@@ -11,6 +11,8 @@ const NEVER = 1 << 29
 
 export interface Frame {
   exit: { axis: 'x' | 'z'; dir: -1 | 1 }
+  /** face cargo rests on; stacking grows away from it. Default 'y-' */
+  floor?: 'x+' | 'x-' | 'y+' | 'y-' | 'z+' | 'z-'
 }
 
 export interface HoldOpts {
@@ -54,24 +56,36 @@ export interface HoldPlan {
   proofs: HoldProofs
 }
 
-// bay-local frame: d runs exit-inward, c across, y up
+type Axis = 'x' | 'y' | 'z'
+
+// bay-local frame: d runs exit-inward, c across, y away from the floor face.
+// Each canonical dimension maps to one grid axis with an optional flip
 interface BayCtx {
   idx: number
   grid: CargoGrid
   cw: number
   dl: number
   h: number
-  onZ: boolean
-  dir: -1 | 1
+  cross: Axis
+  /** c measured from the axis plus face */
+  crossFlip: boolean
+  depth: Axis
+  /** exit sits at the axis plus face */
+  depthFlip: boolean
+  up: Axis
+  /** floor sits at the axis plus face, so up runs minus */
+  upFlip: boolean
   /** stacks hug the high side of the cross axis */
   wallHigh: boolean
 }
 
-function wallIsHigh(grid: CargoGrid, onZ: boolean): boolean {
+const axisLen = (g: CargoGrid, a: Axis): number => (a === 'x' ? g.w : a === 'y' ? g.h : g.l)
+
+function wallIsHigh(grid: CargoGrid, cross: Axis): boolean {
   const f = grid.faces
   if (!f) return false
-  const hi = onZ ? f['x+'] : f['z+']
-  const lo = onZ ? f['x-'] : f['z-']
+  const hi = f[`${cross}+` as keyof typeof f]
+  const lo = f[`${cross}-` as keyof typeof f]
   if (hi === 'wall' || lo === 'aisle') return true
   return false
 }
@@ -93,40 +107,78 @@ interface Slot {
 
 function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
   const exit = frame?.exit ?? grid.exit ?? { axis: 'z' as const, dir: -1 as const }
-  const onZ = exit.axis === 'z'
+  const floor = frame?.floor ?? grid.floor ?? 'y-'
+  let up = floor[0] as Axis
+  let upFlip = floor[1] === '+'
+  // an exit through the floor axis can't carry a horizontal peel; keep the
+  // default deck rather than guessing
+  if (exit.axis === up) {
+    up = 'y'
+    upFlip = false
+  }
+  const depth = exit.axis
+  const cross = (['x', 'y', 'z'] as Axis[]).find((a) => a !== up && a !== depth)!
   return {
     idx,
     grid,
-    cw: onZ ? grid.w : grid.l,
-    dl: onZ ? grid.l : grid.w,
-    h: grid.h,
-    onZ,
-    dir: exit.dir,
-    wallHigh: wallIsHigh(grid, onZ)
+    cw: axisLen(grid, cross),
+    dl: axisLen(grid, depth),
+    h: axisLen(grid, up),
+    cross,
+    crossFlip: false,
+    depth,
+    depthFlip: exit.dir === 1,
+    up,
+    upFlip,
+    wallHigh: wallIsHigh(grid, cross)
   }
 }
 
+// canonical (c,d,y) <-> grid-local (x,y,z): each canonical dimension writes
+// one grid axis, flipped when its reference face sits on the plus side
 function toPlacement(b: BayCtx, s: Slot): Placement {
   const dims = BOX_DIMS[s.box.size]
-  const x = b.onZ ? s.c : b.dir === -1 ? s.d : b.grid.w - (s.d + s.dl)
-  const z = b.onZ ? (b.dir === -1 ? s.d : b.grid.l - (s.d + s.dl)) : s.c
-  const w = b.onZ ? s.cw : s.dl
-  const l = b.onZ ? s.dl : s.cw
-  return { box: s.box, gridId: b.grid.id, x, y: s.y, z, w, l, h: s.h, rotated: !!dims && w !== dims.w }
+  const pos = { x: 0, y: 0, z: 0 }
+  const ext = { x: 0, y: 0, z: 0 }
+  const put = (axis: Axis, at: number, size: number, flip: boolean): void => {
+    pos[axis] = flip ? axisLen(b.grid, axis) - (at + size) : at
+    ext[axis] = size
+  }
+  put(b.cross, s.c, s.cw, b.crossFlip)
+  put(b.depth, s.d, s.dl, b.depthFlip)
+  put(b.up, s.y, s.h, b.upFlip)
+  return {
+    box: s.box,
+    gridId: b.grid.id,
+    x: pos.x,
+    y: pos.y,
+    z: pos.z,
+    w: ext.x,
+    l: ext.z,
+    h: ext.y,
+    rotated: !!dims && ext.x !== dims.w
+  }
 }
 
 function fromPlacement(b: BayCtx, p: Placement, load: number, drop: number, anchor: boolean): Slot {
-  const d = b.onZ ? (b.dir === -1 ? p.z : b.grid.l - (p.z + p.l)) : b.dir === -1 ? p.x : b.grid.w - (p.x + p.w)
-  const c = b.onZ ? p.x : p.z
+  const pos = { x: p.x, y: p.y, z: p.z }
+  const ext = { x: p.w, y: p.h, z: p.l }
+  const get = (axis: Axis, flip: boolean): { at: number; size: number } => ({
+    at: flip ? axisLen(b.grid, axis) - (pos[axis] + ext[axis]) : pos[axis],
+    size: ext[axis]
+  })
+  const c = get(b.cross, b.crossFlip)
+  const d = get(b.depth, b.depthFlip)
+  const y = get(b.up, b.upFlip)
   return {
     box: p.box,
     bay: b.idx,
-    c,
-    d,
-    y: p.y,
-    cw: b.onZ ? p.w : p.l,
-    dl: b.onZ ? p.l : p.w,
-    h: p.h,
+    c: c.at,
+    d: d.at,
+    y: y.at,
+    cw: c.size,
+    dl: d.size,
+    h: y.size,
     load,
     drop,
     stop: anchor ? -1 : p.box.stopIdx,

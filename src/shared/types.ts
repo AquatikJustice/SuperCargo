@@ -337,7 +337,7 @@ export interface CommodityRoster {
 }
 
 /** WALL = solid side, EXIT = cargo leaves here, AISLE = walkway you can pull into. */
-export type BayFaceKind = 'wall' | 'exit' | 'aisle'
+export type BayFaceKind = 'wall' | 'exit' | 'aisle' | 'floor'
 /** the six bay faces, by signed axis (y+ = roof side, y- = floor). */
 export type BayDir = 'x+' | 'x-' | 'y+' | 'y-' | 'z+' | 'z-'
 
