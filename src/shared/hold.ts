@@ -252,11 +252,12 @@ function findSpot(
         if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
         // in the depth zone, glued to own stop, stack HIGH before claiming new
-        // floor (floor is the scarce resource), stretch across the bay not into
-        // its depth, low, shallow, tight to the wall side
+        // floor (floor is the scarce resource), low, shallow. Orientation is a
+        // tiebreak at equal depth: stretch across, but a rotated box that fills
+        // the current row beats an across box opening a new one
         const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
         const cWall = bay.wallHigh ? bay.cw - (t.c + cwf) : t.c
-        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, dlf, t.y, t.d, cWall]
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, t.d, dlf, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -368,9 +369,10 @@ interface Strand {
   blockers: string[]
 }
 
-// can this drop set physically come out, given the flanking bug
+// can this drop set physically come out, given the flanking bug;
+// a stop unloads before it loads, so same-step pickups aren't in the way
 function extractIssues(slots: Slot[], step: number): Strand[] {
-  const aboard = slots.filter((s) => s.load <= step && s.drop > step)
+  const aboard = slots.filter((s) => s.load < step && s.drop > step)
   const leaving = slots.filter((s) => s.drop === step)
   const out = new Set<Slot>()
   const present = (): Slot[] => aboard.concat(leaving).filter((s) => !out.has(s))
@@ -601,7 +603,41 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     )
       pass = retry
   }
-  const { slots, byBox, verdicts, concessions } = pass
+
+  // a stop smeared across bays pulls its strays back to its main bay when
+  // they all fit there cleanly; anything resting on a stray is the same
+  // stop's cargo, so the whole group moves or none of it does
+  const reunite = (p: PassResult): Set<string> => {
+    const moved = new Set<string>()
+    const byStop = new Map<number, Slot[]>()
+    for (const s of p.slots)
+      if (!s.anchor && !pins?.has(s.box.id))
+        (byStop.get(s.stop) ?? byStop.set(s.stop, []).get(s.stop)!).push(s)
+    for (const group of byStop.values()) {
+      const count = new Map<number, number>()
+      for (const s of group) count.set(s.bay, (count.get(s.bay) ?? 0) + 1)
+      if (count.size < 2) continue
+      const homeIdx = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0]
+      const strays = group.filter((s) => s.bay !== homeIdx)
+      const saved = strays.map((s) => ({ ...s }))
+      let ok = true
+      for (const s of [...strays].sort((a, b) => unitOrder(a.box, b.box))) {
+        const rivals = p.slots.filter((q) => q !== s && q.bay === homeIdx && windowsOverlap(q, s))
+        const got = bestFace(bays[homeIdx], rivals, { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }, gap, {})
+        if (!got) {
+          ok = false
+          break
+        }
+        Object.assign(s, got)
+      }
+      if (ok) for (const s of strays) moved.add(s.box.id)
+      else strays.forEach((s, i) => Object.assign(s, saved[i]))
+    }
+    return moved
+  }
+  const movedIds = reunite(pass)
+  const { slots, byBox, verdicts } = pass
+  const concessions = pass.concessions.filter((c) => !movedIds.has(c.boxId))
 
   const snaps: LoadSnap[] = []
   for (let i = 0; i < events.length; i++) {
