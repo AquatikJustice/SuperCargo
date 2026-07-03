@@ -145,12 +145,59 @@ interface Relax {
   flank?: boolean
 }
 
-/** depth span a unit re-seats into on its shaping pass */
-interface Span {
-  d0: number
-  d1: number
-  /** across columns only from here back: caps wall rows at the balanced count */
-  wallFrom?: number
+// strict legality for one candidate slot: free cells, own-stop support held
+// the whole window, row exclusivity, peel order, insertable, no flank pair.
+// Mirrors the checks findSpot applies on its strict rung - keep in lockstep
+function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[]): boolean {
+  if (rivals.some((r) => cellsClash(t, r))) return false
+  if (t.y > 0)
+    for (let dc = 0; dc < t.cw; dc++)
+      for (let dd = 0; dd < t.dl; dd++) {
+        const under = rivals.find(
+          (r) =>
+            r.y + r.h === t.y &&
+            t.c + dc >= r.c && t.c + dc < r.c + r.cw &&
+            t.d + dd >= r.d && t.d + dd < r.d + r.dl
+        )
+        if (!under || !(under.anchor || (under.stop === t.stop && containsWindow(under, t)))) return false
+      }
+  for (const r of rivals) {
+    if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
+    if (!laneClash(t, r)) continue
+    const pad = r.stop !== t.stop ? gap : 0
+    if (r.drop < t.drop && r.d + r.dl + pad > t.d) return false
+    if (r.drop > t.drop && t.d + t.dl + pad > r.d) return false
+  }
+  if (!canInsert(aboardAtLoad, t)) return false
+  if (makesSandwich(rivals, t)) return false
+  return true
+}
+
+// the v0.5.2 wall builder: first fit scanning depth-ascending, bottom-up,
+// then across from the bay's own wall, across face before rotated. Each
+// depth slice fills solid before the section deepens, which is where the
+// clean full-width bands come from. The final delivery scans from the far
+// wall backward instead so it anchors against the bulkhead
+function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: number, deep: boolean): Slot | null {
+  const dims = BOX_DIMS[probe.box.size]
+  if (!dims) return null
+  if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
+  const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
+  const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
+  for (let i = d0; i < bay.dl; i++) {
+    const d = deep ? bay.dl - 1 - (i - d0) : i
+    if (d < d0) break
+    for (let y = 0; y + dims.h <= bay.h; y++)
+      for (let cRaw = 0; cRaw < bay.cw; cRaw++)
+        for (const [cwf, dlf] of faces) {
+          if (d + dlf > bay.dl) continue
+          const c = bay.wallHigh ? bay.cw - cRaw - cwf : cRaw
+          if (c < 0 || c + cwf > bay.cw) continue
+          const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
+          if (fits(rivals, t, gap, aboardAtLoad)) return t
+        }
+  }
+  return null
 }
 
 // slide in at its level, or lower it down an open-topped column: a pit
@@ -211,20 +258,14 @@ function findSpot(
   gap: number,
   relax: Relax,
   zone: number,
-  span?: Span,
   deep?: boolean
 ): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
-  let bestKey: number[] = new Array(9).fill(Infinity)
+  let bestKey: number[] = new Array(8).fill(Infinity)
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   for (let c = 0; c + cwf <= bay.cw; c++) {
     for (let d = 0; d + dlf <= bay.dl; d++) {
-      if (span && (d < span.d0 || d + dlf > span.d1)) continue
-      if (span?.wallFrom != null && cwf > dlf && d < span.wallFrom) continue
-      // shaped across columns keep to the wall lattice; glue must not drag
-      // a wall column a cell off its line to kiss a smalls pile
-      if (span && cwf > dlf && (bay.wallHigh ? bay.cw - (c + cwf) : c) % cwf !== 0) continue
       const t: Slot = { ...probe, bay: bay.idx, c, d, y: 0, cw: cwf, dl: dlf, h: hf }
       const tops = new Set<number>([0])
       for (const r of rivals)
@@ -269,37 +310,24 @@ function findSpot(
         // in the depth zone, glued to own stop, stack HIGH before claiming new
         // floor (floor is the scarce resource), low, shallow. Orientation is a
         // tiebreak at equal depth: stretch across, but a rotated box that fills
-        // the current row beats an across box opening a new one. On a shaping
-        // pass the wall rows come first and the rotated aisle lane comes last,
-        // low and front-flush; across columns fill from the deep end so the
-        // short step and its smalls land at the exit side
+        // the current row beats an across box opening a new one
         let contacts = 0
         for (const r of rivals) if (r.stop === t.stop && touches(t, r)) contacts++
         const glued = contacts ? 0 : 1
-        // smalls keep to the aisle side: the wall line is where tall columns
-        // land, and an early squatter there leaves the later group an awkward
-        // corner to build around. On the floor this is shaping-only - in raw
-        // fit-finding it eats aisle cells a packed ship can't spare
-        const hugHigh = cwf * dlf <= 4 && (y > 0 || span) ? !bay.wallHigh : bay.wallHigh
+        // perching smalls keep off the wall-side tops: that's where the next
+        // unit's tall column lands, and a squatter there shoves it off line
+        const hugHigh = cwf * dlf <= 4 && y > 0 ? !bay.wallHigh : bay.wallHigh
         const cWall = hugHigh ? bay.cw - (t.c + cwf) : t.c
-        const aisle = span && dlf > cwf ? 1 : 0
         // the run's final delivery anchors at the far wall: nothing ever
         // loads behind it, so shallow-packing would strand it mid-bay
-        const dKey = span
-          ? dlf <= cwf
-            ? span.d1 - (t.d + dlf)
-            : t.d - span.d0
-          : deep
-            ? bay.dl - (t.d + dlf)
-            : t.d
+        const dKey = deep ? bay.dl - (t.d + dlf) : t.d
         // small boxes nestle before edging: more own-stop faces touched beats
         // a spot at the rim, and kissing the hull counts once a box is
-        // already nestling (never on open floor, or smalls would re-squat
-        // the wall line). Bigger boxes keep pure geometry - contact-chasing
+        // already nestling. Bigger boxes keep pure geometry - contact-chasing
         // there walls off space and costs the route real trips
         const wallKiss = (bay.wallHigh ? t.c + cwf === bay.cw : t.c === 0) ? 1 : 0
         const snug = probe.box.size <= 4 && contacts ? -(contacts + wallKiss) : 0
-        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, snug, cWall]
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, dKey, dlf, snug, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -320,7 +348,6 @@ function bestFace(
   probe: Slot,
   gap: number,
   relax: Relax,
-  span?: Span,
   deep?: boolean
 ): { slot: Slot; key: number[] } | null {
   const dims = BOX_DIMS[probe.box.size]
@@ -331,7 +358,7 @@ function bestFace(
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: { slot: Slot; key: number[] } | null = null
   for (const [cwf, dlf] of faces) {
-    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, span, deep)
+    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, deep)
     if (s && (!best || beats(s.key, best.key))) best = s
   }
   return best
@@ -344,7 +371,6 @@ function seatBoxes(
   load: number,
   drop: number,
   gap: number,
-  span?: Span,
   deep?: boolean
 ): Slot[] | null {
   const placed: Slot[] = []
@@ -356,7 +382,7 @@ function seatBoxes(
     let got: { slot: Slot; key: number[] } | null = null
     for (const bay of cfg) {
       const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-      const s = bestFace(bay, rivals, probe, gap, {}, span, deep)
+      const s = bestFace(bay, rivals, probe, gap, {}, deep)
       if (s && (!got || beats(s.key, got.key))) got = s
     }
     if (!got) return null
@@ -365,10 +391,9 @@ function seatBoxes(
   return placed
 }
 
-// whole unit into one bay set, no concessions. When shaping, seat once to
-// learn the tightest footprint, then re-seat into it so the block reads like
-// a hauler packed it: full columns deep, the short step and its smalls at the
-// exit side, the rotated lane a planned front-flush column instead of a stub
+// whole unit into one bay set, no concessions. Seat once to pick the bay and
+// find the section start, then rebuild it with the wall scanner so the block
+// comes out as solid full-width slices
 function seatUnit(
   cfg: BayCtx[],
   slots: Slot[],
@@ -379,41 +404,21 @@ function seatUnit(
   shaping: boolean,
   deep: boolean
 ): Slot[] | null {
-  const first = seatBoxes(cfg, slots, unit, load, drop, gap, undefined, deep)
+  const first = seatBoxes(cfg, slots, unit, load, drop, gap, deep)
   if (!first || !shaping) return first
   const bayIdx = first[0].bay
   if (first.some((s) => s.bay !== bayIdx)) return first
+  const bay = cfg.find((b) => b.idx === bayIdx)!
   const d0 = Math.min(...first.map((s) => s.d))
-  const d1 = Math.max(...first.map((s) => s.d + s.dl))
-  const one = cfg.filter((b) => b.idx === bayIdx)
-  // greedy fills every wall row before rotating anything, which strands a
-  // void in the aisle lane of a big bucket. For uniform 16s the wall/aisle
-  // split is solvable: cap wall rows at the balanced count so both lanes
-  // run the same depth, and give the smalls the freed front row
-  const bay = one[0]
-  const n16 = unit.filter((b) => b.size === 16).length
-  const cols = Math.floor(bay.cw / 4)
-  const per = Math.floor(bay.h / 2)
-  if (n16 > 0 && cols > 0 && per > 0 && bay.cw - cols * 4 >= 2 && unit.every((b) => b.size <= 16)) {
-    let bw = Math.ceil(n16 / (per * cols))
-    let ba = 0
-    const score = (w: number, a: number): number[] => [Math.max(2 * w, 4 * a), Math.abs(2 * w - 4 * a)]
-    for (let a = 1; a <= Math.ceil(n16 / per); a++) {
-      const w = Math.ceil(Math.max(0, n16 - a * per) / (per * cols))
-      if (beats(score(w, a), score(bw, ba))) {
-        bw = w
-        ba = a
-      }
-    }
-    for (const pad of [0, 2]) {
-      const depth = Math.max(2 * bw, 4 * ba) + pad
-      if (d0 + depth > bay.dl) break
-      const shaped = seatBoxes(one, slots, unit, load, drop, gap, { d0, d1: d0 + depth, wallFrom: d0 + depth - 2 * bw }, deep)
-      if (shaped) return shaped
-    }
+  const placed: Slot[] = []
+  for (const box of [...unit].sort(unitOrder)) {
+    const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
+    const rivals = slots.concat(placed).filter((s) => s.bay === bayIdx && windowsOverlap(s, probe))
+    const got = scanSpot(bay, rivals, probe, gap, d0, deep)
+    if (!got) return first
+    placed.push(got)
   }
-  const shaped = seatBoxes(one, slots, unit, load, drop, gap, { d0, d1 }, deep)
-  return shaped ?? first
+  return placed
 }
 
 // per-box escalation: clean spot anywhere, then out-of-order, then buried
