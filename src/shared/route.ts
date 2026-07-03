@@ -30,6 +30,8 @@ export interface RouteInput {
   cityToLeo?: Map<number, number>
   /** job indices the user pushed to a later trip */
   deferred?: Set<number>
+  /** job indices already physically aboard: pickups happened, only deliveries remain */
+  aboard?: Set<number>
 }
 
 export interface PlannedStop {
@@ -411,8 +413,11 @@ function planMultiTrip(input: RouteInput): RouteResult {
   const { dist } = input
   const cap = input.capacity
   const all = indexedJobs(input.jobs)
-  const baseUnfittable = all.filter((j) => j.scu > cap).map((j) => j.idx)
-  const byIdx = new Map(all.filter((j) => j.scu <= cap).map((j) => [j.idx, j]))
+  // cargo already on the ship is proven cargo, never unfittable
+  const aboardSet = input.aboard ?? new Set<number>()
+  const baseUnfittable = all.filter((j) => j.scu > cap && !aboardSet.has(j.idx)).map((j) => j.idx)
+  const byIdx = new Map(all.filter((j) => j.scu <= cap || aboardSet.has(j.idx)).map((j) => [j.idx, j]))
+  const seeded = [...aboardSet].flatMap((i) => byIdx.get(i) ?? [])
   const cityToLeo = input.cityToLeo
   // LEO to the cities below it
   const leoCities = new Map<number, number[]>()
@@ -429,17 +434,24 @@ function planMultiTrip(input: RouteInput): RouteResult {
   const walkOnce = (lateSet: ReadonlySet<number>): Walk => {
     const unfittable = [...baseUnfittable]
     const pending = new Set(byIdx.keys())
-    const aboard: IJob[] = []
-    let load = 0
+    // seeded cargo starts the walk on the ship: no pickup visit, only its delivery
+    for (const j of seeded) pending.delete(j.idx)
+    const aboard: IJob[] = [...seeded]
+    let load = seeded.reduce((a, j) => a + j.scu, 0)
     let cur = input.start ?? (pending.size ? (byIdx.get([...pending][0]) as IJob).pickup : 0)
 
     const stops: PlannedStop[] = []
     let total = 0
-    let peak = 0
+    let peak = load
     let trip = 0
-    let started = false
+    let started = seeded.length > 0
 
     const oracle = input.bays ? holdOracle(input.bays) : null
+    if (oracle && seeded.length) {
+      const ranked = [...new Set(seeded.map((j) => j.dest))].sort((a, b) => dist[cur][a] - dist[cur][b])
+      const rankMap = new Map(ranked.map((d, i) => [d, i]))
+      oracle.take(oracleJobs(seeded), (dest) => rankMap.get(dest) ?? ranked.length)
+    }
     const cityBusy = (c: number): boolean =>
       aboard.some((j) => j.dest === c) ||
       [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
@@ -584,9 +596,11 @@ function planMultiTrip(input: RouteInput): RouteResult {
     const late = new Set<number>()
     let best = { walk, homeless: Number.MAX_SAFE_INTEGER }
     for (let round = 0; ; round++) {
-      const plan = planHold(input.bays, passEvents(walk.stops, all), {})
+      const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), {})
       const bad = new Set<number>()
       for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
+      // an aboard job can't load later - it's already on the ship
+      for (const i of aboardSet) bad.delete(i)
       if (bad.size < best.homeless) best = { walk, homeless: bad.size }
       if (!bad.size || round >= 2) break
       for (const i of bad) late.add(i)
@@ -733,11 +747,11 @@ const empty = (): RouteResult => ({
 })
 
 // a pass's stops as load/drop events the layout engine can judge
-function passEvents(stops: PlannedStop[], jobs: IJob[]): LoadEvent[] {
+function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadEvent[] {
   const byIdx = new Map(jobs.map((j) => [j.idx, j]))
   const rank = new Map<number, number>()
   for (const s of stops) if (s.dropJobs.length && !rank.has(s.node)) rank.set(s.node, rank.size)
-  return stops.map((s) => {
+  const events = stops.map((s) => {
     const load: PackBox[] = []
     for (const ji of s.pickJobs) {
       const j = byIdx.get(ji) as IJob
@@ -758,6 +772,17 @@ function passEvents(stops: PlannedStop[], jobs: IJob[]): LoadEvent[] {
     }
     return { load, drop }
   })
+  // cargo aboard before the walk begins loads in one pre-walk event, so the
+  // layout judge sees the ship as full as it really is
+  if (preload?.length) {
+    const load: PackBox[] = []
+    for (const j of preload)
+      j.boxes.forEach((size, k) =>
+        load.push({ id: `${j.idx}#${k}`, size, color: '', dest: '', stopIdx: rank.get(j.dest) ?? rank.size })
+      )
+    return [{ load, drop: [] }, ...events]
+  }
+  return events
 }
 
 // can the layout engine house every box across the whole pass? An optimal
@@ -778,8 +803,9 @@ export function planRoute(input: RouteInput): RouteResult {
 
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
 
-  // user-deferred cargo forces a later trip; the single-pass optimizer can't express that
-  if (input.deferred && input.deferred.size) return planMultiTrip(input)
+  // user-deferred cargo forces a later trip, and cargo already aboard needs
+  // the live walker; the single-pass optimizer can't express either
+  if ((input.deferred && input.deferred.size) || (input.aboard && input.aboard.size)) return planMultiTrip(input)
 
   // a single pass that fits is optimal
   const single = bestOrder(input)

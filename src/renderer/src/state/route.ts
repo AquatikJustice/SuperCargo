@@ -415,17 +415,25 @@ export function computeRoutePlan(
   startLocation?: string,
   bays?: CargoGrid[],
   manualOrder?: string[],
-  deferred?: string[]
+  deferred?: string[],
+  aboard?: ReadonlySet<string>,
+  startKey?: string
 ): RoutePlan | null {
   locations = withCityCoords(locations)
   const model = buildRouteModel(contracts, locations, startLocation, capacity, bays)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
 
+  // objectives whose cargo is already on the ship: no pickup visits, and a
+  // deferral can't apply to them
+  const aboardJobs = aboard?.size
+    ? new Set(model.jobInfo.flatMap((j, i) => (aboard.has(j.objectiveId) ? [i] : [])))
+    : undefined
+
   // objectives the user sent to a later trip -> their job indices
   const deferSet = deferred && deferred.length ? new Set(deferred) : null
   const deferredJobs = deferSet
-    ? new Set(model.jobInfo.flatMap((j, i) => (deferSet.has(j.objectiveId) ? [i] : [])))
+    ? new Set(model.jobInfo.flatMap((j, i) => (deferSet.has(j.objectiveId) && !aboardJobs?.has(i) ? [i] : [])))
     : undefined
 
   // pair city nodes with their LEO
@@ -454,16 +462,20 @@ export function computeRoutePlan(
     fixedOrder = seq
   }
 
+  // a mid-walk re-plan starts from wherever the ship is, not the depot
+  const startNode = startKey !== undefined ? model.nodes.findIndex((n) => n.key === startKey) : -1
+
   const result = planRoute({
     n: model.nodes.length,
     jobs: model.jobs,
     dist,
     capacity,
-    start: model.depot,
+    start: startNode >= 0 ? startNode : model.depot,
     bays,
     fixedOrder,
     cityToLeo,
-    deferred: deferredJobs
+    deferred: deferredJobs,
+    aboard: aboardJobs
   })
 
   const refOf = (ji: number): StepRef => ({
