@@ -792,39 +792,89 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // they all fit there cleanly; anything resting on a stray is the same
   // stop's cargo, so the whole group moves or none of it does. In the
   // shaped world the strays re-seat through the wall scanner so they
-  // continue the stop's section instead of landing as a rank-shaped tower
+  // continue the stop's section instead of landing as a rank-shaped tower.
+  // When the strays miss, each squatter group in the main bay gets a shot
+  // at re-homing whole into another bay first: short-stay cargo parked in
+  // the front rows early poisons whole-run cells by a hair, and evicting
+  // it is a solver-time move like any other
   const reunite = (p: PassResult, shaped: boolean): Set<string> => {
     const moved = new Set<string>()
     const byStop = new Map<number, Slot[]>()
     for (const s of p.slots)
       if (!s.anchor && !pins?.has(s.box.id))
         (byStop.get(s.stop) ?? byStop.set(s.stop, []).get(s.stop)!).push(s)
+    const seatIn = (s: Slot, bayIdx: number): Slot | null => {
+      const rivals = p.slots.filter((q) => q !== s && q.bay === bayIdx && windowsOverlap(q, s))
+      const probe: Slot = { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }
+      if (!shaped) return bestFace(bays[bayIdx], rivals, probe, gap, {})?.slot ?? null
+      let d0 = Infinity
+      for (const q of p.slots)
+        if (q !== s && q.bay === bayIdx && !q.anchor && q.stop === s.stop) d0 = Math.min(d0, q.d)
+      const start = isFinite(d0) ? d0 : 0
+      const deep = s.drop === lastDrop
+      const got = scanSpot(bays[bayIdx], rivals, probe, gap, start, deep)
+      // the family can also grow toward the door: rows in front of its
+      // section freed by a delivery are fair game when the section is full
+      return got ?? (start > 0 ? scanSpot(bays[bayIdx], rivals, probe, gap, 0, deep) : null)
+    }
+    const moveAll = (list: Slot[], bayIdx: number): Slot[] | null => {
+      const saved = list.map((s) => ({ ...s }))
+      // bigs claim their columns before smalls eat the floor, and within a
+      // size the earliest load goes first so stacking chains stay legal
+      // (a box only rests on cargo aboard for its whole window)
+      for (const s of [...list].sort((a, b) => b.box.size - a.box.size || a.load - b.load)) {
+        const slot = seatIn(s, bayIdx)
+        if (!slot) {
+          list.forEach((x, i) => Object.assign(x, saved[i]))
+          return null
+        }
+        Object.assign(s, slot)
+      }
+      return saved
+    }
     for (const group of byStop.values()) {
       const count = new Map<number, number>()
       for (const s of group) count.set(s.bay, (count.get(s.bay) ?? 0) + 1)
       if (count.size < 2) continue
-      const homeIdx = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0]
-      const strays = group.filter((s) => s.bay !== homeIdx)
-      const saved = strays.map((s) => ({ ...s }))
-      let ok = true
-      for (const s of [...strays].sort((a, b) => unitOrder(a.box, b.box))) {
-        const rivals = p.slots.filter((q) => q !== s && q.bay === homeIdx && windowsOverlap(q, s))
-        const probe: Slot = { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }
-        let slot: Slot | null = null
-        if (shaped) {
-          let d0 = Infinity
-          for (const q of p.slots)
-            if (q !== s && q.bay === homeIdx && !q.anchor && q.stop === s.stop) d0 = Math.min(d0, q.d)
-          slot = scanSpot(bays[homeIdx], rivals, probe, gap, isFinite(d0) ? d0 : 0, s.drop === lastDrop)
-        } else slot = bestFace(bays[homeIdx], rivals, probe, gap, {})?.slot ?? null
-        if (!slot) {
-          ok = false
+      const scu = group.reduce((a, s) => a + s.box.size, 0)
+      // consolidation target: its biggest cluster's bay first, then the rest;
+      // a bay the whole family can't even volume-fit isn't worth a scan
+      const targets = [...count.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([i]) => i)
+        .concat(bays.map((b) => b.idx).filter((i) => !count.has(i)))
+        .filter((i) => scu <= bays[i].cw * bays[i].dl * bays[i].h)
+      let done = false
+      for (const homeIdx of targets) {
+        const strays = group.filter((s) => s.bay !== homeIdx)
+        if (moveAll(strays, homeIdx)) {
+          for (const s of strays) moved.add(s.box.id)
+          done = true
           break
         }
-        Object.assign(s, slot)
+        // a single short-stay unit squatting the target bay can poison
+        // whole-window rows by a hair; give each one a shot at re-homing
+        // whole into another bay, then try the strays again
+        const units = new Map<string, Slot[]>()
+        for (const q of p.slots)
+          if (!q.anchor && !pins?.has(q.box.id) && q.bay === homeIdx && q.stop !== group[0].stop)
+            (units.get(`${q.stop}@${q.load}`) ?? units.set(`${q.stop}@${q.load}`, []).get(`${q.stop}@${q.load}`)!).push(q)
+        evict: for (const qs of [...units.values()].sort((a, b) => a.length - b.length).slice(0, 8)) {
+          for (const t of bays) {
+            if (t.idx === homeIdx) continue
+            const savedQ = moveAll(qs, t.idx)
+            if (!savedQ) continue
+            if (moveAll(strays, homeIdx)) {
+              for (const s of strays) moved.add(s.box.id)
+              for (const q of qs) moved.add(q.box.id)
+              done = true
+              break evict
+            }
+            qs.forEach((x, i) => Object.assign(x, savedQ[i]))
+          }
+        }
+        if (done) break
       }
-      if (ok) for (const s of strays) moved.add(s.box.id)
-      else strays.forEach((s, i) => Object.assign(s, saved[i]))
     }
     return moved
   }
