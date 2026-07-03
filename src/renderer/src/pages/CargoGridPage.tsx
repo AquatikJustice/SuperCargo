@@ -1762,7 +1762,7 @@ function PickupDecision({
       ]
     : [
         { id: 'stash', title: 'Stash the overflow off-grid', desc: `The rest loads normally; ${offBreakdown} rides in empty corners of the hold.`, run: () => onStashOffGrid(decision.overloadBoxes) },
-        { id: 'come', title: 'Come back for all of it', desc: 'Nothing from this pickup loads now. Its room frees up for later stops and you grab the whole thing on a later trip.', run: () => onComeBack(loadIds) }
+        { id: 'come', title: `Come back for ${destLabel}'s load`, desc: 'Nothing from this pickup loads now. Its room frees up for later stops and you grab the whole thing on a later trip.', run: () => onComeBack(loadIds) }
       ]
 
   const confirmCopy: Record<string, string> = {
