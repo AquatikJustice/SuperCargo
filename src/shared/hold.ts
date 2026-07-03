@@ -267,7 +267,10 @@ function findSpot(
         // low and front-flush; across columns fill from the deep end so the
         // short step and its smalls land at the exit side
         const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
-        const cWall = bay.wallHigh ? bay.cw - (t.c + cwf) : t.c
+        // perching smalls keep off the wall-side tops: that's where the next
+        // unit's tall column lands, and a squatter there shoves it off line
+        const hugHigh = cwf * dlf <= 4 && y > 0 ? !bay.wallHigh : bay.wallHigh
+        const cWall = hugHigh ? bay.cw - (t.c + cwf) : t.c
         const aisle = span && dlf > cwf ? 1 : 0
         const dKey = span ? (dlf <= cwf ? span.d1 - (t.d + dlf) : t.d - span.d0) : t.d
         const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, cWall]
