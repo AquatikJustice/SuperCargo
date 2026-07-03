@@ -159,6 +159,8 @@ interface StoreState {
   looseBoxes: string[]
   /** objectiveIds the user pushed to a later trip ("come back for it") */
   deferredObjectives: string[]
+  /** objectiveIds grabbed early at a node's first visit to skip the return */
+  grabbedObjectives: string[]
   /** missionIds dismissed by the user, kept so scan-session won't re-import them */
   dismissedMissions: string[]
   /** contracts a session scan found but that aren't reviewed into the list yet */
@@ -271,6 +273,7 @@ interface StoreState {
   clearLoadedPin: (key: string) => void
   /** push an objective to a later trip, or bring it back */
   setObjectiveDeferred: (objectiveId: string, deferred: boolean) => void
+  setObjectiveGrabbed: (objectiveId: string, grabbed: boolean) => void
   /** forget every mid-walk decision: come-back deferrals and off-grid stashes */
   resetWalkDecisions: () => void
   startNewRun: () => void
@@ -328,8 +331,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, dismissedMissions } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, dismissed: dismissedMissions })
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, grabbedObjectives, dismissedMissions } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions })
   }
 
   // active ship's grids
@@ -525,6 +528,7 @@ export const useStore = create<StoreState>((set, get) => {
     isRouteAuto: true,
     looseBoxes: [],
     deferredObjectives: [],
+    grabbedObjectives: [],
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
@@ -608,6 +612,7 @@ export const useStore = create<StoreState>((set, get) => {
         startLocation: manifest.startLocation ?? '',
         looseBoxes: manifest.loose ?? [],
         deferredObjectives: manifest.deferred ?? [],
+        grabbedObjectives: manifest.grabbed ?? [],
         dismissedMissions: manifest.dismissed ?? [],
         manualLayout: manifest.manualLayout ?? {},
         loadedPins: manifest.loadedPins ?? {},
@@ -737,6 +742,7 @@ export const useStore = create<StoreState>((set, get) => {
           startLocation: doc.startLocation ?? '',
           looseBoxes: doc.loose ?? [],
           deferredObjectives: doc.deferred ?? [],
+          grabbedObjectives: doc.grabbed ?? [],
           dismissedMissions: doc.dismissed ?? [],
           manualLayout: doc.manualLayout ?? {},
           loadedPins: doc.loadedPins ?? {},
@@ -830,7 +836,7 @@ export const useStore = create<StoreState>((set, get) => {
         // a different hold means a fresh walk: nothing pre-done, nothing
         // pre-placed, nothing pre-decided. Frozen plan, pickup ticks, hand
         // placements, locked aboard-spots, deferrals, and stashes all go
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {}, deferredObjectives: [], looseBoxes: [] })
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {}, deferredObjectives: [], grabbedObjectives: [], looseBoxes: [] })
         persist()
         get().clearAllPickedUp()
         scheduleReroute()
@@ -993,6 +999,7 @@ export const useStore = create<StoreState>((set, get) => {
         isRouteAuto: true,
         looseBoxes: [],
         deferredObjectives: [],
+        grabbedObjectives: [],
         loadingActive: false,
         manualActive: false,
         loadingIdx: 0
@@ -1240,6 +1247,14 @@ export const useStore = create<StoreState>((set, get) => {
       persist()
     },
 
+    setObjectiveGrabbed: (objectiveId, grabbed) => {
+      const cur = get().grabbedObjectives
+      const has = cur.includes(objectiveId)
+      if (grabbed === has) return
+      set({ grabbedObjectives: grabbed ? [...cur, objectiveId] : cur.filter((id) => id !== objectiveId) })
+      persist()
+    },
+
     setObjectiveDeferred: (objectiveId, deferred) => {
       const cur = get().deferredObjectives
       const has = cur.includes(objectiveId)
@@ -1250,9 +1265,9 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     resetWalkDecisions: () => {
-      const { deferredObjectives, looseBoxes } = get()
-      if (!deferredObjectives.length && !looseBoxes.length) return
-      set({ deferredObjectives: [], looseBoxes: [] })
+      const { deferredObjectives, looseBoxes, grabbedObjectives } = get()
+      if (!deferredObjectives.length && !looseBoxes.length && !grabbedObjectives.length) return
+      set({ deferredObjectives: [], looseBoxes: [], grabbedObjectives: [] })
       persist()
       scheduleReroute()
     },

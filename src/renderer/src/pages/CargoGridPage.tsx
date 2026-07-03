@@ -461,10 +461,12 @@ export default function CargoGridPage(): React.ReactElement {
     [contracts]
   )
   // live steps already route deferred cargo to a later trip; the frozen walk prunes it here
+  const grabbedObjectives = useStore((s) => s.grabbedObjectives)
+  const setObjectiveGrabbed = useStore((s) => s.setObjectiveGrabbed)
   const loadSteps = useMemo(() => {
     if (!frozenSteps) return liveSteps
-    return filterDeferredSteps(frozenSteps, new Set(deferredObjectives), (id) => tickedObj.has(id))
-  }, [frozenSteps, liveSteps, deferredObjectives, tickedObj])
+    return filterDeferredSteps(frozenSteps, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
+  }, [frozenSteps, liveSteps, deferredObjectives, tickedObj, grabbedObjectives])
 
   // soft turn-in amounts, reopenable
   const turnedIn = useMemo(() => {
@@ -713,6 +715,40 @@ export default function CargoGridPage(): React.ReactElement {
     () => (loading && !manual && currentLoad?.kind === 'load' ? new Set(currentLoad.loadIds) : null),
     [loading, manual, currentLoad]
   )
+  // a later visit of this node that only fetches cargo: when raw space is
+  // aboard from here to there, offer to grab it now and skip the return.
+  // Only offered while standing at the node's first visit, where the grab
+  // will land
+  const grabOffer = useMemo(() => {
+    if (!loading || !frozenSteps || currentLoad?.kind !== 'load' || !loadingPack) return null
+    const node = currentLoad.nodeKey
+    let vs = loadIdx
+    while (vs > 0 && loadSteps[vs - 1].nodeKey === node) vs--
+    for (let p = 0; p < vs; p++) if (loadSteps[p].nodeKey === node) return null
+    let ve = loadIdx
+    while (ve + 1 < loadSteps.length && loadSteps[ve + 1].nodeKey === node) ve++
+    for (let k = ve + 1; k < loadSteps.length; k++) {
+      if (loadSteps[k].nodeKey !== node) continue
+      let b = k
+      while (b + 1 < loadSteps.length && loadSteps[b + 1].nodeKey === node) b++
+      const visit = loadSteps.slice(k, b + 1)
+      if (visit.some((v) => v.kind !== 'load')) return null
+      const ids = visit
+        .flatMap((v) => v.loadIds)
+        .filter((id) => !tickedObj.has(id) && !deferredObjectives.includes(id) && !grabbedObjectives.includes(id))
+      if (!ids.length) return null
+      const idSet = new Set(ids)
+      const boxes = visit.flatMap((v, vi) => loadingPack.stepBoxes[k + vi] ?? []).filter((bx) => bx.objectiveId && idSet.has(bx.objectiveId))
+      const scu = boxes.reduce((sum, bx) => sum + bx.size, 0)
+      if (!scu) return null
+      for (let i = loadIdx; i < k; i++) {
+        const aboard = loadingPack.snaps[i]?.placements.reduce((sum, p) => sum + p.box.size, 0) ?? 0
+        if (aboard + scu > result.capacity) return null
+      }
+      return { ids, scu, count: boxes.length, stepNo: k + 1 }
+    }
+    return null
+  }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result])
   const currentObjIds = useMemo(
     () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
     [currentLoad]
@@ -1056,6 +1092,10 @@ export default function CargoGridPage(): React.ReactElement {
                 if (shift) setLoadIdx((i) => Math.max(0, i - shift))
               }}
               onPlace={placeFromPalette}
+              grab={grabOffer ? { scu: grabOffer.scu, count: grabOffer.count, stepNo: grabOffer.stepNo } : null}
+              onGrab={() => grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))}
+              grabbedHere={currentLoad?.kind === 'load' ? currentLoad.loadIds.filter((id) => grabbedObjectives.includes(id)) : []}
+              onUngrab={(ids) => ids.forEach((id) => setObjectiveGrabbed(id, false))}
               capacity={result.capacity}
               done={done}
               idx={loadIdx}
@@ -1410,6 +1450,10 @@ function LoadingPanel({
   onPlaceManual,
   onComeBack,
   onPlace,
+  grab,
+  onGrab,
+  grabbedHere,
+  onUngrab,
   capacity,
   done,
   idx,
@@ -1434,6 +1478,10 @@ function LoadingPanel({
   onPlaceManual: () => void
   onComeBack: (objectiveIds: string[]) => void
   onPlace: (objectiveId: string, size: number) => void
+  grab: { scu: number; count: number; stepNo: number } | null
+  onGrab: () => void
+  grabbedHere: string[]
+  onUngrab: (ids: string[]) => void
   capacity: number
   done: boolean
   idx: number
@@ -1639,6 +1687,33 @@ function LoadingPanel({
         </div>
       )}
 
+      {isLoad && grab && (
+        <div style={{ margin: '0 16px 8px', padding: '10px 12px', border: `1px solid ${C.amber}`, borderRadius: 6, flex: 'none' }}>
+          <div style={{ fontFamily: F.display, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: C.amber }}>
+            ALSO HERE · SKIP THE RETURN
+          </div>
+          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
+            {grab.count} boxes / {grab.scu} SCU planned for a return at step {grab.stepNo}. Grab them now and that
+            stop drops off the route. They might not stack pretty — place or stash them however you need, we track
+            every box.
+          </div>
+          <Btn
+            onClick={onGrab}
+            style={{ width: '100%', border: `1px solid ${C.amber}`, background: 'rgba(255,180,60,0.1)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: 8, cursor: 'pointer' }}
+            hoverStyle={{ background: 'rgba(255,180,60,0.22)' }}
+          >
+            GRAB IT NOW
+          </Btn>
+        </div>
+      )}
+      {isLoad && grabbedHere.length > 0 && (
+        <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
+          grabbed early cargo is in this load ·{' '}
+          <span style={{ color: C.amber, cursor: 'pointer' }} onClick={() => onUngrab(grabbedHere)}>
+            undo
+          </span>
+        </div>
+      )}
       {isLoad && !manual && (
         <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
           drag any box in the hold to place it yourself · double-click undoes

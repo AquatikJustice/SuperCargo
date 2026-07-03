@@ -47,14 +47,15 @@ export default function CompactWindowApp(): React.ReactElement {
   }, [driven, liveSteps])
   // must match the main window's walk exactly or the synced idx points at the wrong step
   const deferredObjectives = useStore((s) => s.deferredObjectives)
+  const grabbedObjectives = useStore((s) => s.grabbedObjectives)
   const tickedObj = useMemo(
     () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id))),
     [contracts]
   )
   const steps = useMemo(() => {
     if (!frozen) return liveSteps
-    return filterDeferredSteps(frozen, new Set(deferredObjectives), (id) => tickedObj.has(id))
-  }, [frozen, liveSteps, deferredObjectives, tickedObj])
+    return filterDeferredSteps(frozen, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
+  }, [frozen, liveSteps, deferredObjectives, tickedObj, grabbedObjectives])
 
   const safeIdx = Math.min(idx, Math.max(0, steps.length - 1))
   const step = steps[safeIdx]

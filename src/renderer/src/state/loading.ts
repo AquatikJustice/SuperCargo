@@ -289,21 +289,62 @@ export function buildLoadingSteps(
 
 // a mid-walk come-back pulls the whole pickup out of the frozen walk: its load
 // and drop steps vanish and the deferred cargo waits for the next trip's route.
-// Ticked objectives never filter - that cargo is physically aboard.
+// Ticked objectives never filter - that cargo is physically aboard. A grabbed
+// pickup loads at its node's first visit instead of the planned return, and a
+// return visit that empties out drops from the walk.
 export function filterDeferredSteps(
   steps: LoadingStep[],
   deferred: ReadonlySet<string>,
-  ticked: (objectiveId: string) => boolean
+  ticked: (objectiveId: string) => boolean,
+  grabbed?: ReadonlySet<string>
 ): LoadingStep[] {
-  if (!deferred.size) return steps
+  if (!deferred.size && !grabbed?.size) return steps
   const gone = (id: string): boolean => deferred.has(id) && !ticked(id)
-  const out: LoadingStep[] = []
-  for (const s of steps) {
-    const lines = s.lines.filter((l) => !gone(l.objectiveId))
-    if (!lines.length) continue
-    if (lines.length === s.lines.length) out.push(s)
-    else out.push({ ...s, lines, loadIds: s.loadIds.filter((id) => !gone(id)), dropIds: s.dropIds.filter((id) => !gone(id)) })
+  const movedFrom = new Map<number, Set<string>>()
+  const movedTo = new Map<number, LoadingStep['lines']>()
+  if (grabbed?.size) {
+    // grabs land on the last load step of the node's FIRST visit, so they
+    // sit at or ahead of wherever the user stood when they grabbed
+    const target = new Map<string, number>()
+    let i = 0
+    while (i < steps.length) {
+      let e = i
+      let lastLoad = -1
+      while (e < steps.length && steps[e].nodeKey === steps[i].nodeKey) {
+        if (steps[e].kind === 'load') lastLoad = e
+        e++
+      }
+      if (lastLoad >= 0 && !target.has(steps[i].nodeKey)) target.set(steps[i].nodeKey, lastLoad)
+      i = e
+    }
+    steps.forEach((s, j) => {
+      if (s.kind !== 'load') return
+      const to = target.get(s.nodeKey)
+      if (to === undefined || to >= j) return
+      for (const l of s.lines)
+        if (grabbed.has(l.objectiveId)) {
+          ;(movedFrom.get(j) ?? movedFrom.set(j, new Set()).get(j)!).add(l.objectiveId)
+          ;(movedTo.get(to) ?? movedTo.set(to, []).get(to)!).push(l)
+        }
+    })
   }
+  const out: LoadingStep[] = []
+  steps.forEach((s, i) => {
+    const away = movedFrom.get(i)
+    const incoming = movedTo.get(i) ?? []
+    const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId)).concat(incoming)
+    if (!lines.length) return
+    if (lines.length === s.lines.length && !away && !incoming.length) {
+      out.push(s)
+      return
+    }
+    out.push({
+      ...s,
+      lines,
+      loadIds: s.loadIds.filter((id) => !gone(id) && !away?.has(id)).concat(incoming.map((l) => l.objectiveId)),
+      dropIds: s.dropIds.filter((id) => !gone(id))
+    })
+  })
   return out
 }
 

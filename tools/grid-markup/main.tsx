@@ -9,8 +9,8 @@ import type { ShipMarkup, BayMarkup, BayDir, BayFaceKind } from '@shared/types'
 const SHIPS = Object.keys(CARGO_GRIDS).sort()
 // box face material index order
 const IDX_DIR: BayDir[] = ['x+', 'x-', 'y+', 'y-', 'z+', 'z-']
-const FACE_CYCLE: (BayFaceKind | undefined)[] = [undefined, 'exit', 'aisle', 'wall']
-const FACE_COLOR: Record<string, string> = { exit: '#2e9d5b', aisle: '#2a78c2', wall: '#586a7d', unset: '#323d4c' }
+const FACE_CYCLE: (BayFaceKind | undefined)[] = [undefined, 'exit', 'aisle', 'wall', 'floor']
+const FACE_COLOR: Record<string, string> = { exit: '#2e9d5b', aisle: '#2a78c2', wall: '#586a7d', floor: '#c2762a', unset: '#323d4c' }
 const colorFor = (k?: BayFaceKind): string => FACE_COLOR[k ?? 'unset']
 const nextFace = (k?: BayFaceKind): BayFaceKind | undefined =>
   FACE_CYCLE[(FACE_CYCLE.indexOf(k) + 1) % FACE_CYCLE.length]
@@ -342,6 +342,10 @@ function App(): JSX.Element {
         const faces = { ...(b.faces ?? {}) }
         if (nxt) faces[d] = nxt
         else delete faces[d]
+        // one floor per bay: deriveFloor takes the first it finds
+        if (nxt === 'floor') {
+          for (const k of Object.keys(faces) as BayDir[]) if (k !== d && faces[k] === 'floor') delete faces[k]
+        }
         b.faces = Object.keys(faces).length ? faces : undefined
       })
     )
@@ -498,8 +502,9 @@ function App(): JSX.Element {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>Grid Markup</h2>
         <p style={{ fontSize: 12.5, color: '#8aa3bd', lineHeight: 1.45 }}>
           Click a bay <b>face</b> to cycle <span style={{ color: FACE_COLOR.exit }}>exit</span> /{' '}
-          <span style={{ color: FACE_COLOR.aisle }}>aisle</span> / <span style={{ color: FACE_COLOR.wall }}>wall</span> / none.
-          Right-click cycles backwards.
+          <span style={{ color: FACE_COLOR.aisle }}>aisle</span> / <span style={{ color: FACE_COLOR.wall }}>wall</span> /{' '}
+          <span style={{ color: FACE_COLOR.floor }}>floor</span> / none.
+          Right-click cycles backwards. Floor is the face cargo rests on (one per bay, stacking grows away from it).
           Select a bay to move it (number fields, or arrow keys / PageUp-Down; Shift = ×5). Rotate with the
           <b> X/Y/Z</b> buttons or keys (<b>R</b> = Y) for 90° snaps, or <b>fine °</b> for off-axis layouts like
           Hull B's diamond (right-click reverses). Ctrl/Shift-click bays to select several and rotate them as one. Save writes

@@ -198,6 +198,8 @@ export interface ManifestDoc {
   dismissed?: string[]
   /** objectiveIds the user pushed to a later trip */
   deferred?: string[]
+  /** objectiveIds grabbed early at a node's first visit */
+  grabbed?: string[]
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
