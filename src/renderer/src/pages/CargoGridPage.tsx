@@ -514,14 +514,12 @@ export default function CargoGridPage(): React.ReactElement {
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
   const resetWalkDecisions = useStore((s) => s.resetWalkDecisions)
-  // ticking LOADED pins boxes and stamps contracts, but the frozen walk must
-  // not replan under a tick: those values feed the layout through a ref, so
-  // only real changes (steps, defers, stashes, ship, manual moves) recompute
-  const packInputs = useRef({ contracts, order, loadedPins })
-  packInputs.current = { contracts, order, loadedPins }
+  // every plan feeds the next one: during the walk, boxes that still fit the
+  // spot the user saw keep it (planHold prev), so ticks, defers and manual
+  // pins re-seat only what they actually displace
+  const prevRef = useRef<Map<string, Placement> | null>(null)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
-    const { contracts, order, loadedPins } = packInputs.current
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
     const fullEvents = buildLoadEvents(loadSteps, source)
     // manual: only hand-placed boxes load
@@ -539,9 +537,27 @@ export default function CargoGridPage(): React.ReactElement {
       const l = lp.rotated ? dims.w : dims.l
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w, l, h: dims.h, rotated: lp.rotated })
     }
+    // apply prev only while a walk is frozen; planning stays a fresh solve.
+    // Captured from every auto plan, so the walk starts from the exact
+    // layout the user saw when they pressed start
+    const prev = new Map<string, Placement>()
+    if (frozenBoxes && prevRef.current)
+      for (const b of source) {
+        const pl = prevRef.current.get(boxKey(b))
+        if (pl) prev.set(b.id, pl)
+      }
     const raw = manual
       ? packTimeline(grids, events, true, manualLayout)
-      : planHold(grids, events, { loose: looseIds, pins: pins.size ? pins : undefined }).snaps
+      : planHold(grids, events, {
+          loose: looseIds,
+          pins: pins.size ? pins : undefined,
+          prev: prev.size ? prev : undefined
+        }).snaps
+    if (!manual) {
+      const m = new Map<string, Placement>()
+      for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
+      prevRef.current = m
+    }
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
@@ -549,7 +565,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
-  }, [loadSteps, grids, frozenBoxes, manualLayout, manual, looseBoxes])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes, loadedPins])
 
   // hand-placed lock, rest auto-packs
   const splitManual = (
