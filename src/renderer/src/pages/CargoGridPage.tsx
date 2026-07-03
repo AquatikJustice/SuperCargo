@@ -36,6 +36,14 @@ const locationFont = jetbrainsFont
 
 const LOADING_PANEL_W = 360
 
+// the virtual off-grid pane: a place to stash loose cargo beside the ship. cells,
+// not SCU. the packer never sees it; it's display + drop-target only.
+const OFF_GRID_ID = 'off-grid'
+const OFF_GRID_W = 8
+const OFF_GRID_L = 6
+const OFF_GRID_H = 4
+const OFF_GAP = 3 // clear space between the ship's last bay and the pane
+
 const STBD_OF: Record<BayDir, BayDir> = { 'z-': 'x+', 'z+': 'x-', 'x+': 'z+', 'x-': 'z-', 'y+': 'x+', 'y-': 'x+' }
 const OPP: Record<BayDir, BayDir> = { 'x+': 'x-', 'x-': 'x+', 'y+': 'y-', 'y-': 'y+', 'z+': 'z-', 'z-': 'z+' }
 
@@ -123,6 +131,7 @@ function Box({
   label,
   draggable,
   selected,
+  offGrid,
   onStart,
   onReset,
   onDragMove,
@@ -136,6 +145,7 @@ function Box({
   label?: string
   draggable?: boolean
   selected?: boolean
+  offGrid?: boolean
   onStart?: (e: ThreeEvent) => void
   onReset?: () => void
   onDragMove?: (shipX: number, shipZ: number) => void
@@ -154,7 +164,7 @@ function Box({
   const cz = center(wz, pl.l, origin[2]) - bcz
   const loaded = mode === 'loaded'
   const color = loaded ? BOX_GRAY_LOADED : BOX_GRAY
-  const stripeColor = loaded ? BOX_GRAY_LOADED : pl.box.color
+  const stripeColor = offGrid ? C.amber : loaded ? BOX_GRAY_LOADED : pl.box.color
   const emissive = mode === 'current' ? 0.12 : 0
   const opacity = mode === 'future' ? 0.12 : loaded ? 0.82 : 1
   const W = pl.w - GAP
@@ -209,13 +219,14 @@ function Box({
       >
         <meshStandardMaterial
           color={color}
-          emissive={selected ? C.acc : loaded ? '#000000' : pl.box.color}
-          emissiveIntensity={selected ? 0.3 : emissive}
+          emissive={selected ? C.acc : offGrid ? C.amber : loaded ? '#000000' : pl.box.color}
+          emissiveIntensity={selected ? 0.3 : offGrid ? 0.14 : emissive}
           roughness={0.95}
           metalness={0}
           transparent={opacity < 1}
           opacity={opacity}
         />
+        {offGrid && <Edges color={C.amber} />}
       </RoundedBox>
       {belts.map((b, i) => (
         <RoundedBox
@@ -517,6 +528,8 @@ export default function CargoGridPage(): React.ReactElement {
 
   const looseBoxes = useStore((s) => s.looseBoxes)
   const setBoxLoose = useStore((s) => s.setBoxLoose)
+  const looseSpots = useStore((s) => s.looseSpots)
+  const setLooseSpot = useStore((s) => s.setLooseSpot)
   const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
@@ -655,22 +668,79 @@ export default function CargoGridPage(): React.ReactElement {
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
 
-  // bounds over visible grids
-  const { origin, span, half } = useMemo(() => {
-    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number] }
+  // bounds over visible grids, plus the off-grid pane so it stays in frame
+  const { origin, span, half, offGrid: offGridBay } = useMemo(() => {
+    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], offGrid: null }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
     for (const g of shownGrids) {
       minX = Math.min(minX, g.x || 0); maxX = Math.max(maxX, (g.x || 0) + g.w)
       minY = Math.min(minY, g.y || 0); maxY = Math.max(maxY, (g.y || 0) + g.h)
       minZ = Math.min(minZ, g.z || 0); maxZ = Math.max(maxZ, (g.z || 0) + g.l)
     }
+    // park the pane past the ship's starboard edge, on the deck, centered on the hold's length
+    const off: CargoGrid = {
+      id: OFF_GRID_ID, name: 'OFF GRID', source: 'override', autoLoad: false,
+      x: maxX + OFF_GAP, y: minY, z: minZ + (maxZ - minZ - OFF_GRID_L) / 2,
+      w: OFF_GRID_W, l: OFF_GRID_L, h: OFF_GRID_H, scu: OFF_GRID_W * OFF_GRID_L * OFF_GRID_H
+    }
+    maxX = Math.max(maxX, off.x + off.w)
+    maxY = Math.max(maxY, off.y + off.h)
+    minZ = Math.min(minZ, off.z); maxZ = Math.max(maxZ, off.z + off.l)
     const o: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
     return {
       origin: o,
       span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6),
-      half: [(maxX - minX) / 2, (maxY - minY) / 2, (maxZ - minZ) / 2] as [number, number, number]
+      half: [(maxX - minX) / 2, (maxY - minY) / 2, (maxZ - minZ) / 2] as [number, number, number],
+      offGrid: off
     }
   }, [shownGrids])
+
+  // lay the loose boxes out in the pane: parked ones keep their spot, the rest
+  // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere
+  const loosePlacements = useMemo<Placement[]>(() => {
+    if (!offGridBay || !looseNow.length) return []
+    const occ = new Set<string>()
+    const mark = (x: number, y: number, z: number, w: number, l: number, h: number): void => {
+      for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) occ.add(`${x + dx},${y + dy},${z + dz}`)
+    }
+    const fits = (x: number, y: number, z: number, w: number, l: number, h: number): boolean => {
+      if (x < 0 || z < 0 || x + w > OFF_GRID_W || z + l > OFF_GRID_L || y + h > OFF_GRID_H) return false
+      for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) if (occ.has(`${x + dx},${y + dy},${z + dz}`)) return false
+      return true
+    }
+    const out: Placement[] = []
+    const shelf: PackBox[] = []
+    // seat parked boxes first so auto-shelf works around them
+    for (const b of looseNow) {
+      const dims = BOX_DIMS[b.size]
+      if (!dims) continue
+      const sp = looseSpots[boxKey(b)]
+      if (sp && sp.gridId === OFF_GRID_ID) {
+        const w = sp.rotated ? dims.l : dims.w
+        const l = sp.rotated ? dims.w : dims.l
+        if (fits(sp.x, sp.y, sp.z, w, l, dims.h)) {
+          mark(sp.x, sp.y, sp.z, w, l, dims.h)
+          out.push({ box: b, gridId: OFF_GRID_ID, x: sp.x, y: sp.y, z: sp.z, w, l, h: dims.h, rotated: !!sp.rotated })
+          continue
+        }
+      }
+      shelf.push(b)
+    }
+    for (const b of [...shelf].sort((a, c) => boxKey(a).localeCompare(boxKey(c)))) {
+      const dims = BOX_DIMS[b.size]
+      if (!dims) continue
+      let placed = false
+      for (let y = 0; y < OFF_GRID_H && !placed; y++)
+        for (let z = 0; z <= OFF_GRID_L - dims.l && !placed; z++)
+          for (let x = 0; x <= OFF_GRID_W - dims.w && !placed; x++)
+            if (fits(x, y, z, dims.w, dims.l, dims.h)) {
+              mark(x, y, z, dims.w, dims.l, dims.h)
+              out.push({ box: b, gridId: OFF_GRID_ID, x, y, z, w: dims.w, l: dims.l, h: dims.h, rotated: false })
+              placed = true
+            }
+    }
+    return out
+  }, [offGridBay, looseNow, looseSpots])
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
@@ -729,7 +799,12 @@ export default function CargoGridPage(): React.ReactElement {
     setLoading(true)
   }
 
-  const gridById = useMemo(() => new Map(grids.map((g) => [g.id, g])), [grids])
+  // include the pane so its ghost + placements resolve, but it never joins the packer's grids
+  const gridById = useMemo(() => {
+    const m = new Map(grids.map((g) => [g.id, g]))
+    if (offGridBay) m.set(offGridBay.id, offGridBay)
+    return m
+  }, [grids, offGridBay])
   const [hover, setHover] = useState<HoverInfo | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
 
@@ -800,6 +875,18 @@ export default function CargoGridPage(): React.ReactElement {
     return m
   }, [result, dragKeys])
 
+  // pane cells taken by other loose boxes, so a drop or reshuffle doesn't overlap
+  const offOcc = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of loosePlacements) {
+      if (dragKeys?.has(boxKey(p.box))) continue
+      for (let dy = 0; dy < p.h; dy++)
+        for (let dz = 0; dz < p.l; dz++)
+          for (let dx = 0; dx < p.w; dx++) set.add(`${p.x + dx},${p.y + dy},${p.z + dz}`)
+    }
+    return set
+  }, [loosePlacements, dragKeys])
+
   const dropY = (occ: Set<string>, g: CargoGrid, lx: number, lz: number, fw: number, fl: number, fh: number): number => {
     for (let y = 0; y + fh <= g.h; y++) {
       let free = true
@@ -824,6 +911,17 @@ export default function CargoGridPage(): React.ReactElement {
     const fw = anchor ? anchor.w : dragRot ? dims.l : dims.w
     const fl = anchor ? anchor.l : dragRot ? dims.w : dims.l
     const fh = dims.h
+    // the pane is a single-box target: a group stays a ship-side move
+    if (offGridBay && !group) {
+      const gx = offGridBay.x
+      const gz = offGridBay.z
+      if (shipX >= gx && shipX < gx + offGridBay.w && shipZ >= gz && shipZ < gz + offGridBay.l) {
+        const lx = Math.max(0, Math.min(offGridBay.w - fw, Math.floor(shipX - gx)))
+        const lz = Math.max(0, Math.min(offGridBay.l - fl, Math.floor(shipZ - gz)))
+        const y = dropY(offOcc, offGridBay, lx, lz, fw, fl, fh)
+        return { gridId: OFF_GRID_ID, x: lx, y: y < 0 ? 0 : y, z: lz, w: fw, l: fl, h: fh, valid: y >= 0 }
+      }
+    }
     for (const g of grids) {
       if (g.autoLoad === false) continue
       const gx = g.x || 0
@@ -869,12 +967,21 @@ export default function CargoGridPage(): React.ReactElement {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
         const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot }]
-        if (currentLoad?.kind === 'load') {
+        if (ghost.gridId === OFF_GRID_ID) {
+          // dropped into the pane: it rides loose here, out of the plan; a
+          // stale pin would keep haunting the bay it left
+          if (loadedPins[d.key]) clearLoadedPin(d.key)
+          setBoxLoose(d.key, true)
+          setLooseSpot(d.key, { gridId: OFF_GRID_ID, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
+        } else if (currentLoad?.kind === 'load') {
           // placing a box pins it there; the re-plan keeps everything the drop
-          // didn't displace
+          // didn't displace. a box pulled off the pane rejoins the plan, loaded now
           const pins: Record<string, LoadedPin> = {}
           const pickupKey = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
-          for (const s of spots) pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey }
+          for (const s of spots) {
+            if (looseBoxes.includes(s.key)) setBoxLoose(s.key, false)
+            pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey }
+          }
           addLoadedPins(pins)
         }
         if (ghost.members) setSel(new Set())
@@ -1229,6 +1336,48 @@ export default function CargoGridPage(): React.ReactElement {
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
           <OrientationLabels frame={frame} half={half} />
+          {loading && offGridBay && (
+            <>
+              <GridShell grid={offGridBay} origin={origin} />
+              <Text
+                font={sairaFont}
+                position={[
+                  center(offGridBay.x, offGridBay.w, origin[0]),
+                  center(offGridBay.y, offGridBay.h, origin[1]) + offGridBay.h / 2 + 1,
+                  center(offGridBay.z, offGridBay.l, origin[2])
+                ]}
+                fontSize={Math.min(2.4, Math.max(1, offGridBay.w * 0.22))}
+                color={C.amber}
+                anchorX="center"
+                anchorY="middle"
+                letterSpacing={0.14}
+                outlineWidth={0.06}
+                outlineColor="#000"
+              >
+                OFF GRID
+              </Text>
+              {loosePlacements.map((pl) => {
+                const key = boxKey(pl.box)
+                if (dragKeys?.has(key)) return null
+                return (
+                  <Box
+                    key={pl.box.id}
+                    pl={pl}
+                    grid={offGridBay}
+                    origin={origin}
+                    mode="current"
+                    offGrid
+                    draggable
+                    onStart={(e) => startDrag(key, pl, offGridBay, e)}
+                    onReset={() => setBoxLoose(key, false)}
+                    onDragMove={drag ? handleDragMove : undefined}
+                    onHover={onHover}
+                    onLeave={() => setHover(null)}
+                  />
+                )
+              })}
+            </>
+          )}
           {loading && visiblePlacements.map((pl) => {
             const g = gridById.get(pl.gridId)
             if (!g) return null

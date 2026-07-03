@@ -191,6 +191,8 @@ export interface ManifestDoc {
   loadingIdx?: number
   /** boxes the user chose to overload off-grid, keyed by objectiveId#slot */
   loose?: string[]
+  /** where each off-grid box sits in the virtual pane, keyed by objectiveId#slot */
+  looseSpots?: Record<string, ManualPlacement>
   /** missionIds the user dismissed; scan-session won't re-import them from the log */
   dismissed?: string[]
   /** objectiveIds the user pushed to a later trip */
