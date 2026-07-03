@@ -159,7 +159,11 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[]): boole
             t.c + dc >= r.c && t.c + dc < r.c + r.cw &&
             t.d + dd >= r.d && t.d + dd < r.d + r.dl
         )
-        if (!under || !(under.anchor || (under.stop === t.stop && containsWindow(under, t)))) return false
+        if (
+          !under ||
+          !(under.anchor || (under.stop === t.stop && containsWindow(under, t) && under.box.size >= t.box.size))
+        )
+          return false
       }
   for (const r of rivals) {
     if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
@@ -275,7 +279,8 @@ function findSpot(
         t.y = y
         if (rivals.some((r) => cellsClash(t, r))) continue
         if (y > 0) {
-          // rests only on its own stop's boxes (or anchors), held the whole window;
+          // rests only on its own stop's boxes (or anchors), held the whole
+          // window, and never on a smaller box - biggest bottom is literal;
           // different stops never stack on each other
           let held = true
           for (let dc = 0; dc < cwf && held; dc++)
@@ -286,7 +291,11 @@ function findSpot(
                   c + dc >= r.c && c + dc < r.c + r.cw &&
                   d + dd >= r.d && d + dd < r.d + r.dl
               )
-              if (!under || !(under.anchor || (under.stop === t.stop && containsWindow(under, t)))) held = false
+              if (
+                !under ||
+                !(under.anchor || (under.stop === t.stop && containsWindow(under, t) && under.box.size >= t.box.size))
+              )
+                held = false
             }
           if (!held) continue
         }
@@ -409,7 +418,10 @@ function seatUnit(
   const bayIdx = first[0].bay
   if (first.some((s) => s.bay !== bayIdx)) return first
   const bay = cfg.find((b) => b.idx === bayIdx)!
-  const d0 = Math.min(...first.map((s) => s.d))
+  // a stop's later pickups continue the section its first pickup started,
+  // plugging its leftover holes instead of opening a fresh wall beside it
+  let d0 = Math.min(...first.map((s) => s.d))
+  for (const s of slots) if (s.bay === bayIdx && !s.anchor && s.stop === unit[0].stopIdx) d0 = Math.min(d0, s.d)
   const placed: Slot[] = []
   for (const box of [...unit].sort(unitOrder)) {
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
