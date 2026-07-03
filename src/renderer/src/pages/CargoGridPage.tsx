@@ -1151,7 +1151,7 @@ export default function CargoGridPage(): React.ReactElement {
           <div
             style={
               portrait
-                ? { flex: 'none', height: 300, maxHeight: '45%', minHeight: 0 }
+                ? { order: 2, flex: 1, minHeight: 300 }
                 : { flex: 'none', width: LOADING_PANEL_W, minHeight: 0 }
             }
           >
@@ -1250,7 +1250,7 @@ export default function CargoGridPage(): React.ReactElement {
             />
           </div>
         )}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ ...(portrait && loading ? { order: 1, flex: 'none', height: '42%', minHeight: 220 } : { flex: 1 }), minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', color: C.acc, textShadow: GLOW }}>
@@ -1278,7 +1278,7 @@ export default function CargoGridPage(): React.ReactElement {
         )}
         <div
           ref={wrap}
-          style={{ position: 'relative', flex: 1, minHeight: portrait ? 200 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
+          style={{ position: 'relative', flex: 1, minHeight: portrait ? 170 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
         >
         {!loading && (
           <div
@@ -1792,7 +1792,7 @@ function LoadingPanel({
       </div>
 
       {isLoad && grab && (
-        <div style={{ margin: '0 16px 8px', padding: '10px 12px', border: `1px solid ${C.amber}`, borderRadius: 6, flex: 'none' }}>
+        <div style={{ margin: '0 16px', padding: '10px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: C.amber }}>
             ALSO HERE · SKIP THE RETURN
           </div>
@@ -1819,7 +1819,7 @@ function LoadingPanel({
         </div>
       )}
       {deferred.length > 0 && (
-        <div style={{ margin: '0 16px 8px', padding: '9px 12px', border: `1px solid ${C.lineFaint}`, borderRadius: 6, flex: 'none' }}>
+        <div style={{ margin: '0 16px', padding: '9px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', color: C.ghost, marginBottom: 7 }}>
             COMING BACK LATER
           </div>
@@ -2081,7 +2081,7 @@ function PickupDecision({
           : 'This won’t all fit the grid. Wedge the overflow into empty corners of the hold, or leave the whole pickup for a later trip.'}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0 12px 11px', borderLeft: `2px solid ${C.amber}`, marginBottom: 12 }}>
         {dig ? <span style={{ color: C.amber, fontSize: 16, lineHeight: 1 }}>↺</span> : <OffGridGlyph />}
         <div>
           <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
@@ -2093,12 +2093,12 @@ function PickupDecision({
         </div>
       </div>
 
-      <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', color: C.ghost, marginBottom: 8 }}>
+      <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', color: C.ghost, marginBottom: 4 }}>
         CHOOSE ONE
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {options.map((o) => (
-          <DecisionOption key={o.id} title={o.title} desc={o.desc} selected={choice === o.id} onClick={() => pick(o.id, o.run)} />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {options.map((o, i) => (
+          <DecisionOption key={o.id} title={o.title} desc={o.desc} selected={choice === o.id} first={i === 0} onClick={() => pick(o.id, o.run)} />
         ))}
       </div>
 
@@ -2114,7 +2114,7 @@ function PickupDecision({
   )
 }
 
-function DecisionOption({ title, desc, selected, onClick }: { title: string; desc: string; selected: boolean; onClick: () => void }): React.ReactElement {
+function DecisionOption({ title, desc, selected, first, onClick }: { title: string; desc: string; selected: boolean; first: boolean; onClick: () => void }): React.ReactElement {
   return (
     <Btn
       onClick={onClick}
@@ -2123,14 +2123,23 @@ function DecisionOption({ title, desc, selected, onClick }: { title: string; des
         alignItems: 'flex-start',
         gap: 11,
         textAlign: 'left',
-        border: `1px solid ${selected ? 'rgba(255,210,30,0.45)' : 'rgba(255,255,255,0.14)'}`,
-        background: selected ? 'rgba(255,210,30,0.10)' : 'transparent',
-        padding: '9px 12px',
+        border: 'none',
+        borderTop: first ? 'none' : `1px solid ${C.lineFaint}`,
+        borderLeft: `2px solid ${selected ? C.acc : 'transparent'}`,
+        background: selected ? 'rgba(255,210,30,0.08)' : 'transparent',
+        padding: '10px 12px',
         cursor: 'pointer',
         width: '100%'
       }}
-      hoverStyle={selected ? {} : { border: `1px solid rgba(255,255,255,0.34)`, background: 'rgba(255,255,255,0.02)' }}
+      hoverStyle={selected ? {} : { background: 'rgba(255,255,255,0.02)' }}
     >
+      <span style={{ flex: 'none', width: 16, height: 16, marginTop: 2, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: selected ? C.acc : 'transparent', border: selected ? 'none' : `1.5px solid rgba(255,255,255,0.3)` }}>
+        {selected && (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3.2">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        )}
+      </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.02em', color: selected ? C.acc : C.text, textShadow: selected ? GLOW : 'none' }}>
           {title}
@@ -2138,13 +2147,6 @@ function DecisionOption({ title, desc, selected, onClick }: { title: string; des
         <span style={{ display: 'block', fontFamily: F.body, fontSize: 12, color: selected ? '#a8b0b3' : '#98a0a3', marginTop: 2 }}>
           {desc}
         </span>
-      </span>
-      <span style={{ flex: 'none', width: 16, height: 16, marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', background: selected ? C.acc : 'transparent', border: selected ? 'none' : `1.5px solid rgba(255,255,255,0.3)` }}>
-        {selected && (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        )}
       </span>
     </Btn>
   )
