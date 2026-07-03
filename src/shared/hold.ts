@@ -103,6 +103,8 @@ interface Slot {
   drop: number
   stop: number
   anchor: boolean
+  /** placed by the user's hand: physics binds it, zoning aesthetics don't */
+  pinned?: boolean
 }
 
 function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
@@ -202,8 +204,11 @@ interface Relax {
 
 // strict legality for one candidate slot: free cells, own-stop support held
 // the whole window, row exclusivity, peel order, insertable, no flank pair.
-// Mirrors the checks findSpot applies on its strict rung - keep in lockstep
-function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[]): boolean {
+// Mirrors the checks findSpot applies on its strict rung - keep in lockstep.
+// A hand-pinned rival only binds physically: it never claims row ownership,
+// and in keep mode it doesn't impose lane order either - the user parked it
+// there, settled neighbors stay put and any dig cost is theirs to see
+function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false): boolean {
   if (rivals.some((r) => cellsClash(t, r))) return false
   if (t.y > 0)
     for (let dc = 0; dc < t.cw; dc++)
@@ -216,13 +221,16 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[]): boole
         )
         if (
           !under ||
-          !(under.anchor || (under.stop === t.stop && containsWindow(under, t) && under.box.size >= t.box.size))
+          !(
+            under.anchor ||
+            ((under.stop === t.stop || under.pinned) && containsWindow(under, t) && under.box.size >= t.box.size)
+          )
         )
           return false
       }
   for (const r of rivals) {
-    if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
-    if (!laneClash(t, r)) continue
+    if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
+    if (!laneClash(t, r) || (r.pinned && keep)) continue
     const pad = r.stop !== t.stop ? gap : 0
     if (r.drop < t.drop && r.d + r.dl + pad > t.d) return false
     if (r.drop > t.drop && t.d + t.dl + pad > r.d) return false
@@ -355,7 +363,10 @@ function findSpot(
               )
               if (
                 !under ||
-                !(under.anchor || (under.stop === t.stop && containsWindow(under, t) && under.box.size >= t.box.size))
+                !(
+                  under.anchor ||
+                  ((under.stop === t.stop || under.pinned) && containsWindow(under, t) && under.box.size >= t.box.size)
+                )
               )
                 held = false
             }
@@ -365,7 +376,7 @@ function findSpot(
         if (!relax.peel)
           for (const r of rivals) {
             // a depth row belongs to one stop wall-to-wall; no crossing another bucket's rows
-            if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) {
+            if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) {
               ok = false
               break
             }
@@ -760,6 +771,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         if (!bay) continue
         const box = boxOf.get(id) ?? p.box
         const s = fromPlacement(bay, { ...p, box }, boxOf.has(id) ? loadOf(id) : 0, boxOf.has(id) ? dropOf(id) : NEVER, !boxOf.has(id))
+        if (!s.anchor) s.pinned = true
         slots.push(s)
         byBox.set(box.id, s)
       }
@@ -784,9 +796,17 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
           if (pl && bay) {
             const t = fromPlacement(bay, { ...pl, box }, load, drop, false)
             const rivals = slots.filter((s) => s.bay === bay.idx && windowsOverlap(s, t))
-            if (fits(rivals, t, gap, rivals.filter((r) => r.load < load && r.drop > load))) {
-              slots.push(t)
-              byBox.set(box.id, t)
+            const support = rivals.filter((r) => r.load < load && r.drop > load)
+            let seat: Slot | null = fits(rivals, t, gap, support, true) ? t : null
+            // its supporter left: settle straight down in its own column
+            // before the ladder gets to fling it somewhere fresh
+            for (let y = 0; !seat && y < t.y; y++) {
+              const s2 = { ...t, y }
+              if (fits(rivals, s2, gap, support, true)) seat = s2
+            }
+            if (seat) {
+              slots.push(seat)
+              byBox.set(box.id, seat)
               kept.add(box.id)
               continue
             }
@@ -1062,7 +1082,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             q.bay === s.bay && q.y + q.h === s.y &&
             s.c + dc >= q.c && s.c + dc < q.c + q.cw &&
             s.d + dd >= q.d && s.d + dd < q.d + q.dl &&
-            (q.anchor || (q.stop === s.stop && containsWindow(q, s)))
+            (q.anchor || ((q.stop === s.stop || q.pinned) && containsWindow(q, s)))
         )
         if (!under) {
           floatOk = false
