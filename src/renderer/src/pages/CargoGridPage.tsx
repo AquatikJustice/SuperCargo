@@ -469,6 +469,18 @@ export default function CargoGridPage(): React.ReactElement {
     if (!frozenSteps) return liveSteps
     return filterDeferredSteps(frozenSteps, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
   }, [frozenSteps, liveSteps, deferredObjectives, tickedObj, grabbedObjectives])
+  // deferred pickups drop out of the walk, so their undo lives off the step
+  const deferredLabels = useMemo(() => {
+    const base = frozenSteps ?? liveSteps
+    return deferredObjectives
+      .filter((id) => !tickedObj.has(id))
+      .map((id) => {
+        const step = base.find((s) => s.kind === 'load' && s.loadIds.includes(id))
+        const line = step?.lines.find((l) => l.objectiveId === id)
+        if (!step || !line) return { id, label: id }
+        return { id, label: `${line.commodity} · ${line.totalScu} SCU · ${step.code || step.label} → ${destLabelOf(line.destination)}` }
+      })
+  }, [frozenSteps, liveSteps, deferredObjectives, tickedObj])
 
   // soft turn-in amounts, reopenable
   const turnedIn = useMemo(() => {
@@ -1192,6 +1204,8 @@ export default function CargoGridPage(): React.ReactElement {
               onGrab={() => grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))}
               grabbedHere={currentLoad?.kind === 'load' ? currentLoad.loadIds.filter((id) => grabbedObjectives.includes(id)) : []}
               onUngrab={(ids) => ids.forEach((id) => setObjectiveGrabbed(id, false))}
+              deferred={deferredLabels}
+              onUndoDefer={(id) => setObjectiveDeferred(id, false)}
               capacity={result.capacity}
               done={done}
               idx={loadIdx}
@@ -1550,6 +1564,8 @@ function LoadingPanel({
   onGrab,
   grabbedHere,
   onUngrab,
+  deferred,
+  onUndoDefer,
   capacity,
   done,
   idx,
@@ -1578,6 +1594,8 @@ function LoadingPanel({
   onGrab: () => void
   grabbedHere: string[]
   onUngrab: (ids: string[]) => void
+  deferred: { id: string; label: string }[]
+  onUndoDefer: (id: string) => void
   capacity: number
   done: boolean
   idx: number
@@ -1808,6 +1826,23 @@ function LoadingPanel({
           <span style={{ color: C.amber, cursor: 'pointer' }} onClick={() => onUngrab(grabbedHere)}>
             undo
           </span>
+        </div>
+      )}
+      {deferred.length > 0 && (
+        <div style={{ margin: '0 16px 8px', padding: '9px 12px', border: `1px solid ${C.lineFaint}`, borderRadius: 6, flex: 'none' }}>
+          <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', color: C.ghost, marginBottom: 7 }}>
+            COMING BACK LATER
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {deferred.map((d) => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: F.mono, fontSize: 11, color: C.dim, flex: 1, minWidth: 0 }}>{d.label}</span>
+                <span style={{ color: C.amber, cursor: 'pointer', fontFamily: F.mono, fontSize: 10.5 }} onClick={() => onUndoDefer(d.id)}>
+                  undo
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {isLoad && !manual && (
