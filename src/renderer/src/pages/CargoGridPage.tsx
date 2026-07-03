@@ -133,10 +133,12 @@ function extentsFor(g: CargoGrid, dims: { w: number; l: number; h: number }, rot
   const up = axOf(floor[0])
   const depth = g.exit && axOf(g.exit.axis) !== up ? axOf(g.exit.axis) : up === 2 ? 0 : 2
   const cross = (3 - up - depth) as Ax
+  // a swap on a sky-pointing cross axis stands the box on end
+  const rot = rotated && cross !== 1
   const ext: [number, number, number] = [0, 0, 0]
   ext[up] = dims.h
-  ext[depth] = rotated ? dims.w : dims.l
-  ext[cross] = rotated ? dims.l : dims.w
+  ext[depth] = rot ? dims.w : dims.l
+  ext[cross] = rot ? dims.l : dims.w
   return ext
 }
 
@@ -1451,6 +1453,7 @@ export default function CargoGridPage(): React.ReactElement {
               loose={looseNow}
               setAside={setAside}
               unplaced={result.unplaced}
+              canStash={!!offPad}
               onStashOffGrid={(boxes) => {
                 const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
                 boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true, at))
@@ -1917,6 +1920,7 @@ function LoadingPanel({
   loose,
   setAside,
   unplaced,
+  canStash,
   onStashOffGrid,
   onComeBack,
   grab,
@@ -1943,6 +1947,7 @@ function LoadingPanel({
   loose: PackBox[]
   setAside: SetAside
   unplaced: PackBox[]
+  canStash: boolean
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
   grab: { scu: number; count: number; stepNo: number } | null
@@ -2114,6 +2119,7 @@ function LoadingPanel({
                   setAside={setAside}
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
+                  canStash={canStash}
                   onStashOffGrid={onStashOffGrid}
                   onComeBack={onComeBack}
                 />
@@ -2359,6 +2365,7 @@ function PickupDecision({
   setAside,
   destLabel,
   loadIds,
+  canStash,
   onStashOffGrid,
   onComeBack
 }: {
@@ -2366,6 +2373,7 @@ function PickupDecision({
   setAside: SetAside
   destLabel: string
   loadIds: string[]
+  canStash: boolean
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
 }): React.ReactElement | null {
@@ -2388,7 +2396,10 @@ function PickupDecision({
         { id: 'come', title: 'Come back for it', desc: 'Skip the whole pickup for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
       ]
     : [
-        { id: 'stash', title: 'Stash the overflow off-grid', desc: `The rest loads normally; ${offBreakdown} rides in empty corners of the hold.`, run: () => onStashOffGrid(decision.overloadBoxes) },
+        // no stash on ships with no off-grid: the boxes would just vanish
+        ...(canStash
+          ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `The rest loads normally; ${offBreakdown} rides in empty corners of the hold.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
+          : []),
         { id: 'come', title: `Come back for ${destLabel}'s load`, desc: 'Nothing from this pickup loads now. Its room frees up for later stops and you grab the whole thing on a later trip.', run: () => onComeBack(loadIds) }
       ]
 
@@ -2410,7 +2421,9 @@ function PickupDecision({
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#b7c0c3', marginBottom: 10 }}>
         {dig
           ? "Loading this now sits it on top of cargo you deliver sooner. To reach that cargo you'll set some boxes aside by hand."
-          : 'This won’t all fit the grid. Wedge the overflow into empty corners of the hold, or leave the whole pickup for a later trip.'}
+          : canStash
+            ? 'This won’t all fit the grid. Wedge the overflow into empty corners of the hold, or leave the whole pickup for a later trip.'
+            : 'This won’t all fit the grid, and this ship has nowhere to carry loose boxes. Leave the whole pickup for a later trip.'}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0 12px 11px', borderLeft: `2px solid ${C.amber}`, marginBottom: 12 }}>

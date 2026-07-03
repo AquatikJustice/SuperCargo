@@ -251,7 +251,9 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   if (!dims) return null
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
-  const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
+  // no footprint swap when the cross axis points at the sky (wall-floored bay)
+  const faces: Array<[number, number]> =
+    dims.w === dims.l || bay.cross === 'y' ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   // a box that outgrows its stop's section turns across at the cap before
   // poking a lone column deeper - a poke drags full-width row ownership
   // with it and the rows it steals are exactly what the next stop needed
@@ -437,7 +439,10 @@ function bestFace(
   // the unit's reserved depth zone starts past every co-aboard earlier delivery
   let zone = 0
   for (const s of rivals) if (!s.anchor && s.drop < probe.drop) zone = Math.max(zone, s.d + s.dl)
-  const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
+  // a wall-floored bay's cross axis points at the sky: a footprint swap there
+  // stands the box on end, so the long side stays on the level depth axis
+  const faces: Array<[number, number]> =
+    dims.w === dims.l || bay.cross === 'y' ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: { slot: Slot; key: number[] } | null = null
   for (const [cwf, dlf] of faces) {
     const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, deep)
