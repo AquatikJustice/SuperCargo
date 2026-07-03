@@ -171,6 +171,10 @@ export interface ManualPlacement {
  *  you can't restack what's already on the ship, so re-plans pack around these. */
 export interface LoadedPin extends ManualPlacement {
   pickupKey: string
+  /** world extents at pin time; older pins rebuild them from box dims */
+  w?: number
+  l?: number
+  h?: number
 }
 
 export interface ManifestDoc {

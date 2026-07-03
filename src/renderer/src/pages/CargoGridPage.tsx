@@ -39,10 +39,11 @@ const LOADING_PANEL_W = 360
 // the virtual off-grid pane: a place to stash loose cargo beside the ship. cells,
 // not SCU. the packer never sees it; it's display + drop-target only.
 const OFF_GRID_ID = 'off-grid'
-const OFF_GRID_W = 12
-const OFF_GRID_L = 8
-const OFF_GRID_H = 5
-const OFF_GAP = 3 // clear space between the ship's last bay and the pane
+const OFF_GRID_W = 16
+const OFF_GRID_L = 10
+const OFF_GRID_H = 6
+const OFF_GAP = 8 // clear space between the ship's last bay and the pane; the
+// STARBOARD floor label lives in this gap, so keep it generous
 
 const STBD_OF: Record<BayDir, BayDir> = { 'z-': 'x+', 'z+': 'x-', 'x+': 'z+', 'x-': 'z-', 'y+': 'x+', 'y-': 'x+' }
 const OPP: Record<BayDir, BayDir> = { 'x+': 'x-', 'x-': 'x+', 'y+': 'y-', 'y-': 'y+', 'z+': 'z-', 'z-': 'z+' }
@@ -193,7 +194,18 @@ function Box({
   // separates adjacent boxes
   const bevel = Math.min(0.09, Math.min(W, H, L) / 2 - 0.02)
   const halfH = H / 2
-  const belts = [{ y: halfH - STRIPE_MARGIN - STRIPE_T / 2, t: STRIPE_T }]
+  // the band hugs the face away from the bay's floor, whatever axis that is
+  const floorFace = grid.floor ?? 'y-'
+  const upAx = axOf(floorFace[0])
+  const grow = floorFace[1] === '-' ? 1 : -1
+  const exts: [number, number, number] = [W, H, L]
+  const bandArgs = exts.map((e, a) => (a === upAx ? STRIPE_T : e + STRIPE_PROUD * 2)) as [number, number, number]
+  const bandOff = grow * (exts[upAx] / 2 - STRIPE_MARGIN - STRIPE_T / 2)
+  const bandPos: [number, number, number] = [
+    cx + (upAx === 0 ? bandOff : 0),
+    cy + (upAx === 1 ? bandOff : 0),
+    cz + (upAx === 2 ? bandOff : 0)
+  ]
   return (
     <group position={[bcx, bcy, bcz]} rotation={bayRot(grid)}>
       <RoundedBox
@@ -246,35 +258,33 @@ function Box({
         />
         {offGrid && <Edges color={C.amber} />}
       </RoundedBox>
-      {belts.map((b, i) => (
-        <RoundedBox
-          key={`belt-${i}`}
-          args={[W + STRIPE_PROUD * 2, b.t, L + STRIPE_PROUD * 2]}
-          radius={Math.min(0.08, b.t * 0.45, bevel)}
-          smoothness={2}
-          steps={1}
-          position={[cx, cy + b.y, cz]}
-          receiveShadow
-          raycast={() => null}
-        >
-          <meshStandardMaterial
-            color={stripeColor}
-            roughness={0.85}
-            metalness={0}
-            transparent={opacity < 1}
-            opacity={opacity}
-          />
-        </RoundedBox>
-      ))}
+      <RoundedBox
+        args={bandArgs}
+        radius={Math.min(0.08, STRIPE_T * 0.45, bevel)}
+        smoothness={2}
+        steps={1}
+        position={bandPos}
+        receiveShadow
+        raycast={() => null}
+      >
+        <meshStandardMaterial
+          color={stripeColor}
+          roughness={0.85}
+          metalness={0}
+          transparent={opacity < 1}
+          opacity={opacity}
+        />
+      </RoundedBox>
       {!label &&
         mode !== 'future' &&
         (() => {
           const sd = splitDestination(pl.box.dest)
           const loc = sd.code || sd.name
           if (!loc) return null
-          const bandBottom = belts[0].y - STRIPE_T / 2
-          const lowY = (bandBottom - halfH) / 2
-          const availH = bandBottom + halfH
+          const overhead = upAx === 1 && grow === 1
+          const bandBottom = overhead ? bandOff - STRIPE_T / 2 : halfH
+          const lowY = overhead ? (bandBottom - halfH) / 2 : 0
+          const availH = overhead ? bandBottom + halfH : H * 0.72
           const eps = 0.015
           const hw = W / 2
           const hl = L / 2
@@ -349,10 +359,12 @@ function Box({
 
 function GridShell({
   grid,
-  origin
+  origin,
+  color
 }: {
   grid: CargoGrid
   origin: [number, number, number]
+  color?: string
 }): React.ReactElement {
   const refOnly = grid.autoLoad === false
   const geo = useMemo(() => new THREE.BoxGeometry(grid.w, grid.h, grid.l), [grid.w, grid.h, grid.l])
@@ -362,15 +374,16 @@ function GridShell({
     center(grid.y || 0, grid.h, origin[1]),
     center(grid.z || 0, grid.l, origin[2])
   ]
+  const line = color ?? (refOnly ? C.amber : C.acc)
   return (
     <group position={pos} rotation={bayRot(grid)}>
       <lineSegments geometry={edges}>
-        <lineBasicMaterial color={refOnly ? C.amber : C.acc} transparent opacity={refOnly ? 0.5 : 0.32} />
+        <lineBasicMaterial color={line} transparent opacity={refOnly ? 0.5 : 0.32} />
       </lineSegments>
       {/* faint fill for empty bays */}
       <mesh geometry={geo}>
         <meshBasicMaterial
-          color={refOnly ? C.amber : C.acc}
+          color={line}
           transparent
           opacity={refOnly ? 0.04 : 0.025}
           depthWrite={false}
@@ -568,7 +581,12 @@ export default function CargoGridPage(): React.ReactElement {
       const dims = BOX_DIMS[b.size]
       if (!lp || !dims) continue
       const g = grids.find((x) => x.id === lp.gridId)
-      const ext = g ? extentsFor(g, dims, lp.rotated) : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
+      const ext =
+        lp.w && lp.h && lp.l
+          ? ([lp.w, lp.h, lp.l] as [number, number, number])
+          : g
+            ? extentsFor(g, dims, lp.rotated)
+            : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: ext[0], l: ext[2], h: ext[1], rotated: lp.rotated })
     }
     // apply prev only while a walk is frozen; planning stays a fresh solve.
@@ -1166,7 +1184,7 @@ export default function CargoGridPage(): React.ReactElement {
   const commitDrag = (): void => {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
-        const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot }]
+        const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h, rotated: dragRot }]
         if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
@@ -1185,7 +1203,7 @@ export default function CargoGridPage(): React.ReactElement {
             const pk = loadedPins[s.key]?.pickupKey ?? here
             if (!pk) continue
             if (looseBoxes.includes(s.key)) setBoxLoose(s.key, false)
-            pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey: pk }
+            pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, w: s.w, l: s.l, h: s.h, rotated: s.rotated, pickupKey: pk }
           }
           if (Object.keys(pins).length) addLoadedPins(pins)
         }
@@ -1474,7 +1492,7 @@ export default function CargoGridPage(): React.ReactElement {
                     for (const b of loadingPack?.stepBoxes[loadIdx] ?? []) {
                       if (!b.objectiveId || !ids.has(b.objectiveId)) continue
                       const p = posOf.get(b.id)
-                      if (p) pins[boxKey(b)] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, rotated: p.rotated, pickupKey: key }
+                      if (p) pins[boxKey(b)] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated, pickupKey: key }
                     }
                     addLoadedPins(pins)
                   }
@@ -1614,7 +1632,7 @@ export default function CargoGridPage(): React.ReactElement {
           })}
           {loading && offGridBay && (
             <>
-              <GridShell grid={offGridBay} origin={origin} />
+              <GridShell grid={offGridBay} origin={origin} color={C.red} />
               {(() => {
                 const size = Math.min(2.4, Math.max(1, offGridBay.w * 0.16))
                 return (
@@ -1627,7 +1645,7 @@ export default function CargoGridPage(): React.ReactElement {
                     ]}
                     rotation={[-Math.PI / 2, 0, Math.PI]}
                     fontSize={size}
-                    color={C.amber}
+                    color={C.red}
                     anchorX="center"
                     anchorY="middle"
                     letterSpacing={0.14}
