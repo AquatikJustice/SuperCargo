@@ -285,11 +285,13 @@ function findSpot(
           : deep
             ? bay.dl - (t.d + dlf)
             : t.d
-        // tiny boxes nestle before edging: more own-stop faces touched beats
-        // a spot at the rim, so a lone 1-SCU can't leave a hole beside it.
-        // Bigger boxes keep pure geometry - contact-chasing there walls off
-        // space and costs the route real trips
-        const snug = probe.box.size <= 2 ? -contacts : 0
+        // small boxes nestle before edging: more own-stop faces touched beats
+        // a spot at the rim, and kissing the hull counts once a box is
+        // already nestling (never on open floor, or smalls would re-squat
+        // the wall line). Bigger boxes keep pure geometry - contact-chasing
+        // there walls off space and costs the route real trips
+        const wallKiss = (bay.wallHigh ? t.c + cwf === bay.cw : t.c === 0) ? 1 : 0
+        const snug = probe.box.size <= 4 && contacts ? -(contacts + wallKiss) : 0
         const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, snug, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
@@ -737,10 +739,12 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     const contactsOf = (t: Slot, rivals: Slot[]): number => {
       let n = 0
       for (const r of rivals) if (r.stop === t.stop && touches(t, r)) n++
-      return n
+      if (!n) return 0
+      const b = bays[t.bay]
+      return n + ((b.wallHigh ? t.c + t.cw === b.cw : t.c === 0) ? 1 : 0)
     }
     const tiny = p.slots
-      .filter((s) => !s.anchor && !pins?.has(s.box.id) && s.box.size <= 2)
+      .filter((s) => !s.anchor && !pins?.has(s.box.id) && s.box.size <= 4)
       .sort((a, b) => b.box.size - a.box.size)
     for (const s of tiny) {
       const rider = p.slots.some(
