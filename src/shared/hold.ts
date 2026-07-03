@@ -429,11 +429,7 @@ function seatUnit(
       const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
       const rivals = slots.concat(placed).filter((s) => s.bay === bayIdx && windowsOverlap(s, probe))
       const got = scanSpot(bay, rivals, probe, gap, d0, deep)
-      if (!got) {
-        if (process.env.SCAN_DEBUG)
-          console.error(`scan MISS stop${unit[0].stopIdx}@${load} sz${box.size} bay${bayIdx} d0=${d0} -> dry fallback`)
-        return first
-      }
+      if (!got) return first
       placed.push(got)
     }
   }
@@ -756,10 +752,6 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // owes fewer concessions, and once boxes are homeless the flat world also
   // takes ties - shapes have no business winning under that kind of pressure
   let pass = solve(true)
-  if (process.env.SCAN_DEBUG)
-    console.error(
-      `shaped world: homeless ${homeless(pass)} conc ${pass.concessions.length} [${pass.concessions.map((c) => `${c.boxId}:${c.kind}`).join(' ')}]`
-    )
   if (homeless(pass) || pass.concessions.length) {
     const flat = solve(false)
     const h = homeless(pass) - homeless(flat)
@@ -769,11 +761,8 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         (homeless(pass) > 0
           ? flat.concessions.length <= pass.concessions.length
           : flat.concessions.length < pass.concessions.length))
-    ) {
-      if (process.env.SCAN_DEBUG)
-        console.error(`flat world WINS: homeless ${homeless(flat)} conc ${flat.concessions.length}`)
+    )
       pass = flat
-    }
   }
 
   // a stop smeared across bays pulls its strays back to its main bay when
