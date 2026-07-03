@@ -18,6 +18,7 @@ import type {
   CargoLayout,
   FrozenBox,
   ManualPlacement,
+  LoadedPin,
   ScannedContract
 } from '@shared/types'
 import { calculateBoxes } from '@shared/box'
@@ -192,6 +193,8 @@ interface StoreState {
   manualActive: boolean
   /** keyed by objectiveId#slot */
   manualLayout: Record<string, ManualPlacement>
+  /** boxes aboard, locked where they were loaded; keyed by objectiveId#slot */
+  loadedPins: Record<string, LoadedPin>
   loadingIdx: number
   /** frozen so turn-ins keep steps */
   loadingSteps: LoadingStep[] | null
@@ -263,6 +266,8 @@ interface StoreState {
   reorderStops: (fromKey: string, toKey: string) => void
   setStartLocation: (loc: string) => void
   setBoxLoose: (key: string, loose: boolean) => void
+  /** lock freshly loaded boxes at the spot the plan gave them */
+  addLoadedPins: (pins: Record<string, LoadedPin>) => void
   /** push an objective to a later trip, or bring it back */
   setObjectiveDeferred: (objectiveId: string, deferred: boolean) => void
   startNewRun: () => void
@@ -320,8 +325,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, dismissedMissions } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, dismissed: dismissedMissions })
+    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, dismissedMissions } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, dismissed: dismissedMissions })
   }
 
   // active ship's grids
@@ -538,6 +543,7 @@ export const useStore = create<StoreState>((set, get) => {
     loadingActive: false,
     manualActive: false,
     manualLayout: {},
+    loadedPins: {},
     loadingIdx: 0,
     loadingSteps: null,
     loadingBoxes: null,
@@ -601,6 +607,7 @@ export const useStore = create<StoreState>((set, get) => {
         deferredObjectives: manifest.deferred ?? [],
         dismissedMissions: manifest.dismissed ?? [],
         manualLayout: manifest.manualLayout ?? {},
+        loadedPins: manifest.loadedPins ?? {},
         // resume walkthrough only with cargo
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
         manualActive: active.length ? (manifest.manualActive ?? false) : false,
@@ -729,6 +736,7 @@ export const useStore = create<StoreState>((set, get) => {
           deferredObjectives: doc.deferred ?? [],
           dismissedMissions: doc.dismissed ?? [],
           manualLayout: doc.manualLayout ?? {},
+          loadedPins: doc.loadedPins ?? {},
           layout: doc.layout ?? null
         })
         scheduleReroute()
@@ -817,8 +825,9 @@ export const useStore = create<StoreState>((set, get) => {
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
         // a different hold means a fresh walk: nothing pre-done, nothing
-        // pre-placed. Frozen plan, pickup ticks, and hand placements all go
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {} })
+        // pre-placed. Frozen plan, pickup ticks, hand placements, and locked
+        // aboard-spots all go
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {} })
         persist()
         get().clearAllPickedUp()
         scheduleReroute()
@@ -975,6 +984,7 @@ export const useStore = create<StoreState>((set, get) => {
         route: null,
         layout: null,
         manualLayout: {},
+        loadedPins: {},
         startLocation: '',
         stopOrder: [],
         isRouteAuto: true,
@@ -1046,10 +1056,28 @@ export const useStore = create<StoreState>((set, get) => {
           })
         }
       })
+      // un-ticking puts those boxes back on the dock; their spots unlock
+      if (!picked) {
+        const pins = get().loadedPins
+        const keep = Object.entries(pins).filter(
+          ([key, p]) => !(key.startsWith(`${objectiveId}#`) && p.pickupKey === pickupKey)
+        )
+        if (keep.length !== Object.keys(pins).length) set({ loadedPins: Object.fromEntries(keep) })
+      }
       commit(updated)
     },
 
+    addLoadedPins: (pins) => {
+      if (!Object.keys(pins).length) return
+      set((s) => ({ loadedPins: { ...s.loadedPins, ...pins } }))
+      persist()
+    },
+
     clearAllPickedUp: () => {
+      if (Object.keys(get().loadedPins).length) {
+        set({ loadedPins: {} })
+        persist()
+      }
       const updated = get().contracts.map((c) =>
         c.objectives.some((o) => o.pickedUpAt?.length)
           ? { ...c, objectives: c.objectives.map((o) => (o.pickedUpAt?.length ? { ...o, pickedUpAt: [] } : o)) }

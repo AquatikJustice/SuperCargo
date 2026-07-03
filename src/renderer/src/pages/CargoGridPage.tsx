@@ -7,7 +7,7 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, deriveStops, pickupVisitKey } from '../state/manifest'
-import { buildLoadingSteps, buildLoadEvents, loadProfile, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
@@ -17,7 +17,7 @@ import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type Buc
 import { listBreakdown } from '@shared/box'
 import { planHold } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
-import type { FrozenBox, GridView } from '@shared/types'
+import type { FrozenBox, GridView, LoadedPin } from '@shared/types'
 import { Btn } from '../components/ui'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
@@ -455,7 +455,16 @@ export default function CargoGridPage(): React.ReactElement {
       setFrozenBoxes(null)
     }
   }, [loading, liveSteps])
-  const loadSteps = frozenSteps ?? liveSteps
+  const deferredObjectives = useStore((s) => s.deferredObjectives)
+  const tickedObj = useMemo(
+    () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id))),
+    [contracts]
+  )
+  // live steps already route deferred cargo to a later trip; the frozen walk prunes it here
+  const loadSteps = useMemo(() => {
+    if (!frozenSteps) return liveSteps
+    return filterDeferredSteps(frozenSteps, new Set(deferredObjectives), (id) => tickedObj.has(id))
+  }, [frozenSteps, liveSteps, deferredObjectives, tickedObj])
 
   // soft turn-in amounts, reopenable
   const turnedIn = useMemo(() => {
@@ -502,6 +511,8 @@ export default function CargoGridPage(): React.ReactElement {
   const setBoxLoose = useStore((s) => s.setBoxLoose)
   const setManualActive = useStore((s) => s.setManualActive)
   const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
+  const loadedPins = useStore((s) => s.loadedPins)
+  const addLoadedPins = useStore((s) => s.addLoadedPins)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -511,7 +522,19 @@ export default function CargoGridPage(): React.ReactElement {
       ? fullEvents.map((ev) => ({ load: ev.load.filter((b) => manualLayout[boxKey(b)]), drop: ev.drop }))
       : fullEvents
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
-    const raw = manual ? packTimeline(grids, events, true, manualLayout) : planHold(grids, events, { loose: looseIds }).snaps
+    // cargo already aboard is locked at the spot it was loaded; re-plans pack around it
+    const pins = new Map<string, Placement>()
+    for (const b of source) {
+      const lp = loadedPins[boxKey(b)]
+      const dims = BOX_DIMS[b.size]
+      if (!lp || !dims) continue
+      const w = lp.rotated ? dims.l : dims.w
+      const l = lp.rotated ? dims.w : dims.l
+      pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w, l, h: dims.h, rotated: lp.rotated })
+    }
+    const raw = manual
+      ? packTimeline(grids, events, true, manualLayout)
+      : planHold(grids, events, { loose: looseIds, pins: pins.size ? pins : undefined }).snaps
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
@@ -519,7 +542,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes, loadedPins])
 
   // hand-placed lock, rest auto-packs
   const splitManual = (
@@ -981,7 +1004,14 @@ export default function CargoGridPage(): React.ReactElement {
               unplaced={result.unplaced}
               onStashOffGrid={(boxes) => boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true))}
               onPlaceManual={() => setManualActive(true)}
-              onComeBack={(ids) => ids.forEach((id) => setObjectiveDeferred(id, true))}
+              onComeBack={(ids) => {
+                // the deferred pickup's steps vanish from the walk; keep the
+                // cursor on the same physical step
+                const gone = new Set(ids.filter((id) => !tickedObj.has(id)))
+                const shift = loadSteps.slice(0, loadIdx).filter((s) => s.lines.every((l) => gone.has(l.objectiveId))).length
+                ids.forEach((id) => setObjectiveDeferred(id, true))
+                if (shift) setLoadIdx((i) => Math.max(0, i - shift))
+              }}
               onPlace={placeFromPalette}
               capacity={result.capacity}
               done={done}
@@ -991,12 +1021,27 @@ export default function CargoGridPage(): React.ReactElement {
               onTurnIn={(entries) => turnInDestination(entries)}
               onUnmark={(ids) => unmarkTurnIn(ids)}
               onLoaded={() => {
-                // loaded step ticks the manifest pickups, one-way
-                if (currentLoad?.kind === 'load')
+                // loaded step ticks the manifest pickups and locks each box
+                // where the plan put it - you can't restack what's aboard
+                if (currentLoad?.kind === 'load') {
+                  const key = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
                   for (const oid of currentLoad.loadIds) {
                     const cid = objMeta.get(oid)?.contractId
-                    if (cid) setPickedUp(cid, oid, pickupVisitKey(currentLoad.nodeKey, currentLoad.trip), true)
+                    if (cid) setPickedUp(cid, oid, key, true)
                   }
+                  const snap = loadingPack?.snaps[loadIdx]
+                  if (snap) {
+                    const ids = new Set(currentLoad.loadIds)
+                    const posOf = new Map(snap.placements.map((p) => [p.box.id, p]))
+                    const pins: Record<string, LoadedPin> = {}
+                    for (const b of loadingPack?.stepBoxes[loadIdx] ?? []) {
+                      if (!b.objectiveId || !ids.has(b.objectiveId)) continue
+                      const p = posOf.get(b.id)
+                      if (p) pins[boxKey(b)] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, rotated: p.rotated, pickupKey: key }
+                    }
+                    addLoadedPins(pins)
+                  }
+                }
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {

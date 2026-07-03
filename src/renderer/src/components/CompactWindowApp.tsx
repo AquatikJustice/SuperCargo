@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
-import { buildLoadingSteps, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, filterDeferredSteps, type LoadingStep } from '../state/loading'
 import { offGridByObjective } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
@@ -45,7 +45,16 @@ export default function CompactWindowApp(): React.ReactElement {
   useEffect(() => {
     setFrozen((prev) => (driven ? prev ?? liveSteps : null))
   }, [driven, liveSteps])
-  const steps = frozen ?? liveSteps
+  // must match the main window's walk exactly or the synced idx points at the wrong step
+  const deferredObjectives = useStore((s) => s.deferredObjectives)
+  const tickedObj = useMemo(
+    () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id))),
+    [contracts]
+  )
+  const steps = useMemo(() => {
+    if (!frozen) return liveSteps
+    return filterDeferredSteps(frozen, new Set(deferredObjectives), (id) => tickedObj.has(id))
+  }, [frozen, liveSteps, deferredObjectives, tickedObj])
 
   const safeIdx = Math.min(idx, Math.max(0, steps.length - 1))
   const step = steps[safeIdx]

@@ -167,6 +167,12 @@ export interface ManualPlacement {
   rotated: boolean
 }
 
+/** a box physically aboard: locked where it sat when its pickup was ticked.
+ *  you can't restack what's already on the ship, so re-plans pack around these. */
+export interface LoadedPin extends ManualPlacement {
+  pickupKey: string
+}
+
 export interface ManifestDoc {
   runId: string
   contracts: HaulingContract[]
@@ -180,6 +186,8 @@ export interface ManifestDoc {
   startLocation?: string
   /** hand-placed boxes from manual mode, keyed by objectiveId#slot */
   manualLayout?: Record<string, ManualPlacement>
+  /** boxes aboard mid-walk, locked at the spot they were loaded, keyed by objectiveId#slot */
+  loadedPins?: Record<string, LoadedPin>
   /** resume the loading/manual walkthrough where you left off after a restart */
   loadingActive?: boolean
   manualActive?: boolean

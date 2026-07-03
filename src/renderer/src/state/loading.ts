@@ -287,6 +287,26 @@ export function buildLoadingSteps(
   return steps
 }
 
+// a mid-walk come-back pulls the whole pickup out of the frozen walk: its load
+// and drop steps vanish and the deferred cargo waits for the next trip's route.
+// Ticked objectives never filter - that cargo is physically aboard.
+export function filterDeferredSteps(
+  steps: LoadingStep[],
+  deferred: ReadonlySet<string>,
+  ticked: (objectiveId: string) => boolean
+): LoadingStep[] {
+  if (!deferred.size) return steps
+  const gone = (id: string): boolean => deferred.has(id) && !ticked(id)
+  const out: LoadingStep[] = []
+  for (const s of steps) {
+    const lines = s.lines.filter((l) => !gone(l.objectiveId))
+    if (!lines.length) continue
+    if (lines.length === s.lines.length) out.push(s)
+    else out.push({ ...s, lines, loadIds: s.loadIds.filter((id) => !gone(id)), dropIds: s.dropIds.filter((id) => !gone(id)) })
+  }
+  return out
+}
+
 // drops lag a step
 export function buildLoadEvents(loadSteps: LoadingStep[], source: PackBox[]): LoadEvent[] {
   const pool = new Map<string, PackBox[]>()
