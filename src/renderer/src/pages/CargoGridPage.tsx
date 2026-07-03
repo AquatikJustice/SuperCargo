@@ -168,7 +168,6 @@ function Box({
   const loaded = mode === 'loaded'
   const color = loaded ? BOX_GRAY_LOADED : BOX_GRAY
   const stripeColor = selected ? C.acc : offGrid ? C.amber : loaded ? BOX_GRAY_LOADED : pl.box.color
-  const emissive = mode === 'current' ? 0.12 : 0
   const opacity = mode === 'future' ? 0.12 : loaded ? 0.82 : 1
   const W = pl.w - GAP
   const H = pl.h - GAP
@@ -222,8 +221,6 @@ function Box({
       >
         <meshStandardMaterial
           color={color}
-          emissive={offGrid ? C.amber : loaded ? '#000000' : pl.box.color}
-          emissiveIntensity={offGrid ? 0.14 : emissive}
           roughness={0.95}
           metalness={0}
           transparent={opacity < 1}
@@ -244,8 +241,6 @@ function Box({
         >
           <meshStandardMaterial
             color={stripeColor}
-            emissive={mode === 'current' ? pl.box.color : '#000000'}
-            emissiveIntensity={emissive}
             roughness={0.85}
             metalness={0}
             transparent={opacity < 1}
@@ -1851,7 +1846,7 @@ function LoadingPanel({
         <LoadBar current={aboard} peak={peak} capacity={capacity} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column' }}>
         {here.map((s, li) => {
           const gi = visitStart + li
           const isCurrent = gi === idx
@@ -1864,12 +1859,10 @@ function LoadingPanel({
               ref={isCurrent ? currentRef : undefined}
               style={{
                 borderLeft: `3px solid ${accent}`,
-                border: `1px solid ${isCurrent ? accent : C.lineFaint}`,
-                borderLeftWidth: 3,
-                borderRadius: 6,
+                borderTop: li === 0 ? 'none' : `1px solid ${C.lineFaint}`,
                 background: isCurrent ? 'rgba(255,255,255,0.045)' : 'transparent',
                 opacity: isPast ? 0.5 : 1,
-                padding: '8px 11px'
+                padding: '9px 12px'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
