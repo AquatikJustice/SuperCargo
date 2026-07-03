@@ -445,7 +445,8 @@ function seatConceding(
   load: number,
   drop: number,
   gap: number,
-  shaping: boolean
+  shaping: boolean,
+  deep: boolean
 ): { placed: Slot[]; conceded: Concession[]; failed: PackBox[] } {
   const rungs: Array<{ gap: number; relax: Relax; kind?: Concession['kind'] }> = [
     { gap, relax: {} },
@@ -477,10 +478,14 @@ function seatConceding(
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
           // the scanner visits every cell, so on the strict rung it finds a
           // spot whenever one exists - shaped passes use it here too so a
-          // bucket too big for any bay still comes out as long lines
+          // bucket too big for any bay still comes out as long lines. The
+          // final delivery keeps its bulkhead anchor even here: a mega
+          // bucket packing shallow floods the fronts everyone after it
+          // needs. Deep stays off the relaxed rungs - forcing it there made
+          // a near-full hold trade real placements for the anchor
           const s =
             shaping && !rung.kind
-              ? scanSpot(bay, rivals, probe, rung.gap, 0, false)
+              ? scanSpot(bay, rivals, probe, rung.gap, 0, deep)
               : bestFace(bay, rivals, probe, rung.gap, rung.relax)?.slot ?? null
           if (s) {
             got = s
@@ -708,8 +713,16 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       let placed: Slot[] | null = null
       for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap, shaping, deep))) break
       if (!placed) {
-        const next = bays.find((b) => !open.includes(b))
-        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap, shaping, deep))) open.push(next)
+        // the final delivery opens the smallest bay that takes it whole:
+        // a handful of last-drop boxes claiming the big bay's bulkhead rows
+        // starves the mid-run stop that needed exactly that depth
+        const fresh = bays.filter((b) => !open.includes(b))
+        if (deep) fresh.sort((a, b) => a.cw * a.dl * a.h - b.cw * b.dl * b.h)
+        for (const next of deep ? fresh : fresh.slice(0, 1))
+          if ((placed = seatUnit([next], slots, unit, load, drop, gap, shaping, deep))) {
+            open.push(next)
+            break
+          }
       }
       if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap, shaping, deep)
       if (placed) {
@@ -717,7 +730,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         for (const s of placed) byBox.set(s.box.id, s)
         verdicts.push({ stop, load, ok: true, boxes: unit })
       } else {
-        const got = seatConceding(bays, open, slots, unit, load, drop, gap, shaping)
+        const got = seatConceding(bays, open, slots, unit, load, drop, gap, shaping, deep)
         slots.push(...got.placed)
         for (const s of got.placed) byBox.set(s.box.id, s)
         concessions.push(...got.conceded)
