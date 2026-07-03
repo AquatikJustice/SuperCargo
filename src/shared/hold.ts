@@ -213,7 +213,7 @@ function findSpot(
   deep?: boolean
 ): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
-  let bestKey: number[] = new Array(8).fill(Infinity)
+  let bestKey: number[] = new Array(9).fill(Infinity)
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   for (let c = 0; c + cwf <= bay.cw; c++) {
@@ -267,7 +267,9 @@ function findSpot(
         // pass the wall rows come first and the rotated aisle lane comes last,
         // low and front-flush; across columns fill from the deep end so the
         // short step and its smalls land at the exit side
-        const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
+        let contacts = 0
+        for (const r of rivals) if (r.stop === t.stop && touches(t, r)) contacts++
+        const glued = contacts ? 0 : 1
         // smalls keep to the aisle side, floor or perch: the wall line is
         // where tall columns land, and an early squatter there leaves the
         // later group an awkward corner to build around
@@ -283,7 +285,12 @@ function findSpot(
           : deep
             ? bay.dl - (t.d + dlf)
             : t.d
-        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, cWall]
+        // tiny boxes nestle before edging: more own-stop faces touched beats
+        // a spot at the rim, so a lone 1-SCU can't leave a hole beside it.
+        // Bigger boxes keep pure geometry - contact-chasing there walls off
+        // space and costs the route real trips
+        const snug = probe.box.size <= 2 ? -contacts : 0
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, snug, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -722,6 +729,35 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     return moved
   }
   const movedIds = reunite(pass)
+
+  // a tiny box seated before its family arrived may sit at the rim of what
+  // became a hole; re-nestle it against the finished layout (solver-time
+  // move, its permanent slot just improves before anyone sees the plan)
+  const tidyTiny = (p: PassResult): void => {
+    const contactsOf = (t: Slot, rivals: Slot[]): number => {
+      let n = 0
+      for (const r of rivals) if (r.stop === t.stop && touches(t, r)) n++
+      return n
+    }
+    const tiny = p.slots
+      .filter((s) => !s.anchor && !pins?.has(s.box.id) && s.box.size <= 2)
+      .sort((a, b) => b.box.size - a.box.size)
+    for (const s of tiny) {
+      const rider = p.slots.some(
+        (q) =>
+          q !== s && q.bay === s.bay && windowsOverlap(q, s) && q.y === s.y + s.h &&
+          spans(q.c, q.c + q.cw, s.c, s.c + s.cw) && spans(q.d, q.d + q.dl, s.d, s.d + s.dl)
+      )
+      if (rider) continue
+      const rivals = p.slots.filter((q) => q !== s && q.bay === s.bay && windowsOverlap(q, s))
+      const got = bestFace(bays[s.bay], rivals, { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }, gap, {})
+      // this pass exists only to nestle: move on a strict contact gain,
+      // never sideways into a spot the key likes but the eye doesn't
+      if (got && contactsOf(got.slot, rivals) > contactsOf(s, rivals)) Object.assign(s, got.slot)
+    }
+  }
+  tidyTiny(pass)
+
   const { slots, byBox, verdicts } = pass
   const concessions = pass.concessions.filter((c) => !movedIds.has(c.boxId))
 
