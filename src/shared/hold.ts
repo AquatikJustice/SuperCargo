@@ -415,26 +415,28 @@ function seatUnit(
 ): Slot[] | null {
   const first = seatBoxes(cfg, slots, unit, load, drop, gap, deep)
   if (!first || !shaping) return first
-  const bayIdx = first[0].bay
-  if (first.some((s) => s.bay !== bayIdx)) return first
-  const bay = cfg.find((b) => b.idx === bayIdx)!
-  // a stop's later pickups continue the section its first pickup started,
-  // plugging its leftover holes instead of opening a fresh wall beside it
-  let d0 = Math.min(...first.map((s) => s.d))
-  for (const s of slots) if (s.bay === bayIdx && !s.anchor && s.stop === unit[0].stopIdx) d0 = Math.min(d0, s.d)
+  // rebuild each bay's share with the wall scanner; a stop's later pickups
+  // continue the section its first pickup started, plugging its leftover
+  // holes instead of opening a fresh wall beside it
+  const byBay = new Map<number, PackBox[]>()
+  for (const s of first) (byBay.get(s.bay) ?? byBay.set(s.bay, []).get(s.bay)!).push(s.box)
   const placed: Slot[] = []
-  for (const box of [...unit].sort(unitOrder)) {
-    const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
-    const rivals = slots.concat(placed).filter((s) => s.bay === bayIdx && windowsOverlap(s, probe))
-    const got = scanSpot(bay, rivals, probe, gap, d0, deep)
-    if (!got) {
-      if (process.env.SCAN_DEBUG)
-        console.error(`scan MISS stop${unit[0].stopIdx}@${load} sz${box.size} bay${bayIdx} d0=${d0} -> dry fallback`)
-      return first
+  for (const [bayIdx, subset] of byBay) {
+    const bay = cfg.find((b) => b.idx === bayIdx)!
+    let d0 = Math.min(...first.filter((s) => s.bay === bayIdx).map((s) => s.d))
+    for (const s of slots) if (s.bay === bayIdx && !s.anchor && s.stop === unit[0].stopIdx) d0 = Math.min(d0, s.d)
+    for (const box of [...subset].sort(unitOrder)) {
+      const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
+      const rivals = slots.concat(placed).filter((s) => s.bay === bayIdx && windowsOverlap(s, probe))
+      const got = scanSpot(bay, rivals, probe, gap, d0, deep)
+      if (!got) {
+        if (process.env.SCAN_DEBUG)
+          console.error(`scan MISS stop${unit[0].stopIdx}@${load} sz${box.size} bay${bayIdx} d0=${d0} -> dry fallback`)
+        return first
+      }
+      placed.push(got)
     }
-    placed.push(got)
   }
-  if (process.env.SCAN_DEBUG) console.error(`scan ok stop${unit[0].stopIdx}@${load} bay${bayIdx} ${unit.length} boxes`)
   return placed
 }
 
@@ -446,7 +448,8 @@ function seatConceding(
   unit: PackBox[],
   load: number,
   drop: number,
-  gap: number
+  gap: number,
+  shaping: boolean
 ): { placed: Slot[]; conceded: Concession[]; failed: PackBox[] } {
   const rungs: Array<{ gap: number; relax: Relax; kind?: Concession['kind'] }> = [
     { gap, relax: {} },
@@ -476,9 +479,15 @@ function seatConceding(
       for (const rung of rungList)
         for (const bay of bayList) {
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-          const s = bestFace(bay, rivals, probe, rung.gap, rung.relax)
+          // the scanner visits every cell, so on the strict rung it finds a
+          // spot whenever one exists - shaped passes use it here too so a
+          // bucket too big for any bay still comes out as long lines
+          const s =
+            shaping && !rung.kind
+              ? scanSpot(bay, rivals, probe, rung.gap, 0, false)
+              : bestFace(bay, rivals, probe, rung.gap, rung.relax)?.slot ?? null
           if (s) {
-            got = s.slot
+            got = s
             kind = rung.kind
             if (!open.includes(bay)) open.push(bay)
             return true
@@ -712,9 +721,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         for (const s of placed) byBox.set(s.box.id, s)
         verdicts.push({ stop, load, ok: true, boxes: unit })
       } else {
-        if (process.env.SCAN_DEBUG && shaping)
-          console.error(`concede stop${stop}@${load} sizes ${unit.map((b) => b.size).join(',')}`)
-        const got = seatConceding(bays, open, slots, unit, load, drop, gap)
+        const got = seatConceding(bays, open, slots, unit, load, drop, gap, shaping)
         slots.push(...got.placed)
         for (const s of got.placed) byBox.set(s.box.id, s)
         concessions.push(...got.conceded)
@@ -750,7 +757,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // takes ties - shapes have no business winning under that kind of pressure
   let pass = solve(true)
   if (process.env.SCAN_DEBUG)
-    console.error(`shaped world: homeless ${homeless(pass)} conc ${pass.concessions.length}`)
+    console.error(
+      `shaped world: homeless ${homeless(pass)} conc ${pass.concessions.length} [${pass.concessions.map((c) => `${c.boxId}:${c.kind}`).join(' ')}]`
+    )
   if (homeless(pass) || pass.concessions.length) {
     const flat = solve(false)
     const h = homeless(pass) - homeless(flat)
