@@ -450,6 +450,19 @@ function App(): JSX.Element {
     })
   }
 
+  const setOffGrid = (patch: Partial<NonNullable<ShipMarkup['offGrid']>>): void => {
+    setMarkup((m) => {
+      const next = m.map((s) => ({ ...s }))
+      let s = next.find((x) => x.ship === ship)
+      if (!s) {
+        s = { ship, bays: [] }
+        next.push(s)
+      }
+      s.offGrid = { on: true, ...s.offGrid, ...patch }
+      return next
+    })
+  }
+
   // arrows move the selection, r rotates
   useEffect(() => {
     if (!sel.length) return
@@ -541,6 +554,31 @@ function App(): JSX.Element {
         <button onClick={() => setView((v) => v + 1)} style={{ marginBottom: 14, fontSize: 12, background: '#2a323c', color: '#cfe3f5', border: '1px solid #28333f', padding: '4px 10px', cursor: 'pointer' }}>
           Reset view (behind stern)
         </button>
+
+        {(() => {
+          const og = sm?.offGrid
+          const on = og?.on ?? true
+          const dim = { w: og?.w ?? 16, l: og?.l ?? 10, h: og?.h ?? 6 }
+          return (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, color: '#8aa3bd', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <input type="checkbox" checked={on} onChange={(e) => setOffGrid({ on: e.target.checked })} />
+                Off-grid stash pad
+              </label>
+              <div style={{ display: 'flex', gap: 6, opacity: on ? 1 : 0.4 }}>
+                {(['w', 'l', 'h'] as const).map((k) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                    <span style={{ color: '#8aa3bd', textTransform: 'uppercase' }}>{k}</span>
+                    <input type="number" min={1} disabled={!on} value={dim[k]}
+                      onChange={(e) => setOffGrid({ [k]: Math.max(1, Math.floor(+e.target.value || 1)) })}
+                      style={{ width: 46, background: '#141b24', color: '#cfe3f5', border: '1px solid #28333f', padding: '2px 4px' }} />
+                  </label>
+                ))}
+              </div>
+              <span style={{ fontSize: 11, color: '#5a6b7d' }}>off = no place to drop loose cargo beside this ship</span>
+            </div>
+          )
+        })()}
 
         {selEff && selBase ? (
           <div style={{ border: '1px solid #28333f', borderRadius: 4, padding: 10, marginBottom: 12 }}>

@@ -10,7 +10,7 @@ import { packBoxes, pickupVisitKey } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
-import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
+import { gridsFor, shipFrame, isSecureBay, offGridFor, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
@@ -39,9 +39,6 @@ const LOADING_PANEL_W = 360
 // the virtual off-grid pane: a place to stash loose cargo beside the ship. cells,
 // not SCU. the packer never sees it; it's display + drop-target only.
 const OFF_GRID_ID = 'off-grid'
-const OFF_GRID_W = 16
-const OFF_GRID_L = 10
-const OFF_GRID_H = 6
 const OFF_GAP = 8 // clear space between the ship's last bay and the pane; the
 // STARBOARD floor label lives in this gap, so keep it generous
 
@@ -437,6 +434,8 @@ export default function CargoGridPage(): React.ReactElement {
     [activeShip, installed, gridFacesSyncedAt]
   )
   const frame = useMemo(() => shipFrame(activeShip), [activeShip, gridFacesSyncedAt])
+  // off-grid stash pad size, or null when the ship has it turned off
+  const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesSyncedAt])
   // secure vaults can't haul
   const shownGrids = useMemo(() => grids.filter((g) => !isSecureBay(g)), [grids])
 
@@ -715,14 +714,16 @@ export default function CargoGridPage(): React.ReactElement {
     }
     const shipMinX = minX, shipMinY = minY, shipMinZ = minZ, shipMaxX = maxX, shipMaxY = maxY, shipMaxZ = maxZ
     // park the pane past the ship's starboard edge, on the deck, centered on the hold's length
-    const off: CargoGrid = {
+    const off: CargoGrid | null = offPad && {
       id: OFF_GRID_ID, name: 'OFF GRID', source: 'override', autoLoad: false,
-      x: maxX + OFF_GAP, y: minY, z: minZ + (maxZ - minZ - OFF_GRID_L) / 2,
-      w: OFF_GRID_W, l: OFF_GRID_L, h: OFF_GRID_H, scu: OFF_GRID_W * OFF_GRID_L * OFF_GRID_H
+      x: maxX + OFF_GAP, y: minY, z: minZ + (maxZ - minZ - offPad.l) / 2,
+      w: offPad.w, l: offPad.l, h: offPad.h, scu: offPad.w * offPad.l * offPad.h
     }
-    maxX = Math.max(maxX, off.x + off.w)
-    maxY = Math.max(maxY, off.y + off.h)
-    minZ = Math.min(minZ, off.z); maxZ = Math.max(maxZ, off.z + off.l)
+    if (off) {
+      maxX = Math.max(maxX, off.x + off.w)
+      maxY = Math.max(maxY, off.y + off.h)
+      minZ = Math.min(minZ, off.z); maxZ = Math.max(maxZ, off.z + off.l)
+    }
     const o: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
     return {
       origin: o,
@@ -732,7 +733,7 @@ export default function CargoGridPage(): React.ReactElement {
       shipCenter: [(shipMinX + shipMaxX) / 2 - o[0], (shipMinY + shipMaxY) / 2 - o[1], (shipMinZ + shipMaxZ) / 2 - o[2]] as [number, number, number],
       offGrid: off
     }
-  }, [shownGrids])
+  }, [shownGrids, offPad])
 
   // lay the loose boxes out in the pane: parked ones keep their spot, the rest
   // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere.
@@ -741,18 +742,19 @@ export default function CargoGridPage(): React.ReactElement {
   // interpenetrating a neighbour
   const loosePlacements = useMemo<Placement[]>(() => {
     if (!offGridBay || !looseNow.length) return []
+    const pw = offGridBay.w, pl = offGridBay.l, ph = offGridBay.h
     const occ = new Set<string>()
     const mark = (x: number, y: number, z: number, w: number, l: number, h: number): void => {
       for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) occ.add(`${x + dx},${y + dy},${z + dz}`)
     }
     const fits = (x: number, y: number, z: number, w: number, l: number, h: number): boolean => {
-      if (x < 0 || z < 0 || x + w > OFF_GRID_W || z + l > OFF_GRID_L || y + h > OFF_GRID_H) return false
+      if (x < 0 || z < 0 || x + w > pw || z + l > pl || y + h > ph) return false
       for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) if (occ.has(`${x + dx},${y + dy},${z + dz}`)) return false
       return true
     }
     // lowest free y at this footprint, so a stale spot lands on top of its neighbour
     const settle = (x: number, z: number, w: number, l: number, h: number): number => {
-      for (let y = 0; y + h <= OFF_GRID_H; y++) if (fits(x, y, z, w, l, h)) return y
+      for (let y = 0; y + h <= ph; y++) if (fits(x, y, z, w, l, h)) return y
       return -1
     }
     const boxes = [...looseNow].sort((a, c) => boxKey(a).localeCompare(boxKey(c)))
@@ -768,7 +770,7 @@ export default function CargoGridPage(): React.ReactElement {
         const l = sp.rotated ? dims.w : dims.l
         // keep the stored spot when it's still clear; otherwise settle down its
         // column onto whatever moved in under it
-        const inPane = sp.x >= 0 && sp.z >= 0 && sp.x + w <= OFF_GRID_W && sp.z + l <= OFF_GRID_L
+        const inPane = sp.x >= 0 && sp.z >= 0 && sp.x + w <= pw && sp.z + l <= pl
         const y = inPane
           ? fits(sp.x, sp.y, sp.z, w, l, dims.h)
             ? sp.y
@@ -786,9 +788,9 @@ export default function CargoGridPage(): React.ReactElement {
       const dims = BOX_DIMS[b.size]
       if (!dims) continue
       let placed = false
-      for (let y = 0; y < OFF_GRID_H && !placed; y++)
-        for (let z = 0; z <= OFF_GRID_L - dims.l && !placed; z++)
-          for (let x = 0; x <= OFF_GRID_W - dims.w && !placed; x++)
+      for (let y = 0; y < ph && !placed; y++)
+        for (let z = 0; z <= pl - dims.l && !placed; z++)
+          for (let x = 0; x <= pw - dims.w && !placed; x++)
             if (fits(x, y, z, dims.w, dims.l, dims.h)) {
               mark(x, y, z, dims.w, dims.l, dims.h)
               out.push({ box: b, gridId: OFF_GRID_ID, x, y, z, w: dims.w, l: dims.l, h: dims.h, rotated: false })

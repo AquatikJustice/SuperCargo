@@ -159,23 +159,42 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot'>>
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+let OFF_GRIDS: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
+
+/** built-in off-grid stash pad, cells. used when a ship has no authored override. */
+export const OFF_GRID_DEFAULT = { w: 16, l: 10, h: 6 }
 
 export function setGridFaces(ships: ShipMarkup[]): void {
   const map: Record<string, Record<string, BayInfo>> = {}
   const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
+  const offGrids: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
   for (const s of ships) {
     const bays: Record<string, BayInfo> = {}
     for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
+    if (s.offGrid) offGrids[s.ship] = s.offGrid
   }
   MARKUP = map
   FRAMES = frames
+  OFF_GRIDS = offGrids
 }
 
 /** authored bow/starboard, or undefined (the view defaults bow to z-). */
 export function shipFrame(ship: string): NonNullable<ShipMarkup['frame']> | undefined {
   return FRAMES[ship]
+}
+
+/** the off-grid stash pad size for a ship, or null when it's turned off.
+ *  no override = the built-in pad; sizes fall back to the defaults per-axis. */
+export function offGridFor(ship: string): { w: number; l: number; h: number } | null {
+  const o = OFF_GRIDS[ship]
+  if (o && !o.on) return null
+  return {
+    w: o?.w ?? OFF_GRID_DEFAULT.w,
+    l: o?.l ?? OFF_GRID_DEFAULT.l,
+    h: o?.h ?? OFF_GRID_DEFAULT.h
+  }
 }
 
 /** true once a ship's bays have been marked up (exit faces authored) for the

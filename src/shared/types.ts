@@ -371,6 +371,9 @@ export interface ShipMarkup {
   ship: string
   /** which signed axis points to the bow / to starboard (up is y+). */
   frame?: { fore: BayDir; starboard: BayDir }
+  /** off-grid stash pad beside the ship. absent = on at the built-in size; on:false = no pad
+   *  (ships you can't drop cargo next to). w/l/h in cells; absent = built-in defaults. */
+  offGrid?: { on: boolean; w?: number; l?: number; h?: number }
   bays: BayMarkup[]
 }
 
