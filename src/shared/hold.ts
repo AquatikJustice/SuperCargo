@@ -145,6 +145,12 @@ interface Relax {
   flank?: boolean
 }
 
+/** depth span a unit re-seats into on its shaping pass */
+interface Span {
+  d0: number
+  d1: number
+}
+
 // slide in at its level, or lower it down an open-topped column: a pit
 // between stacks is fine, a spot with cargo overhead is not
 function canInsert(aboard: Slot[], t: Slot): boolean {
@@ -202,14 +208,16 @@ function findSpot(
   hf: number,
   gap: number,
   relax: Relax,
-  zone: number
+  zone: number,
+  span?: Span
 ): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
-  let bestKey: number[] = new Array(7).fill(Infinity)
+  let bestKey: number[] = new Array(8).fill(Infinity)
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   for (let c = 0; c + cwf <= bay.cw; c++) {
     for (let d = 0; d + dlf <= bay.dl; d++) {
+      if (span && (d < span.d0 || d + dlf > span.d1)) continue
       const t: Slot = { ...probe, bay: bay.idx, c, d, y: 0, cw: cwf, dl: dlf, h: hf }
       const tops = new Set<number>([0])
       for (const r of rivals)
@@ -254,10 +262,15 @@ function findSpot(
         // in the depth zone, glued to own stop, stack HIGH before claiming new
         // floor (floor is the scarce resource), low, shallow. Orientation is a
         // tiebreak at equal depth: stretch across, but a rotated box that fills
-        // the current row beats an across box opening a new one
+        // the current row beats an across box opening a new one. On a shaping
+        // pass the wall rows come first and the rotated aisle lane comes last,
+        // low and front-flush; across columns fill from the deep end so the
+        // short step and its smalls land at the exit side
         const glued = rivals.some((r) => r.stop === t.stop && touches(t, r)) ? 0 : 1
         const cWall = bay.wallHigh ? bay.cw - (t.c + cwf) : t.c
-        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, t.d, dlf, cWall]
+        const aisle = span && dlf > cwf ? 1 : 0
+        const dKey = span ? (dlf <= cwf ? span.d1 - (t.d + dlf) : t.d - span.d0) : t.d
+        const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
           bestKey = key
@@ -272,7 +285,7 @@ function findSpot(
 const unitOrder = (a: PackBox, b: PackBox): number =>
   b.size - a.size || (a.bucketId ?? '').localeCompare(b.bucketId ?? '')
 
-function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: Relax): Slot | null {
+function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: Relax, span?: Span): Slot | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
   // the unit's reserved depth zone starts past every co-aboard earlier delivery
@@ -281,27 +294,57 @@ function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: 
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: { slot: Slot; key: number[] } | null = null
   for (const [cwf, dlf] of faces) {
-    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone)
+    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, span)
     if (s && (!best || beats(s.key, best.key))) best = s
   }
   return best?.slot ?? null
 }
 
-// whole unit into one bay set, no concessions
-function seatUnit(cfg: BayCtx[], slots: Slot[], unit: PackBox[], load: number, drop: number, gap: number): Slot[] | null {
+function seatBoxes(
+  cfg: BayCtx[],
+  slots: Slot[],
+  unit: PackBox[],
+  load: number,
+  drop: number,
+  gap: number,
+  span?: Span
+): Slot[] | null {
   const placed: Slot[] = []
   for (const box of [...unit].sort(unitOrder)) {
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
     let got: Slot | null = null
     for (const bay of cfg) {
       const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-      got = bestFace(bay, rivals, probe, gap, {})
+      got = bestFace(bay, rivals, probe, gap, {}, span)
       if (got) break
     }
     if (!got) return null
     placed.push(got)
   }
   return placed
+}
+
+// whole unit into one bay set, no concessions. When shaping, seat once to
+// learn the tightest footprint, then re-seat into it so the block reads like
+// a hauler packed it: full columns deep, the short step and its smalls at the
+// exit side, the rotated lane a planned front-flush column instead of a stub
+function seatUnit(
+  cfg: BayCtx[],
+  slots: Slot[],
+  unit: PackBox[],
+  load: number,
+  drop: number,
+  gap: number,
+  shaping: boolean
+): Slot[] | null {
+  const first = seatBoxes(cfg, slots, unit, load, drop, gap)
+  if (!first || !shaping) return first
+  const bay = first[0].bay
+  if (first.some((s) => s.bay !== bay)) return first
+  const d0 = Math.min(...first.map((s) => s.d))
+  const d1 = Math.max(...first.map((s) => s.d + s.dl))
+  const shaped = seatBoxes(cfg.filter((b) => b.idx === bay), slots, unit, load, drop, gap, { d0, d1 })
+  return shaped ?? first
 }
 
 // per-box escalation: clean spot anywhere, then out-of-order, then buried
@@ -542,7 +585,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     verdicts: UnitVerdict[]
     concessions: Concession[]
   }
-  const runPass = (queue: PackBox[][]): PassResult => {
+  const runPass = (queue: PackBox[][], shaping: boolean): PassResult => {
     const slots: Slot[] = []
     const byBox = new Map<string, Slot>()
     if (pins)
@@ -565,12 +608,12 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
       const homes = open.filter(has).concat(open.filter((b) => !has(b)))
       let placed: Slot[] | null = null
-      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap))) break
+      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap, shaping))) break
       if (!placed) {
         const next = bays.find((b) => !open.includes(b))
-        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap))) open.push(next)
+        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap, shaping))) open.push(next)
       }
-      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap)
+      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap, shaping)
       if (placed) {
         slots.push(...placed)
         for (const s of placed) byBox.set(s.box.id, s)
@@ -587,21 +630,36 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     return { slots, byBox, verdicts, concessions }
   }
 
+  const homeless = (p: PassResult): number => p.verdicts.reduce((a, v) => a + (v.ok ? 0 : v.boxes.length), 0)
   // the most window-constrained cargo shouldn't go last: on any homeless
   // boxes, retry once with their units placed first
-  let pass = runPass(ordered)
-  if (pass.verdicts.some((v) => !v.ok)) {
-    const failedKeys = new Set(pass.verdicts.filter((v) => !v.ok).map((v) => `${v.stop}@${v.load}`))
-    const promoted = ordered
-      .filter((u) => failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`))
-      .concat(ordered.filter((u) => !failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`)))
-    const retry = runPass(promoted)
-    const homeless = (p: PassResult): number => p.verdicts.reduce((a, v) => a + (v.ok ? 0 : v.boxes.length), 0)
+  const solve = (shaping: boolean): PassResult => {
+    let pass = runPass(ordered, shaping)
+    if (pass.verdicts.some((v) => !v.ok)) {
+      const failedKeys = new Set(pass.verdicts.filter((v) => !v.ok).map((v) => `${v.stop}@${v.load}`))
+      const promoted = ordered
+        .filter((u) => failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`))
+        .concat(ordered.filter((u) => !failedKeys.has(`${u[0].stopIdx}@${loadOf(u[0].id)}`)))
+      const retry = runPass(promoted, shaping)
+      if (
+        homeless(retry) < homeless(pass) ||
+        (homeless(retry) === homeless(pass) && retry.concessions.length < pass.concessions.length)
+      )
+        pass = retry
+    }
+    return pass
+  }
+
+  // neat shapes when they're free; a near-full hold keeps whichever world
+  // owes fewer concessions
+  let pass = solve(true)
+  if (homeless(pass) || pass.concessions.length) {
+    const flat = solve(false)
     if (
-      homeless(retry) < homeless(pass) ||
-      (homeless(retry) === homeless(pass) && retry.concessions.length < pass.concessions.length)
+      homeless(flat) < homeless(pass) ||
+      (homeless(flat) === homeless(pass) && flat.concessions.length < pass.concessions.length)
     )
-      pass = retry
+      pass = flat
   }
 
   // a stop smeared across bays pulls its strays back to its main bay when
