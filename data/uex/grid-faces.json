@@ -1,6 +1,6 @@
 {
   "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
-  "syncedAt": "2026-06-30",
+  "syncedAt": "2026-07-03",
   "gridFaces": [
     {
       "ship": "Drake Ironclad",
@@ -1785,7 +1785,7 @@
             "z-": "exit",
             "x-": "aisle",
             "z+": "wall",
-            "y-": "wall"
+            "y-": "floor"
           },
           "z": 2.5,
           "group": 0,
@@ -1800,7 +1800,7 @@
           "id": "hold-2",
           "x": 0.5857864376269046,
           "faces": {
-            "y-": "wall",
+            "y-": "floor",
             "y+": "exit",
             "z-": "exit",
             "x+": "aisle",
@@ -1824,7 +1824,7 @@
             "x+": "exit",
             "y-": "exit",
             "z+": "wall",
-            "x-": "wall"
+            "x-": "floor"
           },
           "group": 1,
           "w": 2,
@@ -1846,7 +1846,7 @@
             "z-": "exit",
             "y-": "aisle",
             "z+": "wall",
-            "x-": "wall",
+            "x-": "floor",
             "x+": "exit"
           },
           "group": 1,
@@ -1867,7 +1867,7 @@
           "faces": {
             "z-": "exit",
             "x+": "aisle",
-            "y+": "wall",
+            "y+": "floor",
             "z+": "wall",
             "y-": "exit",
             "x-": "aisle"
@@ -1890,7 +1890,7 @@
           "faces": {
             "y-": "exit",
             "z-": "exit",
-            "y+": "wall",
+            "y+": "floor",
             "x-": "aisle",
             "z+": "wall",
             "x+": "aisle"
@@ -1915,7 +1915,7 @@
             "y-": "aisle",
             "z-": "exit",
             "z+": "wall",
-            "x+": "wall",
+            "x+": "floor",
             "x-": "exit"
           },
           "group": 3,
@@ -1938,7 +1938,7 @@
             "z-": "exit",
             "x-": "exit",
             "z+": "wall",
-            "x+": "wall",
+            "x+": "floor",
             "y+": "aisle"
           },
           "group": 3,
@@ -1957,7 +1957,7 @@
           "id": "hold-9",
           "x": -0.8284271247461903,
           "faces": {
-            "y-": "wall",
+            "y-": "floor",
             "y+": "exit",
             "x-": "aisle",
             "z+": "exit",
@@ -1976,7 +1976,7 @@
           "id": "hold-10",
           "x": 0.5857864376269046,
           "faces": {
-            "y-": "wall",
+            "y-": "floor",
             "y+": "exit",
             "z+": "exit",
             "x+": "aisle",
@@ -1997,7 +1997,7 @@
           "faces": {
             "z+": "exit",
             "x+": "aisle",
-            "y+": "wall",
+            "y+": "floor",
             "z-": "wall",
             "y-": "exit",
             "x-": "aisle"
@@ -2020,7 +2020,7 @@
           "faces": {
             "y-": "exit",
             "z+": "exit",
-            "y+": "wall",
+            "y+": "floor",
             "x-": "aisle",
             "z-": "wall",
             "x+": "aisle"
@@ -2046,7 +2046,7 @@
             "x+": "exit",
             "y-": "exit",
             "z-": "wall",
-            "x-": "wall"
+            "x-": "floor"
           },
           "w": 2,
           "h": 2,
@@ -2067,7 +2067,7 @@
             "y+": "wall",
             "z+": "exit",
             "z-": "wall",
-            "x-": "wall",
+            "x-": "floor",
             "x+": "exit",
             "y-": "aisle"
           },
@@ -2091,7 +2091,7 @@
             "y-": "aisle",
             "z+": "exit",
             "z-": "wall",
-            "x+": "wall",
+            "x+": "floor",
             "x-": "exit"
           },
           "y": 3.17157287525381,
@@ -2115,7 +2115,7 @@
             "z+": "exit",
             "x-": "exit",
             "z-": "wall",
-            "x+": "wall"
+            "x+": "floor"
           },
           "y": 4.585786437626904,
           "w": 2,
