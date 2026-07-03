@@ -16,6 +16,9 @@ export interface Frame {
 export interface HoldOpts {
   loose?: ReadonlySet<string>
   pins?: ReadonlyMap<string, Placement>
+  /** the previous plan's placements: a box that still fits its old spot
+   *  keeps it, so a re-plan never re-deals cargo the user already saw settled */
+  prev?: ReadonlyMap<string, Placement>
   /** empty cells kept between different-stop blocks while space allows */
   gap?: number
   frames?: ReadonlyMap<string, Frame>
@@ -660,7 +663,7 @@ export function holdOracle(grids: CargoGrid[]): HoldOracle {
 }
 
 export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts = {}): HoldPlan {
-  const { loose, pins, gap = 0, frames } = opts
+  const { loose, pins, prev, gap = 0, frames } = opts
   const openable = grids.filter((g) => g.autoLoad !== false)
   const bays = openable.map((g, i) => bayCtx(g, i, frames?.get(g.id)))
   const bayById = new Map(bays.map((b) => [b.grid.id, b]))
@@ -693,10 +696,12 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     byBox: Map<string, Slot>
     verdicts: UnitVerdict[]
     concessions: Concession[]
+    kept: Set<string>
   }
   const runPass = (queue: PackBox[][], shaping: boolean): PassResult => {
     const slots: Slot[] = []
     const byBox = new Map<string, Slot>()
+    const kept = new Set<string>()
     if (pins)
       for (const [id, p] of pins) {
         const bay = bayById.get(p.gridId)
@@ -713,12 +718,44 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       const load = loadOf(unit[0].id)
       const drop = dropOf(unit[0].id)
       const stop = unit[0].stopIdx
-      // whole unit clean in one bay, then a fresh bay, then spilled, then per-box concessions
-      const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
-      const homes = open.filter(has).concat(open.filter((b) => !has(b)))
       const deep = drop === lastDrop
+      // a box that still fits the spot the previous plan gave it keeps it;
+      // only displaced boxes re-seat, so the layout the user saw stays put
+      let rest = unit
+      if (prev) {
+        rest = []
+        // floor first: a kept box's supporter must already be back in place
+        // before the support check runs
+        for (const box of [...unit].sort((a, b) => (prev.get(a.id)?.y ?? 0) - (prev.get(b.id)?.y ?? 0))) {
+          const pl = prev.get(box.id)
+          const bay = pl ? bayById.get(pl.gridId) : undefined
+          if (pl && bay) {
+            const t = fromPlacement(bay, { ...pl, box }, load, drop, false)
+            const rivals = slots.filter((s) => s.bay === bay.idx && windowsOverlap(s, t))
+            if (fits(rivals, t, gap, rivals.filter((r) => r.load < load && r.drop > load))) {
+              slots.push(t)
+              byBox.set(box.id, t)
+              kept.add(box.id)
+              continue
+            }
+          }
+          rest.push(box)
+        }
+        if (!rest.length) {
+          verdicts.push({ stop, load, ok: true, boxes: unit })
+          continue
+        }
+      }
+      // whole unit clean in one bay, then a fresh bay, then spilled, then per-box
+      // concessions. Bays holding this stop's pinned or kept cargo count as homes
+      // even before any unit opened them
+      const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
+      const homes = open
+        .filter(has)
+        .concat(bays.filter((b) => !open.includes(b) && has(b)))
+        .concat(open.filter((b) => !has(b)))
       let placed: Slot[] | null = null
-      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap, shaping, deep))) break
+      for (const b of homes) if ((placed = seatUnit([b], slots, rest, load, drop, gap, shaping, deep))) break
       if (!placed) {
         // the final delivery opens the smallest bay that takes it whole:
         // a handful of last-drop boxes claiming the big bay's bulkhead rows
@@ -726,18 +763,18 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         const fresh = bays.filter((b) => !open.includes(b))
         if (deep) fresh.sort((a, b) => a.cw * a.dl * a.h - b.cw * b.dl * b.h)
         for (const next of deep ? fresh : fresh.slice(0, 1))
-          if ((placed = seatUnit([next], slots, unit, load, drop, gap, shaping, deep))) {
+          if ((placed = seatUnit([next], slots, rest, load, drop, gap, shaping, deep))) {
             open.push(next)
             break
           }
       }
-      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap, shaping, deep)
+      if (!placed) placed = seatUnit(open, slots, rest, load, drop, gap, shaping, deep)
       if (placed) {
         slots.push(...placed)
         for (const s of placed) byBox.set(s.box.id, s)
         verdicts.push({ stop, load, ok: true, boxes: unit })
       } else {
-        const got = seatConceding(bays, open, slots, unit, load, drop, gap, shaping, deep)
+        const got = seatConceding(bays, open, slots, rest, load, drop, gap, shaping, deep)
         slots.push(...got.placed)
         for (const s of got.placed) byBox.set(s.box.id, s)
         concessions.push(...got.conceded)
@@ -745,7 +782,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         else verdicts.push({ stop, load, ok: true, boxes: unit })
       }
     }
-    return { slots, byBox, verdicts, concessions }
+    return { slots, byBox, verdicts, concessions, kept }
   }
 
   const homeless = (p: PassResult): number => p.verdicts.reduce((a, v) => a + (v.ok ? 0 : v.boxes.length), 0)
@@ -799,6 +836,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // it is a solver-time move like any other
   const reunite = (p: PassResult, shaped: boolean): Set<string> => {
     const moved = new Set<string>()
+    const nailed = (id: string): boolean => (pins?.has(id) ?? false) || p.kept.has(id)
     const byStop = new Map<number, Slot[]>()
     for (const s of p.slots)
       if (!s.anchor)
@@ -842,20 +880,20 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       for (const s of group) count.set(s.bay, (count.get(s.bay) ?? 0) + 1)
       if (count.size < 2) continue
       const scu = group.reduce((a, s) => a + s.box.size, 0)
-      // loaded cargo is nailed down: it can't move, but it still votes -
-      // only a bay holding every pinned box can be the family's home
-      const pinnedBays = new Set(group.filter((s) => pins?.has(s.box.id)).map((s) => s.bay))
-      if (pinnedBays.size > 1) continue
+      // pinned and kept cargo is nailed down: it can't move, but it still
+      // votes - only a bay holding every nailed box can be the family's home
+      const nailedBays = new Set(group.filter((s) => nailed(s.box.id)).map((s) => s.bay))
+      if (nailedBays.size > 1) continue
       // consolidation target: its biggest cluster's bay first, then the rest;
       // a bay the whole family can't even volume-fit isn't worth a scan
       const targets = [...count.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([i]) => i)
         .concat(bays.map((b) => b.idx).filter((i) => !count.has(i)))
-        .filter((i) => (!pinnedBays.size || pinnedBays.has(i)) && scu <= bays[i].cw * bays[i].dl * bays[i].h)
+        .filter((i) => (!nailedBays.size || nailedBays.has(i)) && scu <= bays[i].cw * bays[i].dl * bays[i].h)
       let done = false
       for (const homeIdx of targets) {
-        const strays = group.filter((s) => s.bay !== homeIdx && !pins?.has(s.box.id))
+        const strays = group.filter((s) => s.bay !== homeIdx && !nailed(s.box.id))
         if (moveAll(strays, homeIdx)) {
           for (const s of strays) moved.add(s.box.id)
           done = true
@@ -866,7 +904,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         // whole into another bay, then try the strays again
         const units = new Map<string, Slot[]>()
         for (const q of p.slots)
-          if (!q.anchor && !pins?.has(q.box.id) && q.bay === homeIdx && q.stop !== group[0].stop)
+          if (!q.anchor && !nailed(q.box.id) && q.bay === homeIdx && q.stop !== group[0].stop)
             (units.get(`${q.stop}@${q.load}`) ?? units.set(`${q.stop}@${q.load}`, []).get(`${q.stop}@${q.load}`)!).push(q)
         evict: for (const qs of [...units.values()].sort((a, b) => a.length - b.length).slice(0, 8)) {
           for (const t of bays) {
@@ -901,7 +939,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       return n + ((b.wallHigh ? t.c + t.cw === b.cw : t.c === 0) ? 1 : 0)
     }
     const tiny = p.slots
-      .filter((s) => !s.anchor && !pins?.has(s.box.id) && s.box.size <= 4)
+      .filter((s) => !s.anchor && !pins?.has(s.box.id) && !p.kept.has(s.box.id) && s.box.size <= 4)
       .sort((a, b) => b.box.size - a.box.size)
     for (const s of tiny) {
       const rider = p.slots.some(
