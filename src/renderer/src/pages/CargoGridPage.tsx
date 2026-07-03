@@ -769,12 +769,35 @@ export default function CargoGridPage(): React.ReactElement {
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
-  // this step's boxes are always yours to place: drag one and it pins where
-  // you drop it, leave the rest and they load exactly as shown
-  const placeIds = useMemo(
-    () => (loading && currentLoad?.kind === 'load' ? new Set(currentLoad.loadIds) : null),
-    [loading, currentLoad]
-  )
+  // green outline of where the plan wants this step's boxes, one box per bay.
+  // frozen when the step opens so it keeps showing the recommendation even after
+  // the user drags cargo off it. keyed by step so a rewind or advance recaptures
+  type Footprint = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number }
+  const footprintRef = useRef<{ idx: number; boxes: Footprint[] } | null>(null)
+  const planFootprint = useMemo<Footprint[]>(() => {
+    if (!loading || currentLoad?.kind !== 'load' || !loadingPack) {
+      footprintRef.current = null
+      return []
+    }
+    if (footprintRef.current?.idx === loadIdx) return footprintRef.current.boxes
+    const ids = new Set(currentLoad.loadIds)
+    const snap = loadingPack.snaps[loadIdx]
+    const mine = snap ? snap.placements.filter((p) => p.box.objectiveId && ids.has(p.box.objectiveId)) : []
+    const byBay = new Map<string, { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }>()
+    for (const p of mine) {
+      const b = byBay.get(p.gridId)
+      if (!b) byBay.set(p.gridId, { x0: p.x, y0: p.y, z0: p.z, x1: p.x + p.w, y1: p.y + p.h, z1: p.z + p.l })
+      else {
+        b.x0 = Math.min(b.x0, p.x); b.y0 = Math.min(b.y0, p.y); b.z0 = Math.min(b.z0, p.z)
+        b.x1 = Math.max(b.x1, p.x + p.w); b.y1 = Math.max(b.y1, p.y + p.h); b.z1 = Math.max(b.z1, p.z + p.l)
+      }
+    }
+    const boxes: Footprint[] = [...byBay].map(([gridId, b]) => ({ gridId, x: b.x0, y: b.y0, z: b.z0, w: b.x1 - b.x0, l: b.z1 - b.z0, h: b.y1 - b.y0 }))
+    footprintRef.current = { idx: loadIdx, boxes }
+    return boxes
+    // capture once per step: dragging must not move the recommendation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loadIdx, currentLoad])
   // a later visit of this node that only fetches cargo: when raw space is
   // aboard from here to there, offer to grab it now and skip the return.
   // Only offered while standing at the node's first visit, where the grab
@@ -870,9 +893,6 @@ export default function CargoGridPage(): React.ReactElement {
   const [group, setGroup] = useState<GroupMember[] | null>(null)
   const [sel, setSel] = useState<Set<string>>(() => new Set())
   const [ghost, setGhost] = useState<Ghost | null>(null)
-  // where the plan had each dragged box before you grabbed it
-  type Origin = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number }
-  const [origins, setOrigins] = useState<Origin[] | null>(null)
   // ship-coord cursor; held box follows
   const [dragPos, setDragPos] = useState<{ x: number; z: number } | null>(null)
   const [dragRot, setDragRot] = useState(false)
@@ -928,6 +948,30 @@ export default function CargoGridPage(): React.ReactElement {
     return -1
   }
 
+  // slide the footprint around the hovered cell so the whole top face of a
+  // support box is a valid stack target, not just its min corner. Candidates are
+  // every anchor whose footprint still covers the cursor; the one that rests
+  // highest wins, ties nearest the raw anchor so ground drops don't drift
+  const bestAnchor = (
+    occ: Set<string>, g: CargoGrid, hx: number, hz: number, gw: number, gl: number, fw: number, fl: number, fh: number
+  ): { x: number; z: number; y: number } => {
+    const rx = Math.max(0, Math.min(gw - fw, hx))
+    const rz = Math.max(0, Math.min(gl - fl, hz))
+    let best = { x: rx, z: rz, y: dropY(occ, g, rx, rz, fw, fl, fh) }
+    for (let dx = 0; dx < fw; dx++)
+      for (let dz = 0; dz < fl; dz++) {
+        const ax = hx - dx
+        const az = hz - dz
+        if (ax < 0 || az < 0 || ax + fw > gw || az + fl > gl) continue
+        const y = dropY(occ, g, ax, az, fw, fl, fh)
+        if (y < 0) continue
+        if (y > best.y || best.y < 0) best = { x: ax, z: az, y }
+        else if (y === best.y && Math.abs(ax - rx) + Math.abs(az - rz) < Math.abs(best.x - rx) + Math.abs(best.z - rz))
+          best = { x: ax, z: az, y }
+      }
+    return best
+  }
+
   const computeGhost = (shipX: number, shipZ: number): Ghost | null => {
     if (!drag) return null
     const dims = BOX_DIMS[drag.box.size]
@@ -941,10 +985,8 @@ export default function CargoGridPage(): React.ReactElement {
       const gx = offGridBay.x
       const gz = offGridBay.z
       if (shipX >= gx && shipX < gx + offGridBay.w && shipZ >= gz && shipZ < gz + offGridBay.l) {
-        const lx = Math.max(0, Math.min(offGridBay.w - fw, Math.floor(shipX - gx)))
-        const lz = Math.max(0, Math.min(offGridBay.l - fl, Math.floor(shipZ - gz)))
-        const y = dropY(offOcc, offGridBay, lx, lz, fw, fl, fh)
-        return { gridId: OFF_GRID_ID, x: lx, y: y < 0 ? 0 : y, z: lz, w: fw, l: fl, h: fh, valid: y >= 0 }
+        const b = bestAnchor(offOcc, offGridBay, Math.floor(shipX - gx), Math.floor(shipZ - gz), offGridBay.w, offGridBay.l, fw, fl, fh)
+        return { gridId: OFF_GRID_ID, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
       }
     }
     for (const g of grids) {
@@ -955,8 +997,8 @@ export default function CargoGridPage(): React.ReactElement {
       const lx = Math.max(0, Math.min(g.w - fw, Math.floor(shipX - gx)))
       const lz = Math.max(0, Math.min(g.l - fl, Math.floor(shipZ - gz)))
       if (!group) {
-        const y = dropY(occCells.get(g.id) ?? new Set(), g, lx, lz, fw, fl, fh)
-        return { gridId: g.id, x: lx, y: y < 0 ? 0 : y, z: lz, w: fw, l: fl, h: fh, valid: y >= 0 }
+        const b = bestAnchor(occCells.get(g.id) ?? new Set(), g, Math.floor(shipX - gx), Math.floor(shipZ - gz), g.w, g.l, fw, fl, fh)
+        return { gridId: g.id, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
       }
       // rigid group: same cell offsets, each box falls to its own support.
       // Members go bottom-up and count as floor for whatever rides above
@@ -999,16 +1041,20 @@ export default function CargoGridPage(): React.ReactElement {
           const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
           setBoxLoose(d.key, true, at)
           setLooseSpot(d.key, { gridId: OFF_GRID_ID, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
-        } else if (currentLoad?.kind === 'load') {
+        } else {
           // placing a box pins it there; the re-plan keeps everything the drop
-          // didn't displace. a box pulled off the pane rejoins the plan, loaded now
+          // didn't displace. a box pulled off the pane rejoins the plan, loaded now.
+          // an already-aboard box keeps the pickup it arrived on; a fresh one takes
+          // this step's, so restacking works even while standing on a drop step
+          const here = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
           const pins: Record<string, LoadedPin> = {}
-          const pickupKey = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
           for (const s of spots) {
+            const pk = loadedPins[s.key]?.pickupKey ?? here
+            if (!pk) continue
             if (looseBoxes.includes(s.key)) setBoxLoose(s.key, false)
-            pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey }
+            pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey: pk }
           }
-          addLoadedPins(pins)
+          if (Object.keys(pins).length) addLoadedPins(pins)
         }
         if (ghost.members) setSel(new Set())
       }
@@ -1016,7 +1062,6 @@ export default function CargoGridPage(): React.ReactElement {
     })
     setGroup(null)
     setGhost(null)
-    setOrigins(null)
     setDragPos(null)
     lastPt.current = null
   }
@@ -1056,11 +1101,9 @@ export default function CargoGridPage(): React.ReactElement {
         }))
       )
       setDragRot(pl.rotated)
-      setOrigins(picked.map(({ p }) => ({ gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h })))
     } else {
       if (sel.size) setSel(new Set())
       setDragRot(loadedPins[key]?.rotated ?? pl.rotated)
-      setOrigins([{ gridId: g.id, x: pl.x, y: pl.y, z: pl.z, w: pl.w, l: pl.l, h: pl.h }])
     }
     setDrag({ key, box: pl.box })
     const sx = (g.x || 0) + pl.x + pl.w / 2
@@ -1079,7 +1122,6 @@ export default function CargoGridPage(): React.ReactElement {
         setDrag(null)
         setGroup(null)
         setGhost(null)
-        setOrigins(null)
         setDragPos(null)
       }
     }
@@ -1416,6 +1458,26 @@ export default function CargoGridPage(): React.ReactElement {
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
           <OrientationLabels frame={frame} half={shipHalf} shipCenter={shipCenter} />
+          {loading && planFootprint.map((f) => {
+            const g = gridById.get(f.gridId)
+            if (!g) return null
+            return (
+              <group key={f.gridId} position={[center(g.x || 0, g.w, origin[0]), center(g.y || 0, g.h, origin[1]), center(g.z || 0, g.l, origin[2])]} rotation={bayRot(g)}>
+                <mesh
+                  raycast={() => null}
+                  position={[
+                    center((g.x || 0) + f.x, f.w, origin[0]) - center(g.x || 0, g.w, origin[0]),
+                    center((g.y || 0) + f.y, f.h, origin[1]) - center(g.y || 0, g.h, origin[1]),
+                    center((g.z || 0) + f.z, f.l, origin[2]) - center(g.z || 0, g.l, origin[2])
+                  ]}
+                >
+                  <boxGeometry args={[f.w, f.h, f.l]} />
+                  <meshBasicMaterial color={C.green} transparent opacity={0.05} depthWrite={false} />
+                  <Edges color={C.green} />
+                </mesh>
+              </group>
+            )
+          })}
           {loading && offGridBay && (
             <>
               <GridShell grid={offGridBay} origin={origin} />
@@ -1467,10 +1529,12 @@ export default function CargoGridPage(): React.ReactElement {
           {loading && visiblePlacements.map((pl) => {
             const g = gridById.get(pl.gridId)
             if (!g) return null
-            const mkey = placeIds?.has(pl.box.objectiveId ?? '') ? boxKey(pl.box) : undefined
+            const mode = boxMode(pl.box.objectiveId)
+            // this step's cargo and anything already aboard is yours to rearrange;
+            // future-trip boxes stay put
+            const mkey = mode === 'current' || mode === 'loaded' ? boxKey(pl.box) : undefined
             // ghost stands in while dragging
             if (mkey && dragKeys?.has(mkey)) return null
-            const mode = boxMode(pl.box.objectiveId)
             if (loading && mode === 'future') return null
             return (
               <Box
@@ -1531,38 +1595,6 @@ export default function CargoGridPage(): React.ReactElement {
                     <meshStandardMaterial color={m.box.color} roughness={0.6} metalness={0} emissive={C.green} emissiveIntensity={0.1} />
                     <Edges color={C.green} />
                   </mesh>
-                )
-              })
-            })()}
-          {drag &&
-            origins &&
-            (() => {
-              const byGrid = new Map<string, Origin[]>()
-              for (const o of origins) (byGrid.get(o.gridId) ?? byGrid.set(o.gridId, []).get(o.gridId)!).push(o)
-              return [...byGrid].map(([gid, spots]) => {
-                const g = gridById.get(gid)
-                if (!g) return null
-                const bcx = center(g.x || 0, g.w, origin[0])
-                const bcy = center(g.y || 0, g.h, origin[1])
-                const bcz = center(g.z || 0, g.l, origin[2])
-                return (
-                  <group key={gid} position={[bcx, bcy, bcz]} rotation={bayRot(g)}>
-                    {spots.map((s, i) => (
-                      <mesh
-                        key={i}
-                        raycast={() => null}
-                        position={[
-                          center((g.x || 0) + s.x, s.w, origin[0]) - bcx,
-                          center((g.y || 0) + s.y, s.h, origin[1]) - bcy,
-                          center((g.z || 0) + s.z, s.l, origin[2]) - bcz
-                        ]}
-                      >
-                        <boxGeometry args={[s.w - GAP, s.h - GAP, s.l - GAP]} />
-                        <meshBasicMaterial transparent opacity={0.04} depthWrite={false} color={C.ghost} />
-                        <Edges color={C.ghost} />
-                      </mesh>
-                    ))}
-                  </group>
                 )
               })
             })()}
