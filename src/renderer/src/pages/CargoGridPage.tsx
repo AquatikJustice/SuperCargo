@@ -533,6 +533,7 @@ export default function CargoGridPage(): React.ReactElement {
   const setBoxLoose = useStore((s) => s.setBoxLoose)
   const looseSpots = useStore((s) => s.looseSpots)
   const setLooseSpot = useStore((s) => s.setLooseSpot)
+  const looseAt = useStore((s) => s.looseAt)
   const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
@@ -995,7 +996,8 @@ export default function CargoGridPage(): React.ReactElement {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
           if (loadedPins[d.key]) clearLoadedPin(d.key)
-          setBoxLoose(d.key, true)
+          const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
+          setBoxLoose(d.key, true, at)
           setLooseSpot(d.key, { gridId: OFF_GRID_ID, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
         } else if (currentLoad?.kind === 'load') {
           // placing a box pins it there; the re-plan keeps everything the drop
@@ -1104,6 +1106,73 @@ export default function CargoGridPage(): React.ReactElement {
     setSel((s) => (s.size ? new Set<string>() : s))
   }, [loading, loadIdx])
 
+  // first walk-step index bearing each pickup key / objective, so a rewind can
+  // tell which decisions were made past where the cursor landed
+  const stepPos = useMemo(() => {
+    const byPickup = new Map<string, number>()
+    const byObjective = new Map<string, number>()
+    loadSteps.forEach((s, i) => {
+      const pk = pickupVisitKey(s.nodeKey, s.trip)
+      if (!byPickup.has(pk)) byPickup.set(pk, i)
+      if (s.kind === 'load') for (const id of s.loadIds) if (!byObjective.has(id)) byObjective.set(id, i)
+    })
+    return { byPickup, byObjective }
+  }, [loadSteps])
+
+  // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
+  // at a step now ahead of the cursor reset; deferrals resolve in frozen space
+  // since their steps are pruned from the walk. Only fires stepping back, and
+  // not when a come-back prunes steps and shifts the cursor to hold its spot
+  const prevIdx = useRef(loadIdx)
+  const prevLen = useRef(loadSteps.length)
+  useEffect(() => {
+    const from = prevIdx.current
+    const fromLen = prevLen.current
+    prevIdx.current = loadIdx
+    prevLen.current = loadSteps.length
+    if (!loading || loadIdx >= from || loadSteps.length < fromLen) return
+    const i = loadIdx
+
+    for (const [key, p] of Object.entries(loadedPins)) {
+      const at = stepPos.byPickup.get(p.pickupKey)
+      if (at !== undefined && at > i) clearLoadedPin(key)
+    }
+    for (const [key, pk] of Object.entries(looseAt)) {
+      const at = stepPos.byPickup.get(pk)
+      if (at !== undefined && at > i) setBoxLoose(key, false)
+    }
+    for (const id of grabbedObjectives) {
+      const at = stepPos.byObjective.get(id)
+      if (at !== undefined && at > i) setObjectiveGrabbed(id, false)
+    }
+    for (let s = i + 1; s < loadSteps.length; s++) {
+      const step = loadSteps[s]
+      if (step.kind !== 'load') continue
+      const key = pickupVisitKey(step.nodeKey, step.trip)
+      for (const oid of step.loadIds) {
+        const cid = objMeta.get(oid)?.contractId
+        if (cid && tickedObj.has(oid)) setPickedUp(cid, oid, key, false)
+      }
+    }
+    if (frozenSteps && deferredObjectives.length) {
+      const landed = loadSteps[i]
+      const pos = landed
+        ? frozenSteps.indexOf(landed) >= 0
+          ? frozenSteps.indexOf(landed)
+          : frozenSteps.findIndex(
+              (f) => f.kind === landed.kind && f.nodeKey === landed.nodeKey && f.trip === landed.trip && f.boundFor === landed.boundFor && f.groupPos === landed.groupPos
+            )
+        : 0
+      if (pos >= 0)
+        for (const oid of deferredObjectives) {
+          if (tickedObj.has(oid)) continue
+          const decisionAt = frozenSteps.findIndex((f) => f.kind === 'load' && f.loadIds.includes(oid))
+          if (decisionAt >= pos) setObjectiveDeferred(oid, false)
+        }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadIdx, loading])
+
   // re-snap on rotate in place
   useEffect(() => {
     if (drag && lastPt.current) setGhost(computeGhost(lastPt.current.x, lastPt.current.z))
@@ -1187,7 +1256,10 @@ export default function CargoGridPage(): React.ReactElement {
               loose={looseNow}
               setAside={setAside}
               unplaced={result.unplaced}
-              onStashOffGrid={(boxes) => boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true))}
+              onStashOffGrid={(boxes) => {
+                const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
+                boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true, at))
+              }}
               onComeBack={(ids) => {
                 // the deferred pickup's steps vanish from the walk; keep the
                 // cursor on the same physical step
@@ -1234,38 +1306,22 @@ export default function CargoGridPage(): React.ReactElement {
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {
-                // stepping back re-opens the step you land on: pickups un-tick,
-                // turn-ins un-mark, so rewinding resets the manifest as you go
+                // re-open the step you land on; everything decided past the
+                // cursor (pins, stashes, grabs, defers, ticks) unwinds in the
+                // back-movement effect
                 const prev = loadSteps[loadIdx - 1]
                 if (prev?.kind === 'load')
                   for (const oid of prev.loadIds) {
                     const cid = objMeta.get(oid)?.contractId
                     if (cid) setPickedUp(cid, oid, pickupVisitKey(prev.nodeKey, prev.trip), false)
-                    // stash decisions rewind with the step too
-                    for (const key of looseBoxes) if (key.startsWith(`${oid}#`)) setBoxLoose(key, false)
                   }
                 else if (prev?.kind === 'drop') unmarkTurnIn(prev.lines.map((l) => l.objectiveId))
-                // rewinding past a come-back's decision point puts that pickup
-                // back in the walk (its decision lived at its own load step)
-                if (prev && frozenSteps && deferredObjectives.length) {
-                  const pos =
-                    frozenSteps.indexOf(prev) >= 0
-                      ? frozenSteps.indexOf(prev)
-                      : frozenSteps.findIndex(
-                          (f) => f.kind === prev.kind && f.nodeKey === prev.nodeKey && f.trip === prev.trip && f.boundFor === prev.boundFor && f.groupPos === prev.groupPos
-                        )
-                  if (pos >= 0)
-                    for (const oid of deferredObjectives) {
-                      if (tickedObj.has(oid)) continue
-                      const decisionAt = frozenSteps.findIndex((f) => f.kind === 'load' && f.loadIds.includes(oid))
-                      if (decisionAt >= pos) setObjectiveDeferred(oid, false)
-                    }
-                }
                 setLoadIdx((i) => Math.max(0, i - 1))
               }}
               onExit={() => setLoading(false)}
               onRestart={() => {
-                // starting over untouches every pickup, turn-in, and decision
+                // starting over wipes every pickup, turn-in, placed pin, stash
+                // and decision so the walk is a fresh start
                 clearAllPickedUp()
                 unmarkTurnIn(contracts.flatMap((c) => c.objectives.map((o) => o.id)))
                 resetWalkDecisions()

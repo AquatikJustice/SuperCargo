@@ -193,6 +193,8 @@ export interface ManifestDoc {
   loose?: string[]
   /** where each off-grid box sits in the virtual pane, keyed by objectiveId#slot */
   looseSpots?: Record<string, ManualPlacement>
+  /** pickupKey each box went loose at, so a rewind past that step un-stashes it; keyed by objectiveId#slot */
+  looseAt?: Record<string, string>
   /** missionIds the user dismissed; scan-session won't re-import them from the log */
   dismissed?: string[]
   /** objectiveIds the user pushed to a later trip */
