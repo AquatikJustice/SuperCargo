@@ -149,6 +149,8 @@ interface Relax {
 interface Span {
   d0: number
   d1: number
+  /** across columns only from here back: caps wall rows at the balanced count */
+  wallFrom?: number
 }
 
 // slide in at its level, or lower it down an open-topped column: a pit
@@ -219,6 +221,10 @@ function findSpot(
   for (let c = 0; c + cwf <= bay.cw; c++) {
     for (let d = 0; d + dlf <= bay.dl; d++) {
       if (span && (d < span.d0 || d + dlf > span.d1)) continue
+      if (span?.wallFrom != null && cwf > dlf && d < span.wallFrom) continue
+      // shaped across columns keep to the wall lattice; glue must not drag
+      // a wall column a cell off its line to kiss a smalls pile
+      if (span && cwf > dlf && (bay.wallHigh ? bay.cw - (c + cwf) : c) % cwf !== 0) continue
       const t: Slot = { ...probe, bay: bay.idx, c, d, y: 0, cw: cwf, dl: dlf, h: hf }
       const tops = new Set<number>([0])
       for (const r of rivals)
@@ -270,10 +276,11 @@ function findSpot(
         let contacts = 0
         for (const r of rivals) if (r.stop === t.stop && touches(t, r)) contacts++
         const glued = contacts ? 0 : 1
-        // smalls keep to the aisle side, floor or perch: the wall line is
-        // where tall columns land, and an early squatter there leaves the
-        // later group an awkward corner to build around
-        const hugHigh = cwf * dlf <= 4 ? !bay.wallHigh : bay.wallHigh
+        // smalls keep to the aisle side: the wall line is where tall columns
+        // land, and an early squatter there leaves the later group an awkward
+        // corner to build around. On the floor this is shaping-only - in raw
+        // fit-finding it eats aisle cells a packed ship can't spare
+        const hugHigh = cwf * dlf <= 4 && (y > 0 || span) ? !bay.wallHigh : bay.wallHigh
         const cWall = hugHigh ? bay.cw - (t.c + cwf) : t.c
         const aisle = span && dlf > cwf ? 1 : 0
         // the run's final delivery anchors at the far wall: nothing ever
@@ -374,11 +381,38 @@ function seatUnit(
 ): Slot[] | null {
   const first = seatBoxes(cfg, slots, unit, load, drop, gap, undefined, deep)
   if (!first || !shaping) return first
-  const bay = first[0].bay
-  if (first.some((s) => s.bay !== bay)) return first
+  const bayIdx = first[0].bay
+  if (first.some((s) => s.bay !== bayIdx)) return first
   const d0 = Math.min(...first.map((s) => s.d))
   const d1 = Math.max(...first.map((s) => s.d + s.dl))
-  const shaped = seatBoxes(cfg.filter((b) => b.idx === bay), slots, unit, load, drop, gap, { d0, d1 }, deep)
+  const one = cfg.filter((b) => b.idx === bayIdx)
+  // greedy fills every wall row before rotating anything, which strands a
+  // void in the aisle lane of a big bucket. For uniform 16s the wall/aisle
+  // split is solvable: cap wall rows at the balanced count so both lanes
+  // run the same depth, and give the smalls the freed front row
+  const bay = one[0]
+  const n16 = unit.filter((b) => b.size === 16).length
+  const cols = Math.floor(bay.cw / 4)
+  const per = Math.floor(bay.h / 2)
+  if (n16 > 0 && cols > 0 && per > 0 && bay.cw - cols * 4 >= 2 && unit.every((b) => b.size <= 16)) {
+    let bw = Math.ceil(n16 / (per * cols))
+    let ba = 0
+    const score = (w: number, a: number): number[] => [Math.max(2 * w, 4 * a), Math.abs(2 * w - 4 * a)]
+    for (let a = 1; a <= Math.ceil(n16 / per); a++) {
+      const w = Math.ceil(Math.max(0, n16 - a * per) / (per * cols))
+      if (beats(score(w, a), score(bw, ba))) {
+        bw = w
+        ba = a
+      }
+    }
+    for (const pad of [0, 2]) {
+      const depth = Math.max(2 * bw, 4 * ba) + pad
+      if (d0 + depth > bay.dl) break
+      const shaped = seatBoxes(one, slots, unit, load, drop, gap, { d0, d1: d0 + depth, wallFrom: d0 + depth - 2 * bw }, deep)
+      if (shaped) return shaped
+    }
+  }
+  const shaped = seatBoxes(one, slots, unit, load, drop, gap, { d0, d1 }, deep)
   return shaped ?? first
 }
 
@@ -688,13 +722,18 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   }
 
   // neat shapes when they're free; a near-full hold keeps whichever world
-  // owes fewer concessions
+  // owes fewer concessions, and once boxes are homeless the flat world also
+  // takes ties - shapes have no business winning under that kind of pressure
   let pass = solve(true)
   if (homeless(pass) || pass.concessions.length) {
     const flat = solve(false)
+    const h = homeless(pass) - homeless(flat)
     if (
-      homeless(flat) < homeless(pass) ||
-      (homeless(flat) === homeless(pass) && flat.concessions.length < pass.concessions.length)
+      h > 0 ||
+      (h === 0 &&
+        (homeless(pass) > 0
+          ? flat.concessions.length <= pass.concessions.length
+          : flat.concessions.length < pass.concessions.length))
     )
       pass = flat
   }
