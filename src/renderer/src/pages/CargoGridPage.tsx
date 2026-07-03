@@ -124,6 +124,24 @@ function bayRot(grid: CargoGrid): [number, number, number] | undefined {
   return r ? [(r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180] : undefined
 }
 
+type Ax = 0 | 1 | 2
+const axOf = (c: string): Ax => (c === 'x' ? 0 : c === 'y' ? 1 : 2)
+const sizeOf = (g: CargoGrid): [number, number, number] => [g.w, g.h, g.l]
+
+// world-extent per axis for a hand-held box in this bay: h grows off the
+// floor face, l runs the exit axis, w takes the axis that's left
+function extentsFor(g: CargoGrid, dims: { w: number; l: number; h: number }, rotated: boolean): [number, number, number] {
+  const floor = g.floor ?? 'y-'
+  const up = axOf(floor[0])
+  const depth = g.exit && axOf(g.exit.axis) !== up ? axOf(g.exit.axis) : up === 2 ? 0 : 2
+  const cross = (3 - up - depth) as Ax
+  const ext: [number, number, number] = [0, 0, 0]
+  ext[up] = dims.h
+  ext[depth] = rotated ? dims.w : dims.l
+  ext[cross] = rotated ? dims.l : dims.w
+  return ext
+}
+
 type BoxMode = 'normal' | 'current' | 'loaded' | 'future'
 
 function Box({
@@ -151,7 +169,7 @@ function Box({
   offGrid?: boolean
   onStart?: (e: ThreeEvent) => void
   onReset?: () => void
-  onDragMove?: (shipX: number, shipZ: number) => void
+  onDragMove?: (shipX: number, shipZ: number, ray?: THREE.Ray) => void
   onHover: (h: Omit<HoverInfo, 'x' | 'y'>, e: ThreeEvent) => void
   onLeave: () => void
 }): React.ReactElement {
@@ -198,7 +216,7 @@ function Box({
           onDragMove
             ? (e) => {
                 e.stopPropagation()
-                onDragMove(e.point.x + origin[0], e.point.z + origin[2])
+                onDragMove(e.point.x + origin[0], e.point.z + origin[2], e.ray)
               }
             : undefined
         }
@@ -542,15 +560,16 @@ export default function CargoGridPage(): React.ReactElement {
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
     const events = buildLoadEvents(loadSteps, source)
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
-    // cargo already aboard is locked at the spot it was loaded; re-plans pack around it
+    // cargo already aboard is locked at the spot it was loaded; re-plans pack
+    // around it. Extents follow the bay's floor axis, not a blanket y-up
     const pins = new Map<string, Placement>()
     for (const b of source) {
       const lp = loadedPins[boxKey(b)]
       const dims = BOX_DIMS[b.size]
       if (!lp || !dims) continue
-      const w = lp.rotated ? dims.l : dims.w
-      const l = lp.rotated ? dims.w : dims.l
-      pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w, l, h: dims.h, rotated: lp.rotated })
+      const g = grids.find((x) => x.id === lp.gridId)
+      const ext = g ? extentsFor(g, dims, lp.rotated) : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
+      pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: ext[0], l: ext[2], h: ext[1], rotated: lp.rotated })
     }
     // apply prev only while a walk is frozen; planning stays a fresh solve.
     // Captured from every plan, so the walk starts from the exact layout the
@@ -927,6 +946,73 @@ export default function CargoGridPage(): React.ReactElement {
     return set
   }, [loosePlacements, dragKeys])
 
+  const dragRay = useRef<THREE.Ray | null>(null)
+
+  // rest a box against the bay's floor face, or the stack growing off it,
+  // whatever axis that floor happens to be on
+  const dropOn = (occ: Set<string>, g: CargoGrid, at: [number, number, number], ext: [number, number, number]): [number, number, number] | null => {
+    const floor = g.floor ?? 'y-'
+    const up = axOf(floor[0])
+    const grow = floor[1] === '-' ? 1 : -1
+    const size = sizeOf(g)
+    const others = [0, 1, 2].filter((a) => a !== up) as [Ax, Ax]
+    const free = (p: [number, number, number]): boolean => {
+      for (let dx = 0; dx < ext[0]; dx++)
+        for (let dy = 0; dy < ext[1]; dy++)
+          for (let dz = 0; dz < ext[2]; dz++) if (occ.has(`${p[0] + dx},${p[1] + dy},${p[2] + dz}`)) return false
+      return true
+    }
+    const max = size[up] - ext[up]
+    for (let i = 0; i <= max; i++) {
+      const u = grow === 1 ? i : max - i
+      const p = [...at] as [number, number, number]
+      p[up] = u
+      if (!free(p)) continue
+      if (i === 0) return p
+      const lay = grow === 1 ? u - 1 : u + ext[up]
+      let held = true
+      for (let da = 0; da < ext[others[0]] && held; da++)
+        for (let db = 0; db < ext[others[1]] && held; db++) {
+          const c = [0, 0, 0]
+          c[up] = lay
+          c[others[0]] = p[others[0]] + da
+          c[others[1]] = p[others[1]] + db
+          if (!occ.has(`${c[0]},${c[1]},${c[2]}`)) held = false
+        }
+      if (held) return p
+    }
+    return null
+  }
+
+  // pointer ray -> fractional local coords on a bay's floor plane. The bay
+  // renders spun about its center, so the ray goes through the inverse spin
+  // before any cell math; without this a 45deg pallet reads garbage cells
+  const tiltedHit = (g: CargoGrid, ray: THREE.Ray): { at: [number, number, number]; t: number } | null => {
+    const size = sizeOf(g)
+    const min = new THREE.Vector3((g.x || 0) - origin[0], (g.y || 0) - origin[1], (g.z || 0) - origin[2])
+    const pivot = min.clone().add(new THREE.Vector3(size[0] / 2, size[1] / 2, size[2] / 2))
+    const o = ray.origin.clone().sub(pivot)
+    const d = ray.direction.clone()
+    const e = bayRot(g)
+    if (e) {
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0], e[1], e[2])).invert()
+      o.applyQuaternion(q)
+      d.applyQuaternion(q)
+    }
+    o.add(pivot)
+    const floor = g.floor ?? 'y-'
+    const up = axOf(floor[0])
+    const planeAt = floor[1] === '-' ? min.getComponent(up) : min.getComponent(up) + size[up]
+    const denom = d.getComponent(up)
+    if (Math.abs(denom) < 1e-6) return null
+    const t = (planeAt - o.getComponent(up)) / denom
+    if (t <= 0) return null
+    const p = o.addScaledVector(d, t)
+    const at: [number, number, number] = [p.x - min.x, p.y - min.y, p.z - min.z]
+    for (const a of [0, 1, 2].filter((x) => x !== up)) if (at[a] < -0.75 || at[a] > size[a] + 0.75) return null
+    return { at, t }
+  }
+
   const dropY = (occ: Set<string>, g: CargoGrid, lx: number, lz: number, fw: number, fl: number, fh: number): number => {
     for (let y = 0; y + fh <= g.h; y++) {
       let free = true
@@ -975,6 +1061,56 @@ export default function CargoGridPage(): React.ReactElement {
     const fw = anchor ? anchor.w : dragRot ? dims.l : dims.w
     const fl = anchor ? anchor.l : dragRot ? dims.w : dims.l
     const fh = dims.h
+    // spun or re-floored bays aim through the pointer ray at their own floor
+    // plane; the ground-plane projection below never lands on a 45deg pallet.
+    // Nearest hit wins. Groups stay flat-bay-only
+    if (!group && dragRay.current) {
+      let hitBest: { g: CargoGrid; at: [number, number, number]; t: number } | null = null
+      for (const g of grids) {
+        if (g.autoLoad === false || (!g.rot && (g.floor ?? 'y-') === 'y-')) continue
+        const hit = tiltedHit(g, dragRay.current)
+        if (hit && (!hitBest || hit.t < hitBest.t)) hitBest = { g, at: hit.at, t: hit.t }
+      }
+      if (hitBest) {
+        const g = hitBest.g
+        const ext = extentsFor(g, dims, dragRot)
+        const size = sizeOf(g)
+        const floor = g.floor ?? 'y-'
+        const up = axOf(floor[0])
+        const grow = floor[1] === '-' ? 1 : -1
+        const others = [0, 1, 2].filter((a) => a !== up) as [Ax, Ax]
+        const raw = [0, 0, 0] as [number, number, number]
+        for (const a of others) raw[a] = Math.max(0, Math.min(size[a] - ext[a], Math.floor(hitBest.at[a])))
+        const occ = occCells.get(g.id) ?? new Set<string>()
+        // slide the footprint around the aim so a stack's whole face is a target
+        let spot: [number, number, number] | null = null
+        let deep = -1
+        let near = Infinity
+        for (let da = 0; da < ext[others[0]]; da++)
+          for (let db = 0; db < ext[others[1]]; db++) {
+            const c = [0, 0, 0] as [number, number, number]
+            c[others[0]] = Math.floor(hitBest.at[others[0]]) - da
+            c[others[1]] = Math.floor(hitBest.at[others[1]]) - db
+            if (c[others[0]] < 0 || c[others[1]] < 0) continue
+            if (c[others[0]] + ext[others[0]] > size[others[0]] || c[others[1]] + ext[others[1]] > size[others[1]]) continue
+            const got = dropOn(occ, g, c, ext)
+            if (!got) continue
+            const depth = grow === 1 ? got[up] : size[up] - ext[up] - got[up]
+            const dist = Math.abs(c[others[0]] - raw[others[0]]) + Math.abs(c[others[1]] - raw[others[1]])
+            if (depth > deep || (depth === deep && dist < near)) {
+              spot = got
+              deep = depth
+              near = dist
+            }
+          }
+        if (!spot) {
+          const flat = [...raw] as [number, number, number]
+          flat[up] = grow === 1 ? 0 : size[up] - ext[up]
+          return { gridId: g.id, x: flat[0], y: flat[1], z: flat[2], w: ext[0], h: ext[1], l: ext[2], valid: false }
+        }
+        return { gridId: g.id, x: spot[0], y: spot[1], z: spot[2], w: ext[0], h: ext[1], l: ext[2], valid: true }
+      }
+    }
     // the pane is a single-box target: a group stays a ship-side move
     if (offGridBay && !group) {
       const gx = offGridBay.x
@@ -985,7 +1121,8 @@ export default function CargoGridPage(): React.ReactElement {
       }
     }
     for (const g of grids) {
-      if (g.autoLoad === false) continue
+      // spun/re-floored bays only take drops through the ray path above
+      if (g.autoLoad === false || g.rot || (g.floor ?? 'y-') !== 'y-') continue
       const gx = g.x || 0
       const gz = g.z || 0
       if (shipX < gx || shipX >= gx + g.w || shipZ < gz || shipZ >= gz + g.l) continue
@@ -1019,8 +1156,9 @@ export default function CargoGridPage(): React.ReactElement {
     return null
   }
 
-  const handleDragMove = (shipX: number, shipZ: number): void => {
+  const handleDragMove = (shipX: number, shipZ: number, ray?: THREE.Ray): void => {
     lastPt.current = { x: shipX, z: shipZ }
+    if (ray) dragRay.current = ray.clone()
     setDragPos({ x: shipX, z: shipZ })
     setGhost(computeGhost(shipX, shipZ))
   }
@@ -1059,6 +1197,7 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(null)
     setDragPos(null)
     lastPt.current = null
+    dragRay.current = null
   }
 
   const startDrag = (key: string, pl: Placement, g: CargoGrid, e: ThreeEvent): void => {
@@ -1558,7 +1697,7 @@ export default function CargoGridPage(): React.ReactElement {
               rotation={[-Math.PI / 2, 0, 0]}
               onPointerMove={(e) => {
                 e.stopPropagation()
-                handleDragMove(e.point.x + origin[0], e.point.z + origin[2])
+                handleDragMove(e.point.x + origin[0], e.point.z + origin[2], e.ray)
               }}
             >
               <planeGeometry args={[4000, 4000]} />
