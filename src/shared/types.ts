@@ -157,8 +157,8 @@ export interface CargoLayout {
   boxes: FrozenBox[]
 }
 
-/** a box the user hand-placed in manual mode, keyed by objectiveId#slot so it
- *  survives manifest edits. coords are bay-local cells, like a Placement. */
+/** a hand-placed box, keyed by objectiveId#slot so it survives manifest edits.
+ *  coords are bay-local cells, like a Placement. */
 export interface ManualPlacement {
   gridId: string
   x: number
@@ -184,13 +184,10 @@ export interface ManifestDoc {
   layout?: CargoLayout
   /** empty = let the solver pick the start */
   startLocation?: string
-  /** hand-placed boxes from manual mode, keyed by objectiveId#slot */
-  manualLayout?: Record<string, ManualPlacement>
   /** boxes aboard mid-walk, locked at the spot they were loaded, keyed by objectiveId#slot */
   loadedPins?: Record<string, LoadedPin>
-  /** resume the loading/manual walkthrough where you left off after a restart */
+  /** resume the loading walkthrough where you left off after a restart */
   loadingActive?: boolean
-  manualActive?: boolean
   loadingIdx?: number
   /** boxes the user chose to overload off-grid, keyed by objectiveId#slot */
   loose?: string[]

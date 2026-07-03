@@ -6,13 +6,13 @@ import sairaFont from '@fontsource/saira/files/saira-latin-600-normal.woff?url'
 import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff?url'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
-import { packBoxes, deriveStops, pickupVisitKey } from '../state/manifest'
+import { packBoxes, pickupVisitKey } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
-import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type Occupied } from '@shared/packer'
+import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
 import { planHold } from '@shared/hold'
@@ -407,22 +407,19 @@ export default function CargoGridPage(): React.ReactElement {
   )
 
   // number by drop-off, route order
-  const { dropNum, dropStops, objColor } = useMemo(() => {
+  const { dropNum, objColor } = useMemo(() => {
     const num = new Map<string, number>()
-    const stops: Array<{ n: number; code: string; name: string; color: string }> = []
     if (route) {
       let n = 0
       for (const step of route.steps) {
         if (!step.dropRefs.length) continue
         for (const r of step.dropRefs) if (!num.has(r.objectiveId)) num.set(r.objectiveId, n)
-        const sd = splitDestination(step.label)
-        stops.push({ n, code: sd.code, name: sd.name || step.label, color: stopColor(n) })
         n++
       }
     }
     const oc = new Map<string, string>()
     for (const [oid, n] of num) oc.set(oid, stopColor(n))
-    return { dropNum: num, dropStops: stops, objColor: oc }
+    return { dropNum: num, objColor: oc }
   }, [route])
 
   // restamp drop-off number + color
@@ -438,8 +435,6 @@ export default function CargoGridPage(): React.ReactElement {
   // in store so nav survives
   const loading = useStore((s) => s.loadingActive)
   const setLoading = useStore((s) => s.setLoadingActive)
-  const manual = useStore((s) => s.manualActive)
-  const setManual = useStore((s) => s.setManualActive)
   const loadIdx = useStore((s) => s.loadingIdx)
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
   const setPickedUp = useStore((s) => s.setPickedUp)
@@ -515,34 +510,25 @@ export default function CargoGridPage(): React.ReactElement {
     []
   )
 
-  const manualLayout = useStore((s) => s.manualLayout)
-  const setManualPlacement = useStore((s) => s.setManualPlacement)
-  const clearManualPlacement = useStore((s) => s.clearManualPlacement)
   const clearLoadedPin = useStore((s) => s.clearLoadedPin)
-  const clearAllManual = useStore((s) => s.clearAllManual)
 
   // survives the running pk-ids
   const boxKey = (b: { objectiveId?: string; slot?: number }): string => `${b.objectiveId}#${b.slot}`
 
   const looseBoxes = useStore((s) => s.looseBoxes)
   const setBoxLoose = useStore((s) => s.setBoxLoose)
-  const setManualActive = useStore((s) => s.setManualActive)
   const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
   const resetWalkDecisions = useStore((s) => s.resetWalkDecisions)
   // every plan feeds the next one: during the walk, boxes that still fit the
-  // spot the user saw keep it (planHold prev), so ticks, defers and manual
+  // spot the user saw keep it (planHold prev), so ticks, defers and hand
   // pins re-seat only what they actually displace
   const prevRef = useRef<Map<string, Placement> | null>(null)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
-    const fullEvents = buildLoadEvents(loadSteps, source)
-    // manual: only hand-placed boxes load
-    const events = manual
-      ? fullEvents.map((ev) => ({ load: ev.load.filter((b) => manualLayout[boxKey(b)]), drop: ev.drop }))
-      : fullEvents
+    const events = buildLoadEvents(loadSteps, source)
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
     // cargo already aboard is locked at the spot it was loaded; re-plans pack around it
     const pins = new Map<string, Placement>()
@@ -555,54 +541,30 @@ export default function CargoGridPage(): React.ReactElement {
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w, l, h: dims.h, rotated: lp.rotated })
     }
     // apply prev only while a walk is frozen; planning stays a fresh solve.
-    // Captured from every auto plan, so the walk starts from the exact
-    // layout the user saw when they pressed start
+    // Captured from every plan, so the walk starts from the exact layout the
+    // user saw when they pressed start
     const prev = new Map<string, Placement>()
     if (frozenBoxes && prevRef.current)
       for (const b of source) {
         const pl = prevRef.current.get(boxKey(b))
         if (pl) prev.set(b.id, pl)
       }
-    const raw = manual
-      ? packTimeline(grids, events, true, manualLayout)
-      : planHold(grids, events, {
-          loose: looseIds,
-          pins: pins.size ? pins : undefined,
-          prev: prev.size ? prev : undefined
-        }).snaps
-    if (!manual) {
-      const m = new Map<string, Placement>()
-      for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
-      prevRef.current = m
-    }
+    const raw = planHold(grids, events, {
+      loose: looseIds,
+      pins: pins.size ? pins : undefined,
+      prev: prev.size ? prev : undefined
+    }).snaps
+    const m = new Map<string, Placement>()
+    for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
+    prevRef.current = m
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
       loose: ('loose' in s ? s.loose : []) as PackBox[],
       count: s.placements.length + s.unplaced.length
     }))
-    return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes, loadedPins])
-
-  // hand-placed lock, rest auto-packs
-  const splitManual = (
-    boxes: PackBox[]
-  ): { fixed: Placement[]; occupied: Occupied[]; auto: PackBox[] } => {
-    const fixed: Placement[] = []
-    const occupied: Occupied[] = []
-    const auto: PackBox[] = []
-    for (const box of boxes) {
-      const mp = manualLayout[boxKey(box)]
-      const dims = BOX_DIMS[box.size]
-      if (mp && dims) {
-        const w = mp.rotated ? dims.l : dims.w
-        const l = mp.rotated ? dims.w : dims.l
-        fixed.push({ box, gridId: mp.gridId, x: mp.x, y: mp.y, z: mp.z, w, l, h: dims.h, rotated: mp.rotated })
-        occupied.push({ gridId: mp.gridId, x: mp.x, y: mp.y, z: mp.z, w, l, h: dims.h, stopIdx: box.stopIdx })
-      } else auto.push(box)
-    }
-    return { fixed, occupied, auto }
-  }
+    return { snaps, stepBoxes: events.map((e) => e.load) }
+  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins])
 
   const budgetBoxes = (
     all: ReturnType<typeof packBoxes>,
@@ -633,15 +595,12 @@ export default function CargoGridPage(): React.ReactElement {
     return m
   }, [contracts])
 
-  // manual kept, rest auto-filled
   const plan = useMemo<FrozenBox[]>(() => {
-    const { fixed, occupied, auto } = splitManual(livePack as PackBox[])
-    const { placements } = packInto(grids, occupied, auto, true)
+    const boxes = livePack as PackBox[]
+    const { placements } = packInto(grids, [], boxes, true)
     const pos = new Map(placements.map((p) => [p.box.id, p]))
-    const boxes: FrozenBox[] = fixed.map((p) => freezeBox(objMeta, p.box, p))
-    for (const b of auto) boxes.push(freezeBox(objMeta, b, pos.get(b.id)))
-    return boxes
-  }, [livePack, grids, manualLayout, objMeta])
+    return boxes.map((b) => freezeBox(objMeta, b, pos.get(b.id)))
+  }, [livePack, grids, objMeta])
   const result = useMemo(() => {
     const loadable = grids.filter((g) => g.autoLoad !== false)
     const capacity = loadable.reduce((a, g) => a + g.w * g.l * g.h, 0)
@@ -696,14 +655,6 @@ export default function CargoGridPage(): React.ReactElement {
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
 
-  // route order; revisits appear twice
-  const deliveryBuckets = useMemo(() => {
-    if (dropStops.length) return dropStops.map((s) => ({ idx: s.n, code: s.code, name: s.name, color: s.color }))
-    return deriveStops(contracts, order)
-      .filter((s) => s.items.some((i) => !i.delivered))
-      .map((s) => ({ idx: s.idx, code: s.code, name: s.name, color: s.color }))
-  }, [dropStops, contracts, order])
-
   // bounds over visible grids
   const { origin, span, half } = useMemo(() => {
     if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number] }
@@ -726,8 +677,8 @@ export default function CargoGridPage(): React.ReactElement {
   // this step's boxes are always yours to place: drag one and it pins where
   // you drop it, leave the rest and they load exactly as shown
   const placeIds = useMemo(
-    () => (loading && !manual && currentLoad?.kind === 'load' ? new Set(currentLoad.loadIds) : null),
-    [loading, manual, currentLoad]
+    () => (loading && currentLoad?.kind === 'load' ? new Set(currentLoad.loadIds) : null),
+    [loading, currentLoad]
   )
   // a later visit of this node that only fetches cargo: when raw space is
   // aboard from here to there, offer to grab it now and skip the return.
@@ -770,25 +721,13 @@ export default function CargoGridPage(): React.ReactElement {
   const boxMode = (objectiveId?: string): BoxMode => {
     if (!loading) return 'normal'
     if (objectiveId && currentObjIds.has(objectiveId)) return 'current'
-    // manual keeps colours; loading grays
-    return manual ? 'normal' : 'loaded'
+    return 'loaded'
   }
-  // resume saved step, clamped
-  const resumeIdx = (): void => setLoadIdx((i) => Math.min(Math.max(0, i), Math.max(0, loadSteps.length - 1)))
   const startLoading = (): void => {
-    resumeIdx()
-    setManual(false)
+    // resume saved step, clamped
+    setLoadIdx((i) => Math.min(Math.max(0, i), Math.max(0, loadSteps.length - 1)))
     setLoading(true)
   }
-  // flag adds drag + numbers + legend
-  const startManual = (): void => {
-    resumeIdx()
-    setManual(true)
-    setLoading(true)
-  }
-  useEffect(() => {
-    if (!loading && manual) setManual(false)
-  }, [loading, manual, setManual])
 
   const gridById = useMemo(() => new Map(grids.map((g) => [g.id, g])), [grids])
   const [hover, setHover] = useState<HoverInfo | null>(null)
@@ -927,10 +866,9 @@ export default function CargoGridPage(): React.ReactElement {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
         const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot }]
-        if (manual) for (const s of spots) setManualPlacement(s.key, { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated })
-        else if (currentLoad?.kind === 'load') {
-          // placing a box in the auto walk pins it there; the re-plan keeps
-          // everything the drop didn't displace
+        if (currentLoad?.kind === 'load') {
+          // placing a box pins it there; the re-plan keeps everything the drop
+          // didn't displace
           const pins: Record<string, LoadedPin> = {}
           const pickupKey = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
           for (const s of spots) pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey }
@@ -983,7 +921,7 @@ export default function CargoGridPage(): React.ReactElement {
       setDragRot(pl.rotated)
     } else {
       if (sel.size) setSel(new Set())
-      setDragRot((manual ? manualLayout[key]?.rotated : loadedPins[key]?.rotated) ?? pl.rotated)
+      setDragRot(loadedPins[key]?.rotated ?? pl.rotated)
     }
     setDrag({ key, box: pl.box })
     const sx = (g.x || 0) + pl.x + pl.w / 2
@@ -992,49 +930,6 @@ export default function CargoGridPage(): React.ReactElement {
     lastPt.current = { x: sx, z: sz }
     setGhost(null)
   }
-
-  // floor first, then stack
-  const freeSpot = (size: number): { gridId: string; x: number; y: number; z: number } | null => {
-    const dims = BOX_DIMS[size]
-    if (!dims) return null
-    for (const floorOnly of [true, false]) {
-      for (const g of grids) {
-        if (g.autoLoad === false) continue
-        const occ = occCells.get(g.id) ?? new Set<string>()
-        for (let z = 0; z + dims.l <= g.l; z++)
-          for (let x = 0; x + dims.w <= g.w; x++) {
-            const y = dropY(occ, g, x, z, dims.w, dims.l, dims.h)
-            if (y >= 0 && (!floorOnly || y === 0)) return { gridId: g.id, x, y, z }
-          }
-      }
-    }
-    return null
-  }
-
-  // next unplaced box, first spot
-  const placeFromPalette = (objectiveId: string, size: number): void => {
-    const set = loadingPack?.stepBoxes[loadIdx] ?? []
-    const box = set.find((b) => b.objectiveId === objectiveId && b.size === size && !manualLayout[boxKey(b)])
-    if (!box) return
-    const spot = freeSpot(size)
-    if (!spot) return
-    setManualPlacement(boxKey(box), { ...spot, rotated: false })
-  }
-
-  // unplaced boxes here, by size
-  const palette = useMemo(() => {
-    if (!manual || !loadingPack) return []
-    const set = loadingPack.stepBoxes[loadIdx] ?? []
-    const groups = new Map<string, { objectiveId: string; size: number; color: string; stopIdx: number; count: number }>()
-    for (const b of set) {
-      if (manualLayout[boxKey(b)]) continue
-      const k = `${b.objectiveId}|${b.size}`
-      const g = groups.get(k)
-      if (g) g.count++
-      else groups.set(k, { objectiveId: b.objectiveId ?? '', size: b.size, color: b.color, stopIdx: b.stopIdx, count: 1 })
-    }
-    return [...groups.values()].sort((a, b) => a.stopIdx - b.stopIdx || b.size - a.size)
-  }, [manual, loadingPack, loadIdx, manualLayout])
 
   useEffect(() => {
     if (!drag) return
@@ -1069,7 +964,7 @@ export default function CargoGridPage(): React.ReactElement {
   // stale keys would grab boxes that already moved on
   useEffect(() => {
     setSel((s) => (s.size ? new Set<string>() : s))
-  }, [loading, manual, loadIdx])
+  }, [loading, loadIdx])
 
   // re-snap on rotate in place
   useEffect(() => {
@@ -1100,7 +995,7 @@ export default function CargoGridPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <PageHeader
         title="CARGO GRID"
-        subtitle={`${activeShip}${loading ? (manual ? ' · manual loading' : ' · auto-loading') : ' · load planner'}`}
+        subtitle={`${activeShip}${loading ? ' · loading' : ' · load planner'}`}
       />
 
       <div style={{ display: 'flex', gap: 18, alignItems: 'baseline', flexWrap: 'wrap', margin: '2px 0 10px' }}>
@@ -1137,39 +1032,6 @@ export default function CargoGridPage(): React.ReactElement {
         )}
       </div>
 
-      {loading && manual && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
-          <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.16em', color: C.ghost }}>DELIVERY ORDER</span>
-          {deliveryBuckets.map((s) => (
-            <span
-              key={s.idx}
-              title={`Drop-off ${s.idx + 1} - put these toward the exit`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: F.body, fontSize: 12, color: C.dim, border: `1px solid ${C.lineSoft}`, borderRadius: 4, padding: '3px 8px' }}
-            >
-              <span style={{ width: 17, height: 17, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: s.color, color: '#05080a', borderRadius: 3, fontFamily: F.display, fontSize: 11, fontWeight: 700, boxShadow: GLOW }}>
-                {s.idx + 1}
-              </span>
-              {s.code || s.name}
-            </span>
-          ))}
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-              drag a box · R rotates · double-click resets one
-            </span>
-            {Object.keys(manualLayout).length > 0 && (
-              <Btn
-                onClick={() => clearAllManual()}
-                title="Send every hand-placed box back to auto-pack"
-                style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '4px 9px', cursor: 'pointer' }}
-                hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
-              >
-                RESET ALL
-              </Btn>
-            )}
-          </span>
-        </div>
-      )}
-
       <div style={{ display: 'flex', flexDirection: portrait ? 'column' : 'row', gap: 10, flex: 1, minHeight: 0 }}>
         {loading && (
           <div
@@ -1184,13 +1046,10 @@ export default function CargoGridPage(): React.ReactElement {
               step={currentLoad}
               steps={loadSteps}
               objColors={objColor}
-              manual={manual}
-              palette={palette}
               loose={looseNow}
               setAside={setAside}
               unplaced={result.unplaced}
               onStashOffGrid={(boxes) => boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true))}
-              onPlaceManual={() => setManualActive(true)}
               onComeBack={(ids) => {
                 // the deferred pickup's steps vanish from the walk; keep the
                 // cursor on the same physical step
@@ -1199,7 +1058,6 @@ export default function CargoGridPage(): React.ReactElement {
                 ids.forEach((id) => setObjectiveDeferred(id, true))
                 if (shift) setLoadIdx((i) => Math.max(0, i - shift))
               }}
-              onPlace={placeFromPalette}
               grab={grabOffer ? { scu: grabOffer.scu, count: grabOffer.count, stepNo: grabOffer.stepNo } : null}
               onGrab={() => grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))}
               grabbedHere={currentLoad?.kind === 'load' ? currentLoad.loadIds.filter((id) => grabbedObjectives.includes(id)) : []}
@@ -1282,11 +1140,11 @@ export default function CargoGridPage(): React.ReactElement {
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', color: C.acc, textShadow: GLOW }}>
-              {manual ? 'MANUAL LOADING MODE' : 'AUTO-LOADING MODE'}
+              LOADING MODE
             </span>
             <Btn
               onClick={() => setLoading(false)}
-              title="Back to the loading-mode chooser"
+              title="Back to the load planner"
               style={{
                 border: `1px solid ${C.lineStrong}`,
                 background: 'transparent',
@@ -1324,23 +1182,11 @@ export default function CargoGridPage(): React.ReactElement {
           >
             <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: 660, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {loadSteps.length > 0 ? (
-                <>
-                  <div style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.24em', color: C.dim, textAlign: 'center' }}>
-                    CHOOSE A LOADING MODE
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: portrait ? 'column' : 'row', gap: 16 }}>
-                    <ModeCard
-                      title="AUTO-LOADING MODE"
-                      desc="We plan your cargo distribution for you based on your chosen route."
-                      onClick={startLoading}
-                    />
-                    <ModeCard
-                      title="MANUAL LOADING MODE"
-                      desc="You plan out your own cargo distribution by placing each box inside the 3D grid."
-                      onClick={startManual}
-                    />
-                  </div>
-                </>
+                <ModeCard
+                  title="START LOADING"
+                  desc="We plan your cargo for you and walk you through it stop by stop. Drag any box in the hold to place it yourself along the way."
+                  onClick={startLoading}
+                />
               ) : (
                 <div style={{ textAlign: 'center', fontFamily: F.body, fontSize: 14, color: C.dim, background: 'rgba(8,12,16,0.9)', border: `1px solid ${C.lineStrong}`, borderRadius: 8, padding: '18px 22px' }}>
                   No route yet for this cargo. Add or fix it on the Manifest, then come back to load.
@@ -1379,7 +1225,7 @@ export default function CargoGridPage(): React.ReactElement {
           {loading && visiblePlacements.map((pl) => {
             const g = gridById.get(pl.gridId)
             if (!g) return null
-            const mkey = manual || (placeIds?.has(pl.box.objectiveId ?? '') ?? false) ? boxKey(pl.box) : undefined
+            const mkey = placeIds?.has(pl.box.objectiveId ?? '') ? boxKey(pl.box) : undefined
             // ghost stands in while dragging
             if (mkey && dragKeys?.has(mkey)) return null
             const mode = boxMode(pl.box.objectiveId)
@@ -1391,16 +1237,13 @@ export default function CargoGridPage(): React.ReactElement {
                 grid={g}
                 origin={origin}
                 mode={mode}
-                label={manual ? String(pl.box.stopIdx + 1) : undefined}
                 draggable={!!mkey}
                 selected={!!mkey && sel.has(mkey)}
                 onStart={(e) => {
                   if (mkey) startDrag(mkey, pl, g, e)
                 }}
                 onReset={() => {
-                  if (!mkey) return
-                  if (manual) clearManualPlacement(mkey)
-                  else if (placeIds?.has(pl.box.objectiveId ?? '')) clearLoadedPin(mkey)
+                  if (mkey) clearLoadedPin(mkey)
                 }}
                 onDragMove={drag ? handleDragMove : undefined}
                 onHover={onHover}
@@ -1545,21 +1388,15 @@ function ModeCard({ title, desc, onClick }: { title: string; desc: string; onCli
 
 type TurnInEntry = { contractId: string; objectiveId: string; deliveredScu: number }
 
-type PaletteItem = { objectiveId: string; size: number; color: string; stopIdx: number; count: number }
-
 function LoadingPanel({
   step,
   steps,
   objColors,
-  manual,
-  palette,
   loose,
   setAside,
   unplaced,
   onStashOffGrid,
-  onPlaceManual,
   onComeBack,
-  onPlace,
   grab,
   onGrab,
   grabbedHere,
@@ -1581,15 +1418,11 @@ function LoadingPanel({
   step: LoadingStep | undefined
   steps: LoadingStep[]
   objColors: Map<string, string>
-  manual: boolean
-  palette: PaletteItem[]
   loose: PackBox[]
   setAside: SetAside
   unplaced: PackBox[]
   onStashOffGrid: (boxes: PackBox[]) => void
-  onPlaceManual: () => void
   onComeBack: (objectiveIds: string[]) => void
-  onPlace: (objectiveId: string, size: number) => void
   grab: { scu: number; count: number; stepNo: number } | null
   onGrab: () => void
   grabbedHere: string[]
@@ -1762,7 +1595,6 @@ function LoadingPanel({
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
                   onStashOffGrid={onStashOffGrid}
-                  onPlaceManual={onPlaceManual}
                   onComeBack={onComeBack}
                 />
               )}
@@ -1770,36 +1602,6 @@ function LoadingPanel({
           )
         })}
       </div>
-
-      {manual && isLoad && (
-        <div style={{ flex: 'none', padding: '10px 16px', borderTop: `1px solid ${C.lineFaint}` }}>
-          <div style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.14em', color: C.ghost, marginBottom: 8 }}>
-            CLICK A BOX TO LOAD IT · THEN DRAG IT IN THE HOLD
-          </div>
-          {palette.length === 0 ? (
-            <div style={{ fontFamily: F.body, fontSize: 13, color: C.green }}>
-              ✓ all loaded here, hit NEXT for the next set
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxHeight: 170, overflowY: 'auto', paddingTop: 10, paddingRight: 10 }}>
-              {palette.map((p) => (
-                <button
-                  key={`${p.objectiveId}-${p.size}`}
-                  onClick={() => onPlace(p.objectiveId, p.size)}
-                  title={`Load a ${p.size} SCU box for drop-off ${p.stopIdx + 1}`}
-                  style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '7px 9px 5px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${p.color}`, borderRadius: 6, cursor: 'pointer' }}
-                >
-                  <IsoCube color={p.color} label={String(p.size)} />
-                  <span style={{ fontFamily: F.mono, fontSize: 10.5, color: C.text }}>{p.size} SCU</span>
-                  <span style={{ position: 'absolute', top: -8, right: -8, minWidth: 19, height: 19, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.color, color: '#05080a', borderRadius: 10, fontFamily: F.display, fontSize: 11, fontWeight: 700, boxShadow: GLOW }}>
-                    ×{p.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {isLoad && grab && (
         <div style={{ margin: '0 16px 8px', padding: '10px 12px', border: `1px solid ${C.amber}`, borderRadius: 6, flex: 'none' }}>
@@ -1845,7 +1647,7 @@ function LoadingPanel({
           </div>
         </div>
       )}
-      {isLoad && !manual && (
+      {isLoad && (
         <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
           drag any box in the hold to place it yourself · double-click undoes
         </div>
@@ -1987,20 +1789,6 @@ function SplitDropRow({ line }: { line: LoadingStep['lines'][number] }): React.R
   )
 }
 
-// isometric crate for the palette
-function IsoCube({ color, label }: { color: string; label: string }): React.ReactElement {
-  return (
-    <svg width={42} height={42} viewBox="0 0 40 40" style={{ display: 'block' }}>
-      <path d="M20 3 L37 12.5 L20 22 L3 12.5 Z" fill={color} />
-      <path d="M3 12.5 L20 22 L20 38 L3 28.5 Z" fill={color} opacity={0.72} />
-      <path d="M37 12.5 L20 22 L20 38 L37 28.5 Z" fill={color} opacity={0.5} />
-      <text x={20} y={15.5} textAnchor="middle" fontFamily={F.display} fontSize={8.5} fontWeight={700} fill="#05080a">
-        {label}
-      </text>
-    </svg>
-  )
-}
-
 // amber cube = cargo riding off-grid; the manifest badge uses a different (red) glyph
 function OffGridGlyph({ size = 14 }: { size?: number }): React.ReactElement {
   return (
@@ -2052,7 +1840,6 @@ function PickupDecision({
   destLabel,
   loadIds,
   onStashOffGrid,
-  onPlaceManual,
   onComeBack
 }: {
   decision: BucketDecision
@@ -2060,7 +1847,6 @@ function PickupDecision({
   destLabel: string
   loadIds: string[]
   onStashOffGrid: (boxes: PackBox[]) => void
-  onPlaceManual: () => void
   onComeBack: (objectiveIds: string[]) => void
 }): React.ReactElement | null {
   const [choice, setChoice] = useState<string | null>(null)
@@ -2079,7 +1865,6 @@ function PickupDecision({
   const options = dig
     ? [
         { id: 'load', title: 'Load it now', desc: `Tightest trip. Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
-        { id: 'place', title: 'Place it myself', desc: 'Switch this bucket to manual placement. You might find a cleaner spot.', run: onPlaceManual },
         { id: 'come', title: 'Come back for it', desc: 'Skip the whole pickup for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
       ]
     : [
@@ -2089,7 +1874,6 @@ function PickupDecision({
 
   const confirmCopy: Record<string, string> = {
     load: `Loading now. ${setAside.count} boxes will be set aside to dig out earlier stops.`,
-    place: 'Manual placement on. Place this bucket wherever it fits best.',
     come: dig ? 'Skipped for now. Grab it on a later pass, no digging.' : 'Whole pickup left for a later trip. Its room is free for later stops.',
     stash: `Stashed off-grid. ${offBreakdown} / ${fmt(offScu)} SCU riding loose from this stop.`
   }

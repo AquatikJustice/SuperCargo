@@ -17,7 +17,6 @@ import type {
   HistoryStatus,
   CargoLayout,
   FrozenBox,
-  ManualPlacement,
   LoadedPin,
   ScannedContract
 } from '@shared/types'
@@ -191,10 +190,6 @@ interface StoreState {
 
   // survives leaving the grid page
   loadingActive: boolean
-  /** drag boxes by hand */
-  manualActive: boolean
-  /** keyed by objectiveId#slot */
-  manualLayout: Record<string, ManualPlacement>
   /** boxes aboard, locked where they were loaded; keyed by objectiveId#slot */
   loadedPins: Record<string, LoadedPin>
   loadingIdx: number
@@ -207,11 +202,6 @@ interface StoreState {
 
   setView: (view: ViewId) => void
   setLoadingActive: (v: boolean | ((p: boolean) => boolean)) => void
-  setManualActive: (v: boolean) => void
-  setManualPlacement: (key: string, placement: ManualPlacement) => void
-  mergeManualPlacements: (placements: Record<string, ManualPlacement>) => void
-  clearManualPlacement: (key: string) => void
-  clearAllManual: () => void
   setLoadingIdx: (v: number | ((p: number) => number)) => void
   setLoadingSteps: (v: LoadingStep[] | null | ((p: LoadingStep[] | null) => LoadingStep[] | null)) => void
   setLoadingBoxes: (v: PackBox[] | null | ((p: PackBox[] | null) => PackBox[] | null)) => void
@@ -331,8 +321,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, looseBoxes, deferredObjectives, grabbedObjectives, dismissedMissions } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, manualLayout, loadedPins, loadingActive, manualActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions })
+    const { runId, contracts, order, stopOrder, layout, startLocation, loadedPins, loadingActive, loadingIdx, looseBoxes, deferredObjectives, grabbedObjectives, dismissedMissions } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions })
   }
 
   // active ship's grids
@@ -498,7 +488,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (contracts.some((c) => c.id === item.accepted.missionId)) return
     // first contract of an empty manifest starts a new trip
     if (contracts.length === 0) {
-      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, manualActive: false, loadingIdx: 0 })
+      set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, loadingIdx: 0 })
     }
     const contract = makeLogContract(item.accepted, contracts.length)
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
@@ -548,8 +538,6 @@ export const useStore = create<StoreState>((set, get) => {
     captureTargetId: null,
     compactOpen: false,
     loadingActive: false,
-    manualActive: false,
-    manualLayout: {},
     loadedPins: {},
     loadingIdx: 0,
     loadingSteps: null,
@@ -614,11 +602,9 @@ export const useStore = create<StoreState>((set, get) => {
         deferredObjectives: manifest.deferred ?? [],
         grabbedObjectives: manifest.grabbed ?? [],
         dismissedMissions: manifest.dismissed ?? [],
-        manualLayout: manifest.manualLayout ?? {},
         loadedPins: manifest.loadedPins ?? {},
         // resume walkthrough only with cargo
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
-        manualActive: active.length ? (manifest.manualActive ?? false) : false,
         loadingIdx: manifest.loadingIdx ?? 0,
         layout,
         history,
@@ -665,7 +651,7 @@ export const useStore = create<StoreState>((set, get) => {
         // empty manifest = fresh trip
         if (contracts.length === 0) {
           const { runId, history } = get()
-          set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, manualActive: false, loadingIdx: 0 })
+          set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, loadingIdx: 0 })
         }
         const contract = makeLogContract(e, contracts.length)
         const willOcr = get().settings.ocrAutoCapture && contractNeedsOcr(contract)
@@ -744,7 +730,6 @@ export const useStore = create<StoreState>((set, get) => {
           deferredObjectives: doc.deferred ?? [],
           grabbedObjectives: doc.grabbed ?? [],
           dismissedMissions: doc.dismissed ?? [],
-          manualLayout: doc.manualLayout ?? {},
           loadedPins: doc.loadedPins ?? {},
           layout: doc.layout ?? null
         })
@@ -773,31 +758,6 @@ export const useStore = create<StoreState>((set, get) => {
     setView: (view) => set({ view }),
     setLoadingActive: (v) => {
       set((s) => ({ loadingActive: typeof v === 'function' ? v(s.loadingActive) : v }))
-      persist()
-    },
-    setManualActive: (v) => {
-      set({ manualActive: v })
-      persist()
-    },
-    setManualPlacement: (key, placement) => {
-      set((s) => ({ manualLayout: { ...s.manualLayout, [key]: placement } }))
-      persist()
-    },
-    mergeManualPlacements: (placements) => {
-      set((s) => ({ manualLayout: { ...s.manualLayout, ...placements } }))
-      persist()
-    },
-    clearManualPlacement: (key) => {
-      set((s) => {
-        if (!(key in s.manualLayout)) return s
-        const next = { ...s.manualLayout }
-        delete next[key]
-        return { manualLayout: next }
-      })
-      persist()
-    },
-    clearAllManual: () => {
-      set({ manualLayout: {} })
       persist()
     },
     setLoadingIdx: (v) => {
@@ -834,9 +794,9 @@ export const useStore = create<StoreState>((set, get) => {
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
         // a different hold means a fresh walk: nothing pre-done, nothing
-        // pre-placed, nothing pre-decided. Frozen plan, pickup ticks, hand
-        // placements, locked aboard-spots, deferrals, and stashes all go
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {}, deferredObjectives: [], grabbedObjectives: [], looseBoxes: [] })
+        // pre-placed, nothing pre-decided. Frozen plan, pickup ticks,
+        // locked aboard-spots, deferrals, and stashes all go
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadedPins: {}, deferredObjectives: [], grabbedObjectives: [], looseBoxes: [] })
         persist()
         get().clearAllPickedUp()
         scheduleReroute()
@@ -992,7 +952,6 @@ export const useStore = create<StoreState>((set, get) => {
         order: [],
         route: null,
         layout: null,
-        manualLayout: {},
         loadedPins: {},
         startLocation: '',
         stopOrder: [],
@@ -1001,7 +960,6 @@ export const useStore = create<StoreState>((set, get) => {
         deferredObjectives: [],
         grabbedObjectives: [],
         loadingActive: false,
-        manualActive: false,
         loadingIdx: 0
       })
       persist()
