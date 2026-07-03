@@ -122,6 +122,7 @@ function Box({
   mode,
   label,
   draggable,
+  selected,
   onStart,
   onReset,
   onDragMove,
@@ -134,7 +135,8 @@ function Box({
   mode: BoxMode
   label?: string
   draggable?: boolean
-  onStart?: () => void
+  selected?: boolean
+  onStart?: (e: ThreeEvent) => void
   onReset?: () => void
   onDragMove?: (shipX: number, shipZ: number) => void
   onHover: (h: Omit<HoverInfo, 'x' | 'y'>, e: ThreeEvent) => void
@@ -192,7 +194,7 @@ function Box({
           draggable
             ? (e) => {
                 e.stopPropagation()
-                onStart?.()
+                onStart?.(e)
               }
             : undefined
         }
@@ -207,8 +209,8 @@ function Box({
       >
         <meshStandardMaterial
           color={color}
-          emissive={loaded ? '#000000' : pl.box.color}
-          emissiveIntensity={emissive}
+          emissive={selected ? C.acc : loaded ? '#000000' : pl.box.color}
+          emissiveIntensity={selected ? 0.3 : emissive}
           roughness={0.95}
           metalness={0}
           transparent={opacity < 1}
@@ -809,19 +811,29 @@ export default function CargoGridPage(): React.ReactElement {
   }
 
   // gravity drag to lowest support
-  type Ghost = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number; valid: boolean }
+  type GhostSpot = { key: string; x: number; y: number; z: number; w: number; l: number; h: number; rotated: boolean }
+  type Ghost = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number; valid: boolean; members?: GhostSpot[] }
+  type GroupMember = { key: string; box: PackBox; dx: number; dz: number; w: number; l: number; h: number; rotated: boolean }
   const [drag, setDrag] = useState<{ key: string; box: PackBox } | null>(null)
+  // dragging a selected box carries the whole set, offsets frozen at grab
+  const [group, setGroup] = useState<GroupMember[] | null>(null)
+  const [sel, setSel] = useState<Set<string>>(() => new Set())
   const [ghost, setGhost] = useState<Ghost | null>(null)
   // ship-coord cursor; held box follows
   const [dragPos, setDragPos] = useState<{ x: number; z: number } | null>(null)
   const [dragRot, setDragRot] = useState(false)
   const lastPt = useRef<{ x: number; z: number } | null>(null)
 
-  // occupied cells, minus dragged box
+  const dragKeys = useMemo(
+    () => (drag ? new Set(group ? group.map((m) => m.key) : [drag.key]) : null),
+    [drag, group]
+  )
+
+  // occupied cells, minus whatever's in hand
   const occCells = useMemo(() => {
     const m = new Map<string, Set<string>>()
     for (const p of result.placements) {
-      if (drag && boxKey(p.box) === drag.key) continue
+      if (dragKeys?.has(boxKey(p.box))) continue
       let set = m.get(p.gridId)
       if (!set) {
         set = new Set()
@@ -832,7 +844,7 @@ export default function CargoGridPage(): React.ReactElement {
           for (let dx = 0; dx < p.w; dx++) set.add(`${p.x + dx},${p.y + dy},${p.z + dz}`)
     }
     return m
-  }, [result, drag])
+  }, [result, dragKeys])
 
   const dropY = (occ: Set<string>, g: CargoGrid, lx: number, lz: number, fw: number, fl: number, fh: number): number => {
     for (let y = 0; y + fh <= g.h; y++) {
@@ -854,8 +866,9 @@ export default function CargoGridPage(): React.ReactElement {
     if (!drag) return null
     const dims = BOX_DIMS[drag.box.size]
     if (!dims) return null
-    const fw = dragRot ? dims.l : dims.w
-    const fl = dragRot ? dims.w : dims.l
+    const anchor = group?.find((m) => m.key === drag.key)
+    const fw = anchor ? anchor.w : dragRot ? dims.l : dims.w
+    const fl = anchor ? anchor.l : dragRot ? dims.w : dims.l
     const fh = dims.h
     for (const g of grids) {
       if (g.autoLoad === false) continue
@@ -864,8 +877,30 @@ export default function CargoGridPage(): React.ReactElement {
       if (shipX < gx || shipX >= gx + g.w || shipZ < gz || shipZ >= gz + g.l) continue
       const lx = Math.max(0, Math.min(g.w - fw, Math.floor(shipX - gx)))
       const lz = Math.max(0, Math.min(g.l - fl, Math.floor(shipZ - gz)))
-      const y = dropY(occCells.get(g.id) ?? new Set(), g, lx, lz, fw, fl, fh)
-      return { gridId: g.id, x: lx, y: y < 0 ? 0 : y, z: lz, w: fw, l: fl, h: fh, valid: y >= 0 }
+      if (!group) {
+        const y = dropY(occCells.get(g.id) ?? new Set(), g, lx, lz, fw, fl, fh)
+        return { gridId: g.id, x: lx, y: y < 0 ? 0 : y, z: lz, w: fw, l: fl, h: fh, valid: y >= 0 }
+      }
+      // rigid group: same cell offsets, each box falls to its own support.
+      // Members go bottom-up and count as floor for whatever rides above
+      const occ = new Set(occCells.get(g.id))
+      const members: GhostSpot[] = []
+      let valid = true
+      let ay = 0
+      for (const m of group) {
+        const mx = lx + m.dx
+        const mz = lz + m.dz
+        const inside = mx >= 0 && mz >= 0 && mx + m.w <= g.w && mz + m.l <= g.l
+        const y = inside ? dropY(occ, g, mx, mz, m.w, m.l, m.h) : -1
+        if (y < 0) valid = false
+        else
+          for (let dy = 0; dy < m.h; dy++)
+            for (let dz = 0; dz < m.l; dz++)
+              for (let dx = 0; dx < m.w; dx++) occ.add(`${mx + dx},${y + dy},${mz + dz}`)
+        if (m.key === drag.key) ay = y < 0 ? 0 : y
+        members.push({ key: m.key, x: mx, y: y < 0 ? 0 : y, z: mz, w: m.w, l: m.l, h: m.h, rotated: m.rotated })
+      }
+      return { gridId: g.id, x: lx, y: ay, z: lz, w: fw, l: fl, h: fh, valid, members }
     }
     return null
   }
@@ -879,26 +914,71 @@ export default function CargoGridPage(): React.ReactElement {
   const commitDrag = (): void => {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
-        if (manual) setManualPlacement(d.key, { gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
-        else if (currentLoad?.kind === 'load')
+        const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot }]
+        if (manual) for (const s of spots) setManualPlacement(s.key, { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated })
+        else if (currentLoad?.kind === 'load') {
           // placing a box in the auto walk pins it there; the re-plan keeps
           // everything the drop didn't displace
-          addLoadedPins({
-            [d.key]: {
-              gridId: ghost.gridId,
-              x: ghost.x,
-              y: ghost.y,
-              z: ghost.z,
-              rotated: dragRot,
-              pickupKey: pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
-            }
-          })
+          const pins: Record<string, LoadedPin> = {}
+          const pickupKey = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
+          for (const s of spots) pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, rotated: s.rotated, pickupKey }
+          addLoadedPins(pins)
+        }
+        if (ghost.members) setSel(new Set())
       }
       return null
     })
+    setGroup(null)
     setGhost(null)
     setDragPos(null)
     lastPt.current = null
+  }
+
+  const startDrag = (key: string, pl: Placement, g: CargoGrid, e: ThreeEvent): void => {
+    const ne = e.nativeEvent
+    if (ne.ctrlKey || ne.metaKey || ne.shiftKey) {
+      setSel((s) => {
+        const n = new Set(s)
+        if (!n.delete(key)) n.add(key)
+        return n
+      })
+      return
+    }
+    setHover(null)
+    if (sel.has(key)) {
+      // grab the whole selection; sort low boxes first so stacks re-seat bottom-up
+      const byKey = new Map(result.placements.map((p) => [boxKey(p.box), p]))
+      const picked = [...sel]
+        .map((k) => {
+          const p = byKey.get(k)
+          const pg = p ? gridById.get(p.gridId) : undefined
+          return p && pg ? { k, p, pg } : null
+        })
+        .filter((m): m is { k: string; p: Placement; pg: CargoGrid } => !!m)
+        .sort((a, b) => (a.pg.y || 0) + a.p.y - ((b.pg.y || 0) + b.p.y))
+      setGroup(
+        picked.map(({ k, p, pg }) => ({
+          key: k,
+          box: p.box,
+          dx: Math.round((pg.x || 0) + p.x - (g.x || 0) - pl.x),
+          dz: Math.round((pg.z || 0) + p.z - (g.z || 0) - pl.z),
+          w: p.w,
+          l: p.l,
+          h: p.h,
+          rotated: p.rotated
+        }))
+      )
+      setDragRot(pl.rotated)
+    } else {
+      if (sel.size) setSel(new Set())
+      setDragRot((manual ? manualLayout[key]?.rotated : loadedPins[key]?.rotated) ?? pl.rotated)
+    }
+    setDrag({ key, box: pl.box })
+    const sx = (g.x || 0) + pl.x + pl.w / 2
+    const sz = (g.z || 0) + pl.z + pl.l / 2
+    setDragPos({ x: sx, z: sz })
+    lastPt.current = { x: sx, z: sz }
+    setGhost(null)
   }
 
   // floor first, then stack
@@ -947,9 +1027,11 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (!drag) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'r' || e.key === 'R') setDragRot((r) => !r)
+      // no rotating a group; the offsets don't spin
+      if ((e.key === 'r' || e.key === 'R') && !group) setDragRot((r) => !r)
       else if (e.key === 'Escape') {
         setDrag(null)
+        setGroup(null)
         setGhost(null)
         setDragPos(null)
       }
@@ -961,7 +1043,21 @@ export default function CargoGridPage(): React.ReactElement {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [drag, ghost, dragRot])
+  }, [drag, ghost, dragRot, group])
+
+  useEffect(() => {
+    if (!sel.size) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setSel(new Set())
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sel])
+
+  // stale keys would grab boxes that already moved on
+  useEffect(() => {
+    setSel((s) => (s.size ? new Set<string>() : s))
+  }, [loading, manual, loadIdx])
 
   // re-snap on rotate in place
   useEffect(() => {
@@ -1269,9 +1365,9 @@ export default function CargoGridPage(): React.ReactElement {
           {loading && visiblePlacements.map((pl) => {
             const g = gridById.get(pl.gridId)
             if (!g) return null
-            const mkey = manual ? boxKey(pl.box) : undefined
+            const mkey = manual || (placeIds?.has(pl.box.objectiveId ?? '') ?? false) ? boxKey(pl.box) : undefined
             // ghost stands in while dragging
-            if (drag && mkey === drag.key) return null
+            if (mkey && dragKeys?.has(mkey)) return null
             const mode = boxMode(pl.box.objectiveId)
             if (loading && mode === 'future') return null
             return (
@@ -1282,17 +1378,10 @@ export default function CargoGridPage(): React.ReactElement {
                 origin={origin}
                 mode={mode}
                 label={manual ? String(pl.box.stopIdx + 1) : undefined}
-                draggable={(manual || (placeIds?.has(pl.box.objectiveId ?? '') ?? false)) && !!mkey}
-                onStart={() => {
-                  if (!mkey) return
-                  setHover(null)
-                  setDragRot((manual ? manualLayout[mkey]?.rotated : loadedPins[mkey]?.rotated) ?? pl.rotated)
-                  setDrag({ key: mkey, box: pl.box })
-                  const sx = (g.x || 0) + pl.x + pl.w / 2
-                  const sz = (g.z || 0) + pl.z + pl.l / 2
-                  setDragPos({ x: sx, z: sz })
-                  lastPt.current = { x: sx, z: sz }
-                  setGhost(null)
+                draggable={!!mkey}
+                selected={!!mkey && sel.has(mkey)}
+                onStart={(e) => {
+                  if (mkey) startDrag(mkey, pl, g, e)
                 }}
                 onReset={() => {
                   if (!mkey) return
@@ -1323,25 +1412,28 @@ export default function CargoGridPage(): React.ReactElement {
             (() => {
               const dims = BOX_DIMS[drag.box.size]
               if (!dims) return null
-              const w = dragRot ? dims.l : dims.w
-              const l = dragRot ? dims.w : dims.l
-              const h = dims.h
-              // hair above the landing spot
+              const held: { key: string; box: PackBox; dx: number; dz: number; w: number; l: number; h: number }[] =
+                group ?? [{ key: drag.key, box: drag.box, dx: 0, dz: 0, w: dragRot ? dims.l : dims.w, l: dragRot ? dims.w : dims.l, h: dims.h }]
               const gg = ghost ? gridById.get(ghost.gridId) : undefined
-              const cy =
-                ghost && gg
-                  ? center((gg.y || 0) + ghost.y, h, origin[1]) + 0.35
-                  : -half[1] + 1.2 + h / 2
-              return (
-                <mesh
-                  raycast={() => null}
-                  position={[dragPos.x - origin[0], cy, dragPos.z - origin[2]]}
-                >
-                  <boxGeometry args={[w - GAP, h - GAP, l - GAP]} />
-                  <meshStandardMaterial color={drag.box.color} roughness={0.6} metalness={0} emissive={C.green} emissiveIntensity={0.1} />
-                  <Edges color={C.green} />
-                </mesh>
-              )
+              return held.map((m) => {
+                const spot = ghost && ghost.members ? ghost.members.find((s) => s.key === m.key) : ghost
+                // hair above the landing spot
+                const cy =
+                  spot && gg
+                    ? center((gg.y || 0) + spot.y, m.h, origin[1]) + 0.35
+                    : -half[1] + 1.2 + m.h / 2
+                return (
+                  <mesh
+                    key={m.key}
+                    raycast={() => null}
+                    position={[dragPos.x + m.dx - origin[0], cy, dragPos.z + m.dz - origin[2]]}
+                  >
+                    <boxGeometry args={[m.w - GAP, m.h - GAP, m.l - GAP]} />
+                    <meshStandardMaterial color={m.box.color} roughness={0.6} metalness={0} emissive={C.green} emissiveIntensity={0.1} />
+                    <Edges color={C.green} />
+                  </mesh>
+                )
+              })
             })()}
           {drag &&
             ghost &&
@@ -1352,22 +1444,26 @@ export default function CargoGridPage(): React.ReactElement {
               const bcx = center(g.x || 0, g.w, origin[0])
               const bcy = center(g.y || 0, g.h, origin[1])
               const bcz = center(g.z || 0, g.l, origin[2])
+              const spots: { x: number; y: number; z: number; w: number; l: number; h: number }[] = ghost.members ?? [ghost]
               return (
                 <group position={[bcx, bcy, bcz]} rotation={bayRot(g)}>
-                  <RoundedBox
-                    raycast={() => null}
-                    args={[ghost.w - GAP, ghost.h - GAP, ghost.l - GAP]}
-                    radius={Math.min(0.09, (Math.min(ghost.w, ghost.h, ghost.l) - GAP) / 2 - 0.02)}
-                    smoothness={3}
-                    steps={1}
-                    position={[
-                      center((g.x || 0) + ghost.x, ghost.w, origin[0]) - bcx,
-                      center((g.y || 0) + ghost.y, ghost.h, origin[1]) - bcy,
-                      center((g.z || 0) + ghost.z, ghost.l, origin[2]) - bcz
-                    ]}
-                  >
-                    <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.55} transparent opacity={0.45} depthWrite={false} />
-                  </RoundedBox>
+                  {spots.map((s, i) => (
+                    <RoundedBox
+                      key={i}
+                      raycast={() => null}
+                      args={[s.w - GAP, s.h - GAP, s.l - GAP]}
+                      radius={Math.min(0.09, (Math.min(s.w, s.h, s.l) - GAP) / 2 - 0.02)}
+                      smoothness={3}
+                      steps={1}
+                      position={[
+                        center((g.x || 0) + s.x, s.w, origin[0]) - bcx,
+                        center((g.y || 0) + s.y, s.h, origin[1]) - bcy,
+                        center((g.z || 0) + s.z, s.l, origin[2]) - bcz
+                      ]}
+                    >
+                      <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.55} transparent opacity={0.45} depthWrite={false} />
+                    </RoundedBox>
+                  ))}
                 </group>
               )
             })()}
