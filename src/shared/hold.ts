@@ -178,29 +178,29 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[]): boole
 }
 
 // the v0.5.2 wall builder: first fit scanning depth-ascending, bottom-up,
-// then across from the bay's own wall, across face before rotated. Each
-// depth slice fills solid before the section deepens, which is where the
-// clean full-width bands come from. The final delivery scans from the far
-// wall backward instead so it anchors against the bulkhead
+// then across from the bay's own wall. Long boxes run INTO the bay - the
+// whole section is scanned for a depth-stretched fit before the box may
+// turn across, which is what draws the long clean lines; turned boxes only
+// cap the ends. The final delivery scans from the far wall backward so it
+// anchors against the bulkhead
 function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: number, deep: boolean): Slot | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
-  for (let i = d0; i < bay.dl; i++) {
-    const d = deep ? bay.dl - 1 - (i - d0) : i
-    if (d < d0) break
-    for (let y = 0; y + dims.h <= bay.h; y++)
-      for (let cRaw = 0; cRaw < bay.cw; cRaw++)
-        for (const [cwf, dlf] of faces) {
-          if (d + dlf > bay.dl) continue
+  for (const [cwf, dlf] of faces)
+    for (let i = d0; i < bay.dl; i++) {
+      const d = deep ? bay.dl - 1 - (i - d0) : i
+      if (d < d0 || d + dlf > bay.dl) continue
+      for (let y = 0; y + dims.h <= bay.h; y++)
+        for (let cRaw = 0; cRaw < bay.cw; cRaw++) {
           const c = bay.wallHigh ? bay.cw - cRaw - cwf : cRaw
           if (c < 0 || c + cwf > bay.cw) continue
           const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
           if (fits(rivals, t, gap, aboardAtLoad)) return t
         }
-  }
+    }
   return null
 }
 
@@ -427,9 +427,14 @@ function seatUnit(
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
     const rivals = slots.concat(placed).filter((s) => s.bay === bayIdx && windowsOverlap(s, probe))
     const got = scanSpot(bay, rivals, probe, gap, d0, deep)
-    if (!got) return first
+    if (!got) {
+      if (process.env.SCAN_DEBUG)
+        console.error(`scan MISS stop${unit[0].stopIdx}@${load} sz${box.size} bay${bayIdx} d0=${d0} -> dry fallback`)
+      return first
+    }
     placed.push(got)
   }
+  if (process.env.SCAN_DEBUG) console.error(`scan ok stop${unit[0].stopIdx}@${load} bay${bayIdx} ${unit.length} boxes`)
   return placed
 }
 
@@ -707,6 +712,8 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         for (const s of placed) byBox.set(s.box.id, s)
         verdicts.push({ stop, load, ok: true, boxes: unit })
       } else {
+        if (process.env.SCAN_DEBUG && shaping)
+          console.error(`concede stop${stop}@${load} sizes ${unit.map((b) => b.size).join(',')}`)
         const got = seatConceding(bays, open, slots, unit, load, drop, gap)
         slots.push(...got.placed)
         for (const s of got.placed) byBox.set(s.box.id, s)
@@ -742,6 +749,8 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // owes fewer concessions, and once boxes are homeless the flat world also
   // takes ties - shapes have no business winning under that kind of pressure
   let pass = solve(true)
+  if (process.env.SCAN_DEBUG)
+    console.error(`shaped world: homeless ${homeless(pass)} conc ${pass.concessions.length}`)
   if (homeless(pass) || pass.concessions.length) {
     const flat = solve(false)
     const h = homeless(pass) - homeless(flat)
@@ -751,8 +760,11 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         (homeless(pass) > 0
           ? flat.concessions.length <= pass.concessions.length
           : flat.concessions.length < pass.concessions.length))
-    )
+    ) {
+      if (process.env.SCAN_DEBUG)
+        console.error(`flat world WINS: homeless ${homeless(flat)} conc ${flat.concessions.length}`)
       pass = flat
+    }
   }
 
   // a stop smeared across bays pulls its strays back to its main bay when
