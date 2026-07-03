@@ -39,9 +39,9 @@ const LOADING_PANEL_W = 360
 // the virtual off-grid pane: a place to stash loose cargo beside the ship. cells,
 // not SCU. the packer never sees it; it's display + drop-target only.
 const OFF_GRID_ID = 'off-grid'
-const OFF_GRID_W = 8
-const OFF_GRID_L = 6
-const OFF_GRID_H = 4
+const OFF_GRID_W = 12
+const OFF_GRID_L = 8
+const OFF_GRID_H = 5
 const OFF_GAP = 3 // clear space between the ship's last bay and the pane
 
 const STBD_OF: Record<BayDir, BayDir> = { 'z-': 'x+', 'z+': 'x-', 'x+': 'z+', 'x-': 'z-', 'y+': 'x+', 'y-': 'x+' }
@@ -49,24 +49,27 @@ const OPP: Record<BayDir, BayDir> = { 'x+': 'x-', 'x-': 'x+', 'y+': 'y-', 'y-': 
 
 function OrientationLabels({
   frame,
-  half
+  half,
+  shipCenter = [0, 0, 0]
 }: {
   frame?: { fore: BayDir; starboard: BayDir }
   half: [number, number, number]
+  shipCenter?: [number, number, number]
 }): React.ReactElement {
   const fore = frame?.fore ?? 'z-'
   const starboard = frame?.starboard ?? STBD_OF[fore]
   const [hx, hy, hz] = half
+  const [sx, sy, sz] = shipCenter
   const size = Math.min(4, Math.max(1.2, Math.max(hx, hz) * 0.12))
   const off = size * 1.1 + 0.6
-  const floorY = -hy
+  const floorY = sy - hy
   const pos = (d: BayDir): [number, number, number] => {
     switch (d) {
-      case 'x+': return [hx + off, floorY, 0]
-      case 'x-': return [-hx - off, floorY, 0]
-      case 'z+': return [0, floorY, hz + off]
-      case 'z-': return [0, floorY, -hz - off]
-      default: return [0, floorY, 0]
+      case 'x+': return [sx + hx + off, floorY, sz]
+      case 'x-': return [sx - hx - off, floorY, sz]
+      case 'z+': return [sx, floorY, sz + hz + off]
+      case 'z-': return [sx, floorY, sz - hz - off]
+      default: return [sx, floorY, sz]
     }
   }
   // upright per world edge
@@ -164,7 +167,7 @@ function Box({
   const cz = center(wz, pl.l, origin[2]) - bcz
   const loaded = mode === 'loaded'
   const color = loaded ? BOX_GRAY_LOADED : BOX_GRAY
-  const stripeColor = offGrid ? C.amber : loaded ? BOX_GRAY_LOADED : pl.box.color
+  const stripeColor = selected ? C.acc : offGrid ? C.amber : loaded ? BOX_GRAY_LOADED : pl.box.color
   const emissive = mode === 'current' ? 0.12 : 0
   const opacity = mode === 'future' ? 0.12 : loaded ? 0.82 : 1
   const W = pl.w - GAP
@@ -219,8 +222,8 @@ function Box({
       >
         <meshStandardMaterial
           color={color}
-          emissive={selected ? C.acc : offGrid ? C.amber : loaded ? '#000000' : pl.box.color}
-          emissiveIntensity={selected ? 0.3 : offGrid ? 0.14 : emissive}
+          emissive={offGrid ? C.amber : loaded ? '#000000' : pl.box.color}
+          emissiveIntensity={offGrid ? 0.14 : emissive}
           roughness={0.95}
           metalness={0}
           transparent={opacity < 1}
@@ -668,15 +671,17 @@ export default function CargoGridPage(): React.ReactElement {
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
 
-  // bounds over visible grids, plus the off-grid pane so it stays in frame
-  const { origin, span, half, offGrid: offGridBay } = useMemo(() => {
-    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], offGrid: null }
+  // bounds over visible grids, plus the off-grid pane so it stays in frame.
+  // shipHalf/shipCenter stay ship-only so the floor labels sit on the ship, not out by the pane
+  const { origin, span, half, shipHalf, shipCenter, offGrid: offGridBay } = useMemo(() => {
+    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
     for (const g of shownGrids) {
       minX = Math.min(minX, g.x || 0); maxX = Math.max(maxX, (g.x || 0) + g.w)
       minY = Math.min(minY, g.y || 0); maxY = Math.max(maxY, (g.y || 0) + g.h)
       minZ = Math.min(minZ, g.z || 0); maxZ = Math.max(maxZ, (g.z || 0) + g.l)
     }
+    const shipMinX = minX, shipMinY = minY, shipMinZ = minZ, shipMaxX = maxX, shipMaxY = maxY, shipMaxZ = maxZ
     // park the pane past the ship's starboard edge, on the deck, centered on the hold's length
     const off: CargoGrid = {
       id: OFF_GRID_ID, name: 'OFF GRID', source: 'override', autoLoad: false,
@@ -691,12 +696,17 @@ export default function CargoGridPage(): React.ReactElement {
       origin: o,
       span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6),
       half: [(maxX - minX) / 2, (maxY - minY) / 2, (maxZ - minZ) / 2] as [number, number, number],
+      shipHalf: [(shipMaxX - shipMinX) / 2, (shipMaxY - shipMinY) / 2, (shipMaxZ - shipMinZ) / 2] as [number, number, number],
+      shipCenter: [(shipMinX + shipMaxX) / 2 - o[0], (shipMinY + shipMaxY) / 2 - o[1], (shipMinZ + shipMaxZ) / 2 - o[2]] as [number, number, number],
       offGrid: off
     }
   }, [shownGrids])
 
   // lay the loose boxes out in the pane: parked ones keep their spot, the rest
-  // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere
+  // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere.
+  // Everything runs in a stable key order so the layout is the same every render,
+  // and a spot that no longer fits drops onto whatever's under it instead of
+  // interpenetrating a neighbour
   const loosePlacements = useMemo<Placement[]>(() => {
     if (!offGridBay || !looseNow.length) return []
     const occ = new Set<string>()
@@ -708,25 +718,39 @@ export default function CargoGridPage(): React.ReactElement {
       for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) if (occ.has(`${x + dx},${y + dy},${z + dz}`)) return false
       return true
     }
+    // lowest free y at this footprint, so a stale spot lands on top of its neighbour
+    const settle = (x: number, z: number, w: number, l: number, h: number): number => {
+      for (let y = 0; y + h <= OFF_GRID_H; y++) if (fits(x, y, z, w, l, h)) return y
+      return -1
+    }
+    const boxes = [...looseNow].sort((a, c) => boxKey(a).localeCompare(boxKey(c)))
     const out: Placement[] = []
     const shelf: PackBox[] = []
     // seat parked boxes first so auto-shelf works around them
-    for (const b of looseNow) {
+    for (const b of boxes) {
       const dims = BOX_DIMS[b.size]
       if (!dims) continue
       const sp = looseSpots[boxKey(b)]
       if (sp && sp.gridId === OFF_GRID_ID) {
         const w = sp.rotated ? dims.l : dims.w
         const l = sp.rotated ? dims.w : dims.l
-        if (fits(sp.x, sp.y, sp.z, w, l, dims.h)) {
-          mark(sp.x, sp.y, sp.z, w, l, dims.h)
-          out.push({ box: b, gridId: OFF_GRID_ID, x: sp.x, y: sp.y, z: sp.z, w, l, h: dims.h, rotated: !!sp.rotated })
+        // keep the stored spot when it's still clear; otherwise settle down its
+        // column onto whatever moved in under it
+        const inPane = sp.x >= 0 && sp.z >= 0 && sp.x + w <= OFF_GRID_W && sp.z + l <= OFF_GRID_L
+        const y = inPane
+          ? fits(sp.x, sp.y, sp.z, w, l, dims.h)
+            ? sp.y
+            : settle(sp.x, sp.z, w, l, dims.h)
+          : -1
+        if (y >= 0) {
+          mark(sp.x, y, sp.z, w, l, dims.h)
+          out.push({ box: b, gridId: OFF_GRID_ID, x: sp.x, y, z: sp.z, w, l, h: dims.h, rotated: !!sp.rotated })
           continue
         }
       }
       shelf.push(b)
     }
-    for (const b of [...shelf].sort((a, c) => boxKey(a).localeCompare(boxKey(c)))) {
+    for (const b of shelf) {
       const dims = BOX_DIMS[b.size]
       if (!dims) continue
       let placed = false
@@ -1335,27 +1359,33 @@ export default function CargoGridPage(): React.ReactElement {
           {shownGrids.map((g) => (
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
-          <OrientationLabels frame={frame} half={half} />
+          <OrientationLabels frame={frame} half={shipHalf} shipCenter={shipCenter} />
           {loading && offGridBay && (
             <>
               <GridShell grid={offGridBay} origin={origin} />
-              <Text
-                font={sairaFont}
-                position={[
-                  center(offGridBay.x, offGridBay.w, origin[0]),
-                  center(offGridBay.y, offGridBay.h, origin[1]) + offGridBay.h / 2 + 1,
-                  center(offGridBay.z, offGridBay.l, origin[2])
-                ]}
-                fontSize={Math.min(2.4, Math.max(1, offGridBay.w * 0.22))}
-                color={C.amber}
-                anchorX="center"
-                anchorY="middle"
-                letterSpacing={0.14}
-                outlineWidth={0.06}
-                outlineColor="#000"
-              >
-                OFF GRID
-              </Text>
+              {(() => {
+                const size = Math.min(2.4, Math.max(1, offGridBay.w * 0.16))
+                return (
+                  <Text
+                    font={sairaFont}
+                    position={[
+                      center(offGridBay.x, offGridBay.w, origin[0]),
+                      center(offGridBay.y, offGridBay.h, origin[1]) - offGridBay.h / 2 + 0.02,
+                      (offGridBay.z || 0) - origin[2] - size * 0.9
+                    ]}
+                    rotation={[-Math.PI / 2, 0, Math.PI]}
+                    fontSize={size}
+                    color={C.amber}
+                    anchorX="center"
+                    anchorY="middle"
+                    letterSpacing={0.14}
+                    outlineWidth={size * 0.03}
+                    outlineColor="#000"
+                  >
+                    OFF GRID
+                  </Text>
+                )
+              })()}
               {loosePlacements.map((pl) => {
                 const key = boxKey(pl.box)
                 if (dragKeys?.has(key)) return null
