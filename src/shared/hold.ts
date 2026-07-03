@@ -189,18 +189,25 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
-  for (const [cwf, dlf] of faces)
-    for (let i = d0; i < bay.dl; i++) {
-      const d = deep ? bay.dl - 1 - (i - d0) : i
-      if (d < d0 || d + dlf > bay.dl) continue
-      for (let y = 0; y + dims.h <= bay.h; y++)
-        for (let cRaw = 0; cRaw < bay.cw; cRaw++) {
-          const c = bay.wallHigh ? bay.cw - cRaw - cwf : cRaw
-          if (c < 0 || c + cwf > bay.cw) continue
-          const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
-          if (fits(rivals, t, gap, aboardAtLoad)) return t
-        }
-    }
+  // a box that outgrows its stop's section turns across at the cap before
+  // poking a lone column deeper - a poke drags full-width row ownership
+  // with it and the rows it steals are exactly what the next stop needed
+  let ownDeep = d0
+  for (const r of rivals) if (!r.anchor && r.stop === probe.stop) ownDeep = Math.max(ownDeep, r.d + r.dl)
+  const caps = !deep && ownDeep > d0 && ownDeep < bay.dl ? [ownDeep, bay.dl] : [bay.dl]
+  for (const cap of caps)
+    for (const [cwf, dlf] of faces)
+      for (let i = d0; i < bay.dl; i++) {
+        const d = deep ? bay.dl - 1 - (i - d0) : i
+        if (d < d0 || d + dlf > cap) continue
+        for (let y = 0; y + dims.h <= bay.h; y++)
+          for (let cRaw = 0; cRaw < bay.cw; cRaw++) {
+            const c = bay.wallHigh ? bay.cw - cRaw - cwf : cRaw
+            if (c < 0 || c + cwf > bay.cw) continue
+            const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
+            if (fits(rivals, t, gap, aboardAtLoad)) return t
+          }
+      }
   return null
 }
 
@@ -765,6 +772,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // owes fewer concessions, and once boxes are homeless the flat world also
   // takes ties - shapes have no business winning under that kind of pressure
   let pass = solve(true)
+  let shapedWon = true
   if (homeless(pass) || pass.concessions.length) {
     const flat = solve(false)
     const h = homeless(pass) - homeless(flat)
@@ -774,14 +782,18 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         (homeless(pass) > 0
           ? flat.concessions.length <= pass.concessions.length
           : flat.concessions.length < pass.concessions.length))
-    )
+    ) {
       pass = flat
+      shapedWon = false
+    }
   }
 
   // a stop smeared across bays pulls its strays back to its main bay when
   // they all fit there cleanly; anything resting on a stray is the same
-  // stop's cargo, so the whole group moves or none of it does
-  const reunite = (p: PassResult): Set<string> => {
+  // stop's cargo, so the whole group moves or none of it does. In the
+  // shaped world the strays re-seat through the wall scanner so they
+  // continue the stop's section instead of landing as a rank-shaped tower
+  const reunite = (p: PassResult, shaped: boolean): Set<string> => {
     const moved = new Set<string>()
     const byStop = new Map<number, Slot[]>()
     for (const s of p.slots)
@@ -797,19 +809,26 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       let ok = true
       for (const s of [...strays].sort((a, b) => unitOrder(a.box, b.box))) {
         const rivals = p.slots.filter((q) => q !== s && q.bay === homeIdx && windowsOverlap(q, s))
-        const got = bestFace(bays[homeIdx], rivals, { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }, gap, {})
-        if (!got) {
+        const probe: Slot = { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }
+        let slot: Slot | null = null
+        if (shaped) {
+          let d0 = Infinity
+          for (const q of p.slots)
+            if (q !== s && q.bay === homeIdx && !q.anchor && q.stop === s.stop) d0 = Math.min(d0, q.d)
+          slot = scanSpot(bays[homeIdx], rivals, probe, gap, isFinite(d0) ? d0 : 0, s.drop === lastDrop)
+        } else slot = bestFace(bays[homeIdx], rivals, probe, gap, {})?.slot ?? null
+        if (!slot) {
           ok = false
           break
         }
-        Object.assign(s, got.slot)
+        Object.assign(s, slot)
       }
       if (ok) for (const s of strays) moved.add(s.box.id)
       else strays.forEach((s, i) => Object.assign(s, saved[i]))
     }
     return moved
   }
-  const movedIds = reunite(pass)
+  const movedIds = reunite(pass, shapedWon)
 
   // a tiny box seated before its family arrived may sit at the rim of what
   // became a hole; re-nestle it against the finished layout (solver-time
