@@ -513,6 +513,7 @@ export default function CargoGridPage(): React.ReactElement {
   const setObjectiveDeferred = useStore((s) => s.setObjectiveDeferred)
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
+  const resetWalkDecisions = useStore((s) => s.resetWalkDecisions)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -1052,15 +1053,34 @@ export default function CargoGridPage(): React.ReactElement {
                   for (const oid of prev.loadIds) {
                     const cid = objMeta.get(oid)?.contractId
                     if (cid) setPickedUp(cid, oid, pickupVisitKey(prev.nodeKey, prev.trip), false)
+                    // stash decisions rewind with the step too
+                    for (const key of looseBoxes) if (key.startsWith(`${oid}#`)) setBoxLoose(key, false)
                   }
                 else if (prev?.kind === 'drop') unmarkTurnIn(prev.lines.map((l) => l.objectiveId))
+                // rewinding past a come-back's decision point puts that pickup
+                // back in the walk (its decision lived at its own load step)
+                if (prev && frozenSteps && deferredObjectives.length) {
+                  const pos =
+                    frozenSteps.indexOf(prev) >= 0
+                      ? frozenSteps.indexOf(prev)
+                      : frozenSteps.findIndex(
+                          (f) => f.kind === prev.kind && f.nodeKey === prev.nodeKey && f.trip === prev.trip && f.boundFor === prev.boundFor && f.groupPos === prev.groupPos
+                        )
+                  if (pos >= 0)
+                    for (const oid of deferredObjectives) {
+                      if (tickedObj.has(oid)) continue
+                      const decisionAt = frozenSteps.findIndex((f) => f.kind === 'load' && f.loadIds.includes(oid))
+                      if (decisionAt >= pos) setObjectiveDeferred(oid, false)
+                    }
+                }
                 setLoadIdx((i) => Math.max(0, i - 1))
               }}
               onExit={() => setLoading(false)}
               onRestart={() => {
-                // starting over untouches every pickup and turn-in
+                // starting over untouches every pickup, turn-in, and decision
                 clearAllPickedUp()
                 unmarkTurnIn(contracts.flatMap((c) => c.objectives.map((o) => o.id)))
+                resetWalkDecisions()
                 setLoadIdx(0)
               }}
             />

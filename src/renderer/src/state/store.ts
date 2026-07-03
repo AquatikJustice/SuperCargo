@@ -270,6 +270,8 @@ interface StoreState {
   addLoadedPins: (pins: Record<string, LoadedPin>) => void
   /** push an objective to a later trip, or bring it back */
   setObjectiveDeferred: (objectiveId: string, deferred: boolean) => void
+  /** forget every mid-walk decision: come-back deferrals and off-grid stashes */
+  resetWalkDecisions: () => void
   startNewRun: () => void
 
   // history
@@ -825,9 +827,9 @@ export const useStore = create<StoreState>((set, get) => {
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
         // a different hold means a fresh walk: nothing pre-done, nothing
-        // pre-placed. Frozen plan, pickup ticks, hand placements, and locked
-        // aboard-spots all go
-        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {} })
+        // pre-placed, nothing pre-decided. Frozen plan, pickup ticks, hand
+        // placements, locked aboard-spots, deferrals, and stashes all go
+        set({ loadingSteps: null, loadingBoxes: null, loadingIdx: 0, manualLayout: {}, loadedPins: {}, deferredObjectives: [], looseBoxes: [] })
         persist()
         get().clearAllPickedUp()
         scheduleReroute()
@@ -1232,6 +1234,14 @@ export const useStore = create<StoreState>((set, get) => {
       const has = cur.includes(objectiveId)
       if (deferred === has) return
       set({ deferredObjectives: deferred ? [...cur, objectiveId] : cur.filter((id) => id !== objectiveId) })
+      persist()
+      scheduleReroute()
+    },
+
+    resetWalkDecisions: () => {
+      const { deferredObjectives, looseBoxes } = get()
+      if (!deferredObjectives.length && !looseBoxes.length) return
+      set({ deferredObjectives: [], looseBoxes: [] })
       persist()
       scheduleReroute()
     },
