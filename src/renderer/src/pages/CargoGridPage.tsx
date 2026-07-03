@@ -514,8 +514,14 @@ export default function CargoGridPage(): React.ReactElement {
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
   const resetWalkDecisions = useStore((s) => s.resetWalkDecisions)
+  // ticking LOADED pins boxes and stamps contracts, but the frozen walk must
+  // not replan under a tick: those values feed the layout through a ref, so
+  // only real changes (steps, defers, stashes, ship, manual moves) recompute
+  const packInputs = useRef({ contracts, order, loadedPins })
+  packInputs.current = { contracts, order, loadedPins }
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
+    const { contracts, order, loadedPins } = packInputs.current
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
     const fullEvents = buildLoadEvents(loadSteps, source)
     // manual: only hand-placed boxes load
@@ -543,7 +549,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: fullEvents.map((e) => e.load) }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, manualLayout, manual, looseBoxes, loadedPins])
+  }, [loadSteps, grids, frozenBoxes, manualLayout, manual, looseBoxes])
 
   // hand-placed lock, rest auto-packs
   const splitManual = (

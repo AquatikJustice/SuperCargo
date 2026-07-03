@@ -801,7 +801,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     const moved = new Set<string>()
     const byStop = new Map<number, Slot[]>()
     for (const s of p.slots)
-      if (!s.anchor && !pins?.has(s.box.id))
+      if (!s.anchor)
         (byStop.get(s.stop) ?? byStop.set(s.stop, []).get(s.stop)!).push(s)
     const seatIn = (s: Slot, bayIdx: number): Slot | null => {
       const rivals = p.slots.filter((q) => q !== s && q.bay === bayIdx && windowsOverlap(q, s))
@@ -832,21 +832,30 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       }
       return saved
     }
-    for (const group of byStop.values()) {
+    // earlier deliveries reunite first, same as they seat: a late stop's
+    // eviction needs the bays the early stops have already tidied. Pins
+    // land in the slot list ahead of everything, so insertion order would
+    // put a pinned stop at the front and starve its eviction
+    const groups = [...byStop.values()].sort((a, b) => a[0].drop - b[0].drop || a[0].stop - b[0].stop)
+    for (const group of groups) {
       const count = new Map<number, number>()
       for (const s of group) count.set(s.bay, (count.get(s.bay) ?? 0) + 1)
       if (count.size < 2) continue
       const scu = group.reduce((a, s) => a + s.box.size, 0)
+      // loaded cargo is nailed down: it can't move, but it still votes -
+      // only a bay holding every pinned box can be the family's home
+      const pinnedBays = new Set(group.filter((s) => pins?.has(s.box.id)).map((s) => s.bay))
+      if (pinnedBays.size > 1) continue
       // consolidation target: its biggest cluster's bay first, then the rest;
       // a bay the whole family can't even volume-fit isn't worth a scan
       const targets = [...count.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([i]) => i)
         .concat(bays.map((b) => b.idx).filter((i) => !count.has(i)))
-        .filter((i) => scu <= bays[i].cw * bays[i].dl * bays[i].h)
+        .filter((i) => (!pinnedBays.size || pinnedBays.has(i)) && scu <= bays[i].cw * bays[i].dl * bays[i].h)
       let done = false
       for (const homeIdx of targets) {
-        const strays = group.filter((s) => s.bay !== homeIdx)
+        const strays = group.filter((s) => s.bay !== homeIdx && !pins?.has(s.box.id))
         if (moveAll(strays, homeIdx)) {
           for (const s of strays) moved.add(s.box.id)
           done = true
