@@ -14,6 +14,7 @@ import { gridsFor, shipFrame, isSecureBay, type CargoGrid } from '@shared/cargoG
 import type { BayDir } from '@shared/types'
 import { packCargo, packTimeline, packInto, provePeel, type Placement, type PackBox, type Occupied } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
+import { listBreakdown } from '@shared/box'
 import { planHold } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView } from '@shared/types'
@@ -1745,7 +1746,7 @@ function PickupDecision({
 
   const dig = decision.kind === 'digout'
   const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)
-  const offCount = decision.overloadBoxes.length
+  const offBreakdown = listBreakdown(decision.overloadBoxes.map((b) => b.size))
   const bigNote = setAside.big ? `${setAside.big} big · ` : ''
 
   const pick = (id: string, run: () => void): void => {
@@ -1757,18 +1758,18 @@ function PickupDecision({
     ? [
         { id: 'load', title: 'Load it now', desc: `Tightest trip. Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
         { id: 'place', title: 'Place it myself', desc: 'Switch this bucket to manual placement. You might find a cleaner spot.', run: onPlaceManual },
-        { id: 'come', title: 'Come back for it', desc: 'Skip for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
+        { id: 'come', title: 'Come back for it', desc: 'Skip the whole pickup for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
       ]
     : [
-        { id: 'stash', title: 'Stash it off-grid', desc: `Rides in empty corners of the hold. ${offCount} boxes / ${fmt(offScu)} SCU off grid right here.`, run: () => onStashOffGrid(decision.overloadBoxes) },
-        { id: 'come', title: 'Come back for it', desc: 'Leave it for a later trip. Nothing goes off grid.', run: () => onComeBack(loadIds) }
+        { id: 'stash', title: 'Stash the overflow off-grid', desc: `The rest loads normally; ${offBreakdown} rides in empty corners of the hold.`, run: () => onStashOffGrid(decision.overloadBoxes) },
+        { id: 'come', title: 'Come back for all of it', desc: 'Nothing from this pickup loads now. Its room frees up for later stops and you grab the whole thing on a later trip.', run: () => onComeBack(loadIds) }
       ]
 
   const confirmCopy: Record<string, string> = {
     load: `Loading now. ${setAside.count} boxes will be set aside to dig out earlier stops.`,
     place: 'Manual placement on. Place this bucket wherever it fits best.',
-    come: dig ? 'Skipped for now. Grab it on a later pass, no digging.' : 'Skipped for now. Nothing goes off grid from this pickup.',
-    stash: `Stashed off-grid. ${offCount} boxes / ${fmt(offScu)} SCU off grid from this stop.`
+    come: dig ? 'Skipped for now. Grab it on a later pass, no digging.' : 'Whole pickup left for a later trip. Its room is free for later stops.',
+    stash: `Stashed off-grid. ${offBreakdown} / ${fmt(offScu)} SCU riding loose from this stop.`
   }
 
   return (
@@ -1783,17 +1784,17 @@ function PickupDecision({
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#b7c0c3', marginBottom: 10 }}>
         {dig
           ? "Loading this now sits it on top of cargo you deliver sooner. To reach that cargo you'll set some boxes aside by hand."
-          : 'This won’t fit the grid. You can wedge it into empty corners of the hold, or leave it for a later trip.'}
+          : 'This won’t all fit the grid. Wedge the overflow into empty corners of the hold, or leave the whole pickup for a later trip.'}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)', marginBottom: 12 }}>
         {dig ? <span style={{ color: C.amber, fontSize: 16, lineHeight: 1 }}>↺</span> : <OffGridGlyph />}
         <div>
           <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
-            {dig ? `SET ASIDE ${setAside.count} BOXES` : `${offCount} BOXES · ${fmt(offScu)} SCU OFF GRID`}
+            {dig ? `SET ASIDE ${setAside.count} BOXES` : `${offBreakdown} · ${fmt(offScu)} SCU WON'T FIT`}
           </div>
           <div style={{ fontFamily: F.body, fontSize: 12, color: '#a8b0b3', marginTop: 2 }}>
-            {dig ? `${bigNote}${fmt(setAside.scu)} SCU moved by hand` : 'A few small boxes wedge in safely. A big pile does not.'}
+            {dig ? `${bigNote}${fmt(setAside.scu)} SCU moved by hand` : 'Small boxes wedge into corners safely. Big ones have nowhere to hide.'}
           </div>
         </div>
       </div>
