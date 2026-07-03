@@ -209,7 +209,8 @@ function findSpot(
   gap: number,
   relax: Relax,
   zone: number,
-  span?: Span
+  span?: Span,
+  deep?: boolean
 ): { slot: Slot; key: number[] } | null {
   let best: Slot | null = null
   let bestKey: number[] = new Array(8).fill(Infinity)
@@ -272,7 +273,15 @@ function findSpot(
         const hugHigh = cwf * dlf <= 4 && y > 0 ? !bay.wallHigh : bay.wallHigh
         const cWall = hugHigh ? bay.cw - (t.c + cwf) : t.c
         const aisle = span && dlf > cwf ? 1 : 0
-        const dKey = span ? (dlf <= cwf ? span.d1 - (t.d + dlf) : t.d - span.d0) : t.d
+        // the run's final delivery anchors at the far wall: nothing ever
+        // loads behind it, so shallow-packing would strand it mid-bay
+        const dKey = span
+          ? dlf <= cwf
+            ? span.d1 - (t.d + dlf)
+            : t.d - span.d0
+          : deep
+            ? bay.dl - (t.d + dlf)
+            : t.d
         const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, aisle, dKey, dlf, cWall]
         if (beats(key, bestKey)) {
           best = { ...t }
@@ -288,7 +297,15 @@ function findSpot(
 const unitOrder = (a: PackBox, b: PackBox): number =>
   b.size - a.size || (a.bucketId ?? '').localeCompare(b.bucketId ?? '')
 
-function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: Relax, span?: Span): Slot | null {
+function bestFace(
+  bay: BayCtx,
+  rivals: Slot[],
+  probe: Slot,
+  gap: number,
+  relax: Relax,
+  span?: Span,
+  deep?: boolean
+): { slot: Slot; key: number[] } | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
   // the unit's reserved depth zone starts past every co-aboard earlier delivery
@@ -297,10 +314,10 @@ function bestFace(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, relax: 
   const faces: Array<[number, number]> = dims.w === dims.l ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: { slot: Slot; key: number[] } | null = null
   for (const [cwf, dlf] of faces) {
-    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, span)
+    const s = findSpot(bay, rivals, probe, cwf, dlf, dims.h, gap, relax, zone, span, deep)
     if (s && (!best || beats(s.key, best.key))) best = s
   }
-  return best?.slot ?? null
+  return best
 }
 
 function seatBoxes(
@@ -310,19 +327,23 @@ function seatBoxes(
   load: number,
   drop: number,
   gap: number,
-  span?: Span
+  span?: Span,
+  deep?: boolean
 ): Slot[] | null {
   const placed: Slot[] = []
   for (const box of [...unit].sort(unitOrder)) {
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
-    let got: Slot | null = null
+    // best spot across every permitted bay, not the first bay with any spot:
+    // a spilled box would rather glue to its stack next door than squat in
+    // an empty pocket here
+    let got: { slot: Slot; key: number[] } | null = null
     for (const bay of cfg) {
       const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-      got = bestFace(bay, rivals, probe, gap, {}, span)
-      if (got) break
+      const s = bestFace(bay, rivals, probe, gap, {}, span, deep)
+      if (s && (!got || beats(s.key, got.key))) got = s
     }
     if (!got) return null
-    placed.push(got)
+    placed.push(got.slot)
   }
   return placed
 }
@@ -338,15 +359,16 @@ function seatUnit(
   load: number,
   drop: number,
   gap: number,
-  shaping: boolean
+  shaping: boolean,
+  deep: boolean
 ): Slot[] | null {
-  const first = seatBoxes(cfg, slots, unit, load, drop, gap)
+  const first = seatBoxes(cfg, slots, unit, load, drop, gap, undefined, deep)
   if (!first || !shaping) return first
   const bay = first[0].bay
   if (first.some((s) => s.bay !== bay)) return first
   const d0 = Math.min(...first.map((s) => s.d))
   const d1 = Math.max(...first.map((s) => s.d + s.dl))
-  const shaped = seatBoxes(cfg.filter((b) => b.idx === bay), slots, unit, load, drop, gap, { d0, d1 })
+  const shaped = seatBoxes(cfg.filter((b) => b.idx === bay), slots, unit, load, drop, gap, { d0, d1 }, deep)
   return shaped ?? first
 }
 
@@ -390,7 +412,7 @@ function seatConceding(
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
           const s = bestFace(bay, rivals, probe, rung.gap, rung.relax)
           if (s) {
-            got = s
+            got = s.slot
             kind = rung.kind
             if (!open.includes(bay)) open.push(bay)
             return true
@@ -519,7 +541,7 @@ export function holdOracle(grids: CargoGrid[]): HoldOracle {
         outer: for (const rung of rungs)
           for (const bay of bays) {
             const rivals = work.filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-            got = bestFace(bay, rivals, probe, rung.gap, rung.relax)
+            got = bestFace(bay, rivals, probe, rung.gap, rung.relax)?.slot ?? null
             if (got) break outer
           }
         if (!got) return null
@@ -581,6 +603,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   const ordered = [...units.values()].sort(
     (a, b) => dropOf(a[0].id) - dropOf(b[0].id) || loadOf(a[0].id) - loadOf(b[0].id)
   )
+  const lastDrop = ordered.length ? dropOf(ordered[ordered.length - 1][0].id) : -1
 
   interface PassResult {
     slots: Slot[]
@@ -610,13 +633,14 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       // whole unit clean in one bay, then a fresh bay, then spilled, then per-box concessions
       const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
       const homes = open.filter(has).concat(open.filter((b) => !has(b)))
+      const deep = drop === lastDrop
       let placed: Slot[] | null = null
-      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap, shaping))) break
+      for (const b of homes) if ((placed = seatUnit([b], slots, unit, load, drop, gap, shaping, deep))) break
       if (!placed) {
         const next = bays.find((b) => !open.includes(b))
-        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap, shaping))) open.push(next)
+        if (next && (placed = seatUnit([next], slots, unit, load, drop, gap, shaping, deep))) open.push(next)
       }
-      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap, shaping)
+      if (!placed) placed = seatUnit(open, slots, unit, load, drop, gap, shaping, deep)
       if (placed) {
         slots.push(...placed)
         for (const s of placed) byBox.set(s.box.id, s)
@@ -689,7 +713,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
           ok = false
           break
         }
-        Object.assign(s, got)
+        Object.assign(s, got.slot)
       }
       if (ok) for (const s of strays) moved.add(s.box.id)
       else strays.forEach((s, i) => Object.assign(s, saved[i]))
