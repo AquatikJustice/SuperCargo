@@ -196,13 +196,18 @@ const DIR_TO_EXIT: Record<BayDir, { axis: 'x' | 'z'; dir: -1 | 1 }> = {
 }
 
 // the packer peels toward a horizontal exit/aisle; the roof (y) is a bonus, not
-// a peel axis. prefer an EXIT face, else an AISLE face.
+// a peel axis. prefer an EXIT face, else an AISLE face. An exit sharing the
+// floor's axis loses to any other candidate: the packer can't peel through the
+// face cargo rests on, and picking it anyway forfeits the floor entirely
 function deriveExit(faces?: Partial<Record<BayDir, BayFaceKind>>): CargoGrid['exit'] {
   if (!faces) return undefined
+  const floorAx = deriveFloor(faces)?.[0]
   const horiz: BayDir[] = ['x+', 'x-', 'z+', 'z-']
-  const exit = horiz.find((d) => faces[d] === 'exit')
+  const pick = (kind: BayFaceKind): BayDir | undefined =>
+    horiz.find((d) => faces[d] === kind && d[0] !== floorAx) ?? horiz.find((d) => faces[d] === kind)
+  const exit = pick('exit')
   if (exit) return DIR_TO_EXIT[exit]
-  const aisle = horiz.find((d) => faces[d] === 'aisle')
+  const aisle = pick('aisle')
   return aisle ? DIR_TO_EXIT[aisle] : undefined
 }
 

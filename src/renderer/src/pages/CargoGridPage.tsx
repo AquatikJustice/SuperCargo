@@ -1638,7 +1638,7 @@ export default function CargoGridPage(): React.ReactElement {
                   }}
                 >
                   <boxGeometry args={args} />
-                  <meshStandardMaterial color="#131a20" roughness={1} metalness={0} transparent opacity={0.94} />
+                  <meshStandardMaterial color="#13536c" roughness={1} metalness={0} transparent opacity={0.94} />
                 </mesh>
               </group>
             )
