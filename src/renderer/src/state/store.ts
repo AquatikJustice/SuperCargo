@@ -268,6 +268,7 @@ interface StoreState {
   setBoxLoose: (key: string, loose: boolean) => void
   /** lock freshly loaded boxes at the spot the plan gave them */
   addLoadedPins: (pins: Record<string, LoadedPin>) => void
+  clearLoadedPin: (key: string) => void
   /** push an objective to a later trip, or bring it back */
   setObjectiveDeferred: (objectiveId: string, deferred: boolean) => void
   /** forget every mid-walk decision: come-back deferrals and off-grid stashes */
@@ -1072,6 +1073,16 @@ export const useStore = create<StoreState>((set, get) => {
     addLoadedPins: (pins) => {
       if (!Object.keys(pins).length) return
       set((s) => ({ loadedPins: { ...s.loadedPins, ...pins } }))
+      persist()
+    },
+
+    clearLoadedPin: (key) => {
+      if (!(key in get().loadedPins)) return
+      set((s) => {
+        const pins = { ...s.loadedPins }
+        delete pins[key]
+        return { loadedPins: pins }
+      })
       persist()
     },
 

@@ -502,6 +502,7 @@ export default function CargoGridPage(): React.ReactElement {
   const manualLayout = useStore((s) => s.manualLayout)
   const setManualPlacement = useStore((s) => s.setManualPlacement)
   const clearManualPlacement = useStore((s) => s.clearManualPlacement)
+  const clearLoadedPin = useStore((s) => s.clearLoadedPin)
   const clearAllManual = useStore((s) => s.clearAllManual)
 
   // survives the running pk-ids
@@ -706,6 +707,12 @@ export default function CargoGridPage(): React.ReactElement {
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
+  // this step's boxes are always yours to place: drag one and it pins where
+  // you drop it, leave the rest and they load exactly as shown
+  const placeIds = useMemo(
+    () => (loading && !manual && currentLoad?.kind === 'load' ? new Set(currentLoad.loadIds) : null),
+    [loading, manual, currentLoad]
+  )
   const currentObjIds = useMemo(
     () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
     [currentLoad]
@@ -836,7 +843,20 @@ export default function CargoGridPage(): React.ReactElement {
   const commitDrag = (): void => {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
-        setManualPlacement(d.key, { gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
+        if (manual) setManualPlacement(d.key, { gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
+        else if (currentLoad?.kind === 'load')
+          // placing a box in the auto walk pins it there; the re-plan keeps
+          // everything the drop didn't displace
+          addLoadedPins({
+            [d.key]: {
+              gridId: ghost.gridId,
+              x: ghost.x,
+              y: ghost.y,
+              z: ghost.z,
+              rotated: dragRot,
+              pickupKey: pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
+            }
+          })
       }
       return null
     })
@@ -1222,11 +1242,11 @@ export default function CargoGridPage(): React.ReactElement {
                 origin={origin}
                 mode={mode}
                 label={manual ? String(pl.box.stopIdx + 1) : undefined}
-                draggable={manual && !!mkey}
+                draggable={(manual || (placeIds?.has(pl.box.objectiveId ?? '') ?? false)) && !!mkey}
                 onStart={() => {
                   if (!mkey) return
                   setHover(null)
-                  setDragRot(manualLayout[mkey]?.rotated ?? pl.rotated)
+                  setDragRot((manual ? manualLayout[mkey]?.rotated : loadedPins[mkey]?.rotated) ?? pl.rotated)
                   setDrag({ key: mkey, box: pl.box })
                   const sx = (g.x || 0) + pl.x + pl.w / 2
                   const sz = (g.z || 0) + pl.z + pl.l / 2
@@ -1234,7 +1254,11 @@ export default function CargoGridPage(): React.ReactElement {
                   lastPt.current = { x: sx, z: sz }
                   setGhost(null)
                 }}
-                onReset={() => mkey && clearManualPlacement(mkey)}
+                onReset={() => {
+                  if (!mkey) return
+                  if (manual) clearManualPlacement(mkey)
+                  else if (placeIds?.has(pl.box.objectiveId ?? '')) clearLoadedPin(mkey)
+                }}
                 onDragMove={drag ? handleDragMove : undefined}
                 onHover={onHover}
                 onLeave={() => setHover(null)}
@@ -1615,6 +1639,11 @@ function LoadingPanel({
         </div>
       )}
 
+      {isLoad && !manual && (
+        <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
+          drag any box in the hold to place it yourself · double-click undoes
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {arrowBtn('‹', onBack, idx === 0)}
         {isLoad ? (
