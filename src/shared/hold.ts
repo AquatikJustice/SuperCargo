@@ -18,6 +18,9 @@ export interface Frame {
 export interface HoldOpts {
   loose?: ReadonlySet<string>
   pins?: ReadonlyMap<string, Placement>
+  /** permanent crates (personal storage): aboard the whole run, never freed,
+   *  and the packer never stacks cargo on them */
+  fixtures?: ReadonlyMap<string, Placement>
   /** the previous plan's placements: a box that still fits its old spot
    *  keeps it, so a re-plan never re-deals cargo the user already saw settled */
   prev?: ReadonlyMap<string, Placement>
@@ -107,6 +110,8 @@ interface Slot {
   anchor: boolean
   /** placed by the user's hand: physics binds it, zoning aesthetics don't */
   pinned?: boolean
+  /** permanent crate: blocks like an anchor but its top is never support */
+  fixture?: boolean
 }
 
 function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
@@ -226,7 +231,7 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
         if (
           !under ||
           !(
-            under.anchor ||
+            (under.anchor && !under.fixture) ||
             ((under.stop === t.stop || under.pinned) && containsWindow(under, t) && under.box.size >= t.box.size)
           )
         )
@@ -371,7 +376,7 @@ function findSpot(
               if (
                 !under ||
                 !(
-                  under.anchor ||
+                  (under.anchor && !under.fixture) ||
                   ((under.stop === t.stop || under.pinned) && containsWindow(under, t) && under.box.size >= t.box.size)
                 )
               )
@@ -670,9 +675,19 @@ export interface HoldOracle {
 
 const FUT = 1 << 20
 
-export function holdOracle(grids: CargoGrid[]): HoldOracle {
+export function holdOracle(grids: CargoGrid[], fixtures?: ReadonlyMap<string, Placement>): HoldOracle {
   const bays = grids.filter((g) => g.autoLoad !== false).map((g, i) => bayCtx(g, i))
   let slots: Slot[] = []
+  if (fixtures) {
+    const byId = new Map(bays.map((b) => [b.grid.id, b]))
+    for (const [, p] of fixtures) {
+      const bay = byId.get(p.gridId)
+      if (!bay) continue
+      const s = fromPlacement(bay, p, -1, NEVER, true)
+      s.fixture = true
+      slots.push(s)
+    }
+  }
   const byJob = new Map<number, Slot[]>()
   let seq = 0
   const rungs: Array<{ gap: number; relax: Relax }> = [{ gap: 0, relax: {} }, { gap: 0, relax: { peel: true } }]
@@ -685,7 +700,7 @@ export function holdOracle(grids: CargoGrid[]): HoldOracle {
     const gone = new Set<Slot>()
     if (dropping) for (const id of dropping) for (const s of byJob.get(id) ?? []) gone.add(s)
     const work = slots.filter((s) => !gone.has(s))
-    for (const s of work) s.drop = FUT + rankOf(s.stop)
+    for (const s of work) if (!s.anchor) s.drop = FUT + rankOf(s.stop)
     const placed: Slot[][] = []
     for (const job of jobs) {
       const mine: Slot[] = []
@@ -736,7 +751,7 @@ export function holdOracle(grids: CargoGrid[]): HoldOracle {
 }
 
 export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts = {}): HoldPlan {
-  const { loose, pins, prev, gap = 0, frames, debug } = opts
+  const { loose, pins, fixtures, prev, gap = 0, frames, debug } = opts
   const openable = grids.filter((g) => g.autoLoad !== false)
   const bays = openable.map((g, i) => bayCtx(g, i, frames?.get(g.id)))
   const bayById = new Map(bays.map((b) => [b.grid.id, b]))
@@ -782,6 +797,14 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     const slots: Slot[] = []
     const byBox = new Map<string, Slot>()
     const kept = new Set<string>()
+    if (fixtures)
+      for (const [, p] of fixtures) {
+        const bay = bayById.get(p.gridId)
+        if (!bay) continue
+        const s = fromPlacement(bay, p, -1, NEVER, true)
+        s.fixture = true
+        slots.push(s)
+      }
     if (pins)
       for (const [id, p] of pins) {
         const bay = bayById.get(p.gridId)
@@ -1086,7 +1109,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   // down, onto the nearest legal support
   const settlePins = (p: PassResult): void => {
     const holds = (r: Slot, t: Slot): boolean =>
-      r.anchor || ((r.stop === t.stop || !!r.pinned) && containsWindow(r, t) && r.box.size >= t.box.size)
+      (r.anchor && !r.fixture) || ((r.stop === t.stop || !!r.pinned) && containsWindow(r, t) && r.box.size >= t.box.size)
     const seated = (rivals: Slot[], t: Slot, atY: number): boolean => {
       if (atY === 0) return true
       for (let dc = 0; dc < t.cw; dc++)

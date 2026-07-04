@@ -1,6 +1,7 @@
 import type { HaulingContract, Location } from '@shared/types'
 import { planRoute, type RouteJob, type RouteResult } from '@shared/route'
 import { holdOracle, type HoldOracle } from '@shared/hold'
+import type { Placement } from '@shared/packer'
 import type { CargoGrid } from '@shared/cargoGrids'
 import { boxList } from '@shared/box'
 import { splitDestination } from '../data/stations'
@@ -188,7 +189,12 @@ function sameLoc(a: Location | null, b: Location | null): boolean {
 
 // split a bucket by what physically packs in one go, not raw SCU: a
 // 696-SCU chunk can pass the sum check yet never tile the bays
-function chunkToFit(boxes: number[], cap: number, bays: CargoGrid[]): number[][] {
+function chunkToFit(
+  boxes: number[],
+  cap: number,
+  bays: CargoGrid[],
+  fixtures?: ReadonlyMap<string, Placement>
+): number[][] {
   const bins: number[][] = []
   const sums: number[] = []
   const oracles: (HoldOracle | null)[] = []
@@ -204,7 +210,7 @@ function chunkToFit(boxes: number[], cap: number, bays: CargoGrid[]): number[][]
       placed = true
     }
     if (!placed) {
-      const o = holdOracle(bays)
+      const o = holdOracle(bays, fixtures)
       const ok = o.take([{ id: id++, dest: 0, boxes: [b] }], () => 0, true)
       bins.push([b])
       sums.push(b)
@@ -255,8 +261,14 @@ export function buildRouteModel(
   locations: Location[],
   startLocation?: string,
   capacity?: number,
-  bays?: CargoGrid[]
+  bays?: CargoGrid[],
+  fixtures?: ReadonlyMap<string, Placement>
 ): RouteModel {
+  if (fixtures?.size && capacity && capacity > 0) {
+    let scu = 0
+    for (const [, p] of fixtures) scu += p.box.size
+    capacity = Math.max(1, capacity - scu)
+  }
   const nodes: RouteNode[] = []
   const byKey = new Map<string, number>()
 
@@ -343,7 +355,7 @@ export function buildRouteModel(
         }
         // split by what one load can actually take
         if (bays && bays.length) {
-          for (const chunk of chunkToFit(boxes, capacity ?? 0, bays)) addJob(chunk)
+          for (const chunk of chunkToFit(boxes, capacity ?? 0, bays, fixtures)) addJob(chunk)
         } else if (capacity && capacity > 0 && boxes.reduce((a, v) => a + v, 0) > capacity) {
           for (const chunk of chunkToCapacity(boxes, capacity)) addJob(chunk)
         } else {
@@ -417,10 +429,11 @@ export function computeRoutePlan(
   manualOrder?: string[],
   deferred?: string[],
   aboard?: ReadonlySet<string>,
-  startKey?: string
+  startKey?: string,
+  fixtures?: ReadonlyMap<string, Placement>
 ): RoutePlan | null {
   locations = withCityCoords(locations)
-  const model = buildRouteModel(contracts, locations, startLocation, capacity, bays)
+  const model = buildRouteModel(contracts, locations, startLocation, capacity, bays, fixtures)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
 
@@ -475,7 +488,8 @@ export function computeRoutePlan(
     fixedOrder,
     cityToLeo,
     deferred: deferredJobs,
-    aboard: aboardJobs
+    aboard: aboardJobs,
+    fixtures
   })
 
   const refOf = (ji: number): StepRef => ({

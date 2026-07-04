@@ -1,7 +1,7 @@
 // capacitated pickup-and-delivery planner
 
 import { holdOracle, planHold, type OracleJob } from './hold'
-import type { LoadEvent, PackBox } from './packer'
+import type { LoadEvent, PackBox, Placement } from './packer'
 import type { CargoGrid } from './cargoGrids'
 
 export interface RouteJob {
@@ -32,6 +32,8 @@ export interface RouteInput {
   deferred?: Set<number>
   /** job indices already physically aboard: pickups happened, only deliveries remain */
   aboard?: Set<number>
+  /** permanent crates parked in the hold; their space is never plannable */
+  fixtures?: ReadonlyMap<string, Placement>
 }
 
 export interface PlannedStop {
@@ -446,7 +448,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
     let trip = 0
     let started = seeded.length > 0
 
-    const oracle = input.bays ? holdOracle(input.bays) : null
+    const oracle = input.bays ? holdOracle(input.bays, input.fixtures) : null
     if (oracle && seeded.length) {
       const ranked = [...new Set(seeded.map((j) => j.dest))].sort((a, b) => dist[cur][a] - dist[cur][b])
       const rankMap = new Map(ranked.map((d, i) => [d, i]))
@@ -596,7 +598,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
     const late = new Set<number>()
     let best = { walk, homeless: Number.MAX_SAFE_INTEGER }
     for (let round = 0; ; round++) {
-      const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), {})
+      const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), { fixtures: input.fixtures })
       const bad = new Set<number>()
       for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
       // an aboard job can't load later - it's already on the ship
@@ -787,8 +789,13 @@ function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadE
 
 // can the layout engine house every box across the whole pass? An optimal
 // order survives a few declared digs; only a homeless box rejects it
-function singlePassPacks(stops: PlannedStop[], jobs: IJob[], bays: CargoGrid[]): boolean {
-  return planHold(bays, passEvents(stops, jobs), {}).snaps.every((s) => s.unplaced.length === 0)
+function singlePassPacks(
+  stops: PlannedStop[],
+  jobs: IJob[],
+  bays: CargoGrid[],
+  fixtures?: ReadonlyMap<string, Placement>
+): boolean {
+  return planHold(bays, passEvents(stops, jobs), { fixtures }).snaps.every((s) => s.unplaced.length === 0)
 }
 
 // a later visit that exists only to fetch cargo collapses into an earlier
@@ -806,7 +813,7 @@ function pullForward(res: RouteResult, input: RouteInput): RouteResult {
   let budget = 7
   const judge = (stops: PlannedStop[]): { lost: number; conc: number } => {
     judges++
-    const plan = planHold(input.bays!, passEvents(stops, jobs), {})
+    const plan = planHold(input.bays!, passEvents(stops, jobs), { fixtures: input.fixtures })
     const ids = new Set<string>()
     for (const s of plan.snaps) for (const b of s.unplaced) ids.add(b.id)
     return { lost: ids.size, conc: plan.concessions.length }
@@ -876,6 +883,11 @@ function pullForward(res: RouteResult, input: RouteInput): RouteResult {
 }
 
 export function planRoute(input: RouteInput): RouteResult {
+  if (input.fixtures?.size && input.capacity > 0) {
+    let scu = 0
+    for (const [, p] of input.fixtures) scu += p.box.size
+    input = { ...input, capacity: Math.max(1, input.capacity - scu) }
+  }
   const res = solveRoute(input)
   // a hand-ordered route is the user's word; leave it alone
   return res.method === 'manual' ? res : pullForward(res, input)
@@ -901,7 +913,7 @@ function solveRoute(input: RouteInput): RouteResult {
   const single = bestOrder(input)
   if (single) {
     const mat = materialize(single.order, jobs, input.dist)
-    if (!input.bays || singlePassPacks(mat.stops, jobs, input.bays)) {
+    if (!input.bays || singlePassPacks(mat.stops, jobs, input.bays, input.fixtures)) {
       return {
         order: single.order,
         stops: mat.stops,
