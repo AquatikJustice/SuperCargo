@@ -1936,7 +1936,7 @@ export default function CargoGridPage(): React.ReactElement {
         {loading && offGrid.count > 0 && (
           <span
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: F.body, fontSize: 13, color: C.amber }}
-            title="Cargo riding loose in the hold, not in a bay slot."
+            title="Cargo off grid, not in a bay slot."
           >
             <OffGridGlyph />
             <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
@@ -2986,7 +2986,7 @@ function PickupDecision({
     : [
         // no stash on ships with no off-grid: the boxes would just vanish
         ...(canStash
-          ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `${offBreakdown} rides loose in the hold, the rest loads normally.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
+          ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `${offBreakdown} rides off grid, the rest loads normally.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
           : []),
         { id: 'come', title: `Come back for ${destLabel}'s load`, desc: 'Leave the whole pickup for a later trip.', run: () => onComeBack(loadIds) }
       ]
@@ -2994,7 +2994,7 @@ function PickupDecision({
   const confirmCopy: Record<string, string> = {
     load: `Loading now, ${digCount} boxes set aside to dig out earlier stops.`,
     come: dig ? 'Skipped for a later pass.' : 'Whole pickup left for a later trip.',
-    stash: `Stashed off-grid: ${offBreakdown} / ${fmt(offScu)} SCU riding loose.`
+    stash: `Stashed off grid: ${offBreakdown} / ${fmt(offScu)} SCU.`
   }
 
   const accent = dig ? '#a99cd0' : '#c9b07e'
@@ -3018,8 +3018,8 @@ function PickupDecision({
         {dig
           ? `These sit on cargo you deliver sooner — ${bigNote}${fmt(digScu)} SCU comes off by hand to reach them.`
           : canStash
-            ? 'Small boxes wedge into corners; the big ones have nowhere to hide. Stash the overflow loose, or leave the pickup for later.'
-            : 'This won’t all fit and the ship can’t carry loose boxes, so leave the pickup for later.'}
+            ? 'Small boxes wedge into corners; the big ones have nowhere to hide. Stash the overflow off grid, or leave the pickup for later.'
+            : 'This won’t all fit and the ship can’t carry off-grid boxes, so leave the pickup for later.'}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>

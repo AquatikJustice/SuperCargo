@@ -554,7 +554,7 @@ function OffGridBadge({ variant, count }: { variant: 'tag' | 'rollup'; count?: n
   const rollup = variant === 'rollup'
   return (
     <span
-      title="Cargo riding off-grid (loose in the hold), not in a bay slot"
+      title="Cargo off grid, not in a bay slot"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
