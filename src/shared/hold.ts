@@ -754,9 +754,16 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     ;(units.get(key) ?? units.set(key, []).get(key)!).push(b)
   }
   // earliest deliveries claim the shallow space first
-  const ordered = [...units.values()].sort(
+  let ordered = [...units.values()].sort(
     (a, b) => dropOf(a[0].id) - dropOf(b[0].id) || loadOf(a[0].id) - loadOf(b[0].id)
   )
+  // on an over-full hold, boxes the previous plan couldn't seat stay at the
+  // back of the line: letting them jump into a spot a drag just vacated is
+  // what makes OTHER boxes blink out of the hold mid-walk
+  if (prev?.size) {
+    const had = (u: PackBox[]): boolean => u.some((b) => prev.has(b.id))
+    ordered = ordered.filter(had).concat(ordered.filter((u) => !had(u)))
+  }
   const lastDrop = ordered.length ? dropOf(ordered[ordered.length - 1][0].id) : -1
 
   interface PassResult {
