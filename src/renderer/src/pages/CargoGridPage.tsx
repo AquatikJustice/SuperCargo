@@ -1247,9 +1247,12 @@ export default function CargoGridPage(): React.ReactElement {
             pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, w: s.w, l: s.l, h: s.h, rotated: s.rotated, pickupKey: pk }
           }
           // a drop that would shove someone else's box clean off the ship is
-          // refused, not silently paid for with vanishing cargo
+          // refused, not silently paid for with vanishing cargo. The spot can
+          // look wide open NOW and still be spoken for at the run's fullest
+          // moment, so the notice names where the crunch actually bites
           const env = packEnvRef.current
           let evicted = 0
+          let crunchAt = -1
           if (env && Object.keys(pins).length) {
             const byKey = new Map(env.source.map((b) => [boxKey(b), b]))
             const hyp = new Map(env.pins)
@@ -1268,15 +1271,23 @@ export default function CargoGridPage(): React.ReactElement {
             for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
             const dragged = new Set(Object.keys(pins))
             const fresh = new Set<string>()
-            for (const s2 of probe.snaps)
-              for (const u of s2.unplaced) if (!before.has(u.id) && !dragged.has(boxKey(u))) fresh.add(u.id)
+            probe.snaps.forEach((s2, i) => {
+              for (const u of s2.unplaced)
+                if (!before.has(u.id) && !dragged.has(boxKey(u))) {
+                  if (!fresh.has(u.id) && crunchAt < 0) crunchAt = i
+                  fresh.add(u.id)
+                }
+            })
             evicted = fresh.size
           }
           if (evicted) {
+            const step = crunchAt >= 0 ? loadSteps[crunchAt] : undefined
+            const where = step ? destLabelOf(step.boundFor) || step.label : ''
+            const boxes = evicted === 1 ? 'a box loses its spot' : `${evicted} boxes lose their spot`
             setDropNotice(
-              evicted === 1
-                ? 'No room to move the displaced box - drop somewhere clear, or stash something off-grid first'
-                : `No room to move ${evicted} displaced boxes - drop somewhere clear, or stash something off-grid first`
+              crunchAt >= 0 && crunchAt !== loadIdx
+                ? `This spot is free now, but the run needs it later: ${boxes} around ${where || `step ${crunchAt + 1}`}. Stash more off-grid, or leave this for a later trip`
+                : `No room to move what this displaces - ${boxes}. Drop somewhere clear, or stash something off-grid first`
             )
           } else if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
