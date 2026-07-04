@@ -13,7 +13,7 @@ import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
-import { setAsideToUnload, looseSummary, bucketDecision, BIG, type SetAside, type BucketDecision } from '@shared/loadout'
+import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
 import { planHold, fixtureMap } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
@@ -3115,10 +3115,7 @@ function PickupDecision({
   const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)
   const offBreakdown = listBreakdown(decision.overloadBoxes.map((b) => b.size))
   const digCount = decision.digBoxes.length
-  const digScu = decision.digBoxes.reduce((a, b) => a + b.size, 0)
   const digBreakdown = listBreakdown(decision.digBoxes.map((b) => b.size))
-  const digBig = decision.digBoxes.filter((b) => b.size >= BIG).length
-  const bigNote = digBig ? `${digBig} big · ` : ''
 
   const pick = (id: string, run: () => void): void => {
     setChoice(id)
@@ -3128,7 +3125,7 @@ function PickupDecision({
   const options = dig
     ? [
         { id: 'load', title: 'Load it now', desc: `Set aside ${digCount} boxes to dig out earlier stops.`, run: () => {} },
-        { id: 'come', title: 'Come back for it', desc: 'Skip this pickup and grab it on a later pass.', run: () => onComeBack(loadIds) }
+        { id: 'come', title: 'Come back for it', desc: 'Grab it on a later pass.', run: () => onComeBack(loadIds) }
       ]
     : [
         // no stash on ships with no off-grid: the boxes would just vanish
@@ -3141,7 +3138,7 @@ function PickupDecision({
   const confirmCopy: Record<string, string> = {
     load: `Loading now, ${digCount} boxes set aside to dig out earlier stops.`,
     come: dig ? 'Skipped for a later pass.' : 'Whole pickup left for a later trip.',
-    stash: `Stashed off grid: ${offBreakdown} / ${fmt(offScu)} SCU.`
+    stash: `Stashed off grid: ${offBreakdown}.`
   }
 
   const accent = dig ? '#a99cd0' : '#c9b07e'
@@ -3163,7 +3160,7 @@ function PickupDecision({
       </div>
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#a8b0b3', marginBottom: 13 }}>
         {dig
-          ? `These sit on cargo you deliver sooner — ${bigNote}${fmt(digScu)} SCU comes off by hand to reach them.`
+          ? 'The plan says these sit on cargo you deliver sooner. Load and dig them out, or come back later?'
           : canStash
             ? "The plan says these boxes won't fit on grid. Load them off grid or come back later?"
             : "The plan says these won't fit, and this ship can't carry off grid. Come back later?"}

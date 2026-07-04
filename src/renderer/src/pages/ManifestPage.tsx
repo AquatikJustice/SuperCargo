@@ -85,7 +85,7 @@ export default function ManifestPage(): React.ReactElement {
         <SummaryStat label="TOTAL SCU" value={fmt(totals.scu)} first />
         <SummaryStat label="BOXES" value={fmt(totals.boxes)} />
         <SummaryStat label="STOPS" value={String(stops.length)} />
-        <SummaryStat label="DISTANCE" value={route ? fmtDistance(route.totalDistance) : '—'} />
+        <SummaryStat label="DISTANCE" value={route ? fmtDistance(route.totalDistance) : 'N/A'} />
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <LoadBar current={aboard} peak={peak} capacity={capMax} reserved={reserved} />
         </div>
