@@ -1167,9 +1167,8 @@ export default function CargoGridPage(): React.ReactElement {
     if (!loading || !grabOffer || !loadingPack || !frozenSteps || drag) return
     const env = packEnvRef.current
     if (!env) return
-    const key = `${loadIdx}|${grabOffer.ids.join(',')}`
-    if (grabbedOnce.current === key) return
-    grabbedOnce.current = key
+    if (grabbedOnce.current) return
+    grabbedOnce.current = '1'
     const steps2 = filterDeferredSteps(
       frozenSteps,
       new Set(deferredObjectives),
@@ -1591,6 +1590,12 @@ export default function CargoGridPage(): React.ReactElement {
     // visit keys must stay unique across the splice
     const tripBase = Math.max(0, ...prefix.map((s) => s.trip)) + 1
     tail = tail.map((s) => ({ ...s, trip: s.trip + tripBase }))
+    // the tail's leading steps at this node ARE the visit the user stands at;
+    // a re-minted trip there orphans every pin made at this stop
+    for (const s of tail) {
+      if (s.nodeKey !== cur.nodeKey) break
+      s.trip = cur.trip
+    }
     const combined = prefix.concat(tail)
     // depth order follows the new drop order
     const dn = new Map<string, number>()
@@ -1631,9 +1636,10 @@ export default function CargoGridPage(): React.ReactElement {
     if (!snap?.unplaced.length) return
     const mine = new Set((loadingPack.stepBoxes[loadIdx] ?? []).map((b) => b.id))
     if (!snap.unplaced.some((u) => mine.has(u.id) && !looseBoxes.includes(boxKey(u)))) return
-    const key = `${cur.nodeKey}|${[...cur.loadIds].sort().join(',')}`
-    if (negotiatedRef.current === key) return
-    negotiatedRef.current = key
+    // one shot per arrival, no matter how the splice reshapes the step:
+    // a second attempt on the re-solved plan is how feedback storms start
+    if (negotiatedRef.current) return
+    negotiatedRef.current = '1'
     setNegotiated(true)
     resolveTail(undefined, true)
   }, [loading, loadingPack, loadIdx, drag, loadSteps, looseBoxes])
@@ -1868,11 +1874,12 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (!loading || !frozenSteps) return
     for (const [key, p] of Object.entries(loadedPins)) {
-      const at = stepPos.byPickup.get(p.pickupKey)
-      if (at === undefined || at > loadIdx) clearLoadedPin(key)
+      // unknown key = squatter from a dead walk. Ahead-of-cursor pins are the
+      // back-unwind's job; clearing them here races the re-solve splices
+      if (!stepPos.byPickup.has(p.pickupKey)) clearLoadedPin(key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, frozenSteps, stepPos, loadIdx, loadedPins])
+  }, [loading, frozenSteps, stepPos, loadedPins])
 
   // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
   // at a step now ahead of the cursor reset; deferrals resolve in frozen space
