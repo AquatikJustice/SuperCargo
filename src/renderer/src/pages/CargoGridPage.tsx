@@ -3158,15 +3158,15 @@ function PickupDecision({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
         {dig ? <span style={{ color: accent, fontSize: 18, lineHeight: 1, flex: 'none' }}>↺</span> : <OffGridGlyph />}
         <span style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
-          {dig ? `Set aside ${digCount} boxes · ${digBreakdown}` : `${offBreakdown} · ${fmt(offScu)} SCU won't fit`}
+          {dig ? `Set aside ${digCount} boxes · ${digBreakdown}` : `${offBreakdown} won't fit`}
         </span>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#a8b0b3', marginBottom: 13 }}>
         {dig
           ? `These sit on cargo you deliver sooner — ${bigNote}${fmt(digScu)} SCU comes off by hand to reach them.`
           : canStash
-            ? 'Small boxes wedge into corners; the big ones have nowhere to hide. Stash the overflow off grid, or leave the pickup for later.'
-            : 'This won’t all fit and the ship can’t carry off-grid boxes, so leave the pickup for later.'}
+            ? 'No room left for these.'
+            : 'No room, and no off grid on this ship.'}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
