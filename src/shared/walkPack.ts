@@ -78,26 +78,30 @@ function fill(s: Bay, p: Placement, owner: number): void {
   s.used += p.w * p.l * p.h
 }
 
-// First fit, scanned z (front) then x (from the wall toward the aisle) then y, so
-// each column stacks all the way UP before the next one starts across, and the
-// wall fills before the aisle.
-function findSpot(
-  s: Bay,
-  w: number,
-  l: number,
-  h: number,
-  minZ: number,
-  stop: number
-): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
+type Spot = { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean }
+
+// First fit for one footprint: scan z (front) then x (wall toward aisle) then y,
+// so each column stacks all the way UP before the next starts across.
+function fit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, rotated: boolean): Spot | null {
   const g = s.grid
-  const orients: Array<[number, number, boolean]> = w === l ? [[w, l, false]] : [[w, l, false], [l, w, true]]
-  for (let z = Math.max(0, minZ); z + 1 <= g.l; z++)
-    for (let xi = 0; xi < g.w; xi++) {
-      const x = s.wallHigh ? g.w - 1 - xi : xi
-      for (let y = 0; y + h <= g.h; y++)
-        for (const [fw, fl, rotated] of orients) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
+  for (let z = Math.max(0, minZ); z + fl <= g.l; z++)
+    for (let xi = 0; xi + fw <= g.w; xi++) {
+      const x = s.wallHigh ? g.w - fw - xi : xi
+      for (let y = 0; y + h <= g.h; y++) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
     }
   return null
+}
+
+// Take the shallower of the two orientations so a box that would stick out in
+// depth lies down instead, keeping the block's footprint tight. Ties keep the
+// natural (unrotated) orientation.
+function findSpot(s: Bay, w: number, l: number, h: number, minZ: number, stop: number): Spot | null {
+  const flat = fit(s, w, l, h, minZ, stop, false)
+  if (w === l) return flat
+  const turned = fit(s, l, w, h, minZ, stop, true)
+  if (!turned) return flat
+  if (!flat) return turned
+  return turned.z + turned.fl < flat.z + flat.fl ? turned : flat
 }
 
 export interface RunOpts {
