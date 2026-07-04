@@ -1183,15 +1183,10 @@ export default function CargoGridPage(): React.ReactElement {
     })
     const base = new Set<string>()
     for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
-    let dirty = probe.concessions.length > loadingPack.conc
-    if (!dirty)
-      outer: for (const s of probe.snaps)
-        for (const u of s.unplaced)
-          if (!base.has(u.id)) {
-            dirty = true
-            break outer
-          }
-    if (dirty) setGrabAsk(true)
+    // volume said yes but the stack says no: someone never finds a seat.
+    // That's not an offer, so no card either
+    for (const s of probe.snaps) for (const u of s.unplaced) if (!base.has(u.id)) return
+    if (probe.concessions.length > loadingPack.conc) setGrabAsk(true)
     else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
   }, [loading, grabOffer, loadingPack, frozenSteps, drag, loadIdx, deferredObjectives, tickedObj, grabbedObjectives, grids, fixtures, setObjectiveGrabbed])
 
@@ -1564,6 +1559,13 @@ export default function CargoGridPage(): React.ReactElement {
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
     for (const key of Object.keys(loadedPins)) aboard.add(key.split('#')[0])
+    // everything the user can SEE in the hold is aboard, pinned or not; a
+    // tail that re-emits it as a future pickup un-boards it from the view
+    const curIds = new Set(cur.kind === 'load' ? cur.loadIds : [])
+    for (const p of loadingPack?.snaps[loadIdx]?.placements ?? []) {
+      const oid = p.box.objectiveId
+      if (oid && !(replanCurrent && curIds.has(oid))) aboard.add(oid)
+    }
     if (!replanCurrent && cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
     const tailRoute = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
