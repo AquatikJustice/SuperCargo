@@ -333,20 +333,35 @@ export function filterDeferredSteps(
   const out: LoadingStep[] = []
   steps.forEach((s, i) => {
     const away = movedFrom.get(i)
-    const incoming = movedTo.get(i) ?? []
-    const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId)).concat(incoming)
+    const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId))
+    // grabbed pickups join the visit as their OWN steps, one per destination:
+    // lumping them into another group's step loads two groups in one tick
+    const emitGrabbed = (): void => {
+      const incoming = movedTo.get(i)
+      if (!incoming?.length) return
+      const byDest = new Map<string, LoadingStep['lines']>()
+      for (const l of incoming) {
+        const a = byDest.get(l.destination) ?? []
+        a.push(l)
+        byDest.set(l.destination, a)
+      }
+      for (const [dest, ls] of byDest)
+        out.push({ ...s, kind: 'load', boundFor: dest, groupPos: 0, groupTotal: 0, lines: ls, loadIds: ls.map((l) => l.objectiveId), dropIds: [] })
+    }
     // a step that lost all its lines drops out; a born-empty step (step 0) stays
-    if (!lines.length && s.lines.length) return
-    if (lines.length === s.lines.length && !away && !incoming.length) {
-      out.push(s)
+    if (!lines.length && s.lines.length) {
+      emitGrabbed()
       return
     }
-    out.push({
-      ...s,
-      lines,
-      loadIds: s.loadIds.filter((id) => !gone(id) && !away?.has(id)).concat(incoming.map((l) => l.objectiveId)),
-      dropIds: s.dropIds.filter((id) => !gone(id))
-    })
+    if (lines.length === s.lines.length && !away) out.push(s)
+    else
+      out.push({
+        ...s,
+        lines,
+        loadIds: s.loadIds.filter((id) => !gone(id) && !away?.has(id)),
+        dropIds: s.dropIds.filter((id) => !gone(id))
+      })
+    emitGrabbed()
   })
   return out
 }
