@@ -616,6 +616,7 @@ export default function CargoGridPage(): React.ReactElement {
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const spaceDeliveryPiles = useStore((s) => s.settings.spaceDeliveryPiles)
+  const updateSettings = useStore((s) => s.updateSettings)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const clearAllPickedUp = useStore((s) => s.clearAllPickedUp)
@@ -2258,6 +2259,30 @@ export default function CargoGridPage(): React.ReactElement {
               </div>
             ))}
           </div>
+        )}
+        {loading && (
+          <Btn
+            onClick={() => void updateSettings({ spaceDeliveryPiles: !spaceDeliveryPiles })}
+            title="Leave a gap between cargo for different stops, when there's room"
+            style={{
+              position: 'absolute',
+              bottom: 10,
+              right: 10,
+              zIndex: 4,
+              border: `1px solid ${spaceDeliveryPiles ? C.acc : C.lineStrong}`,
+              background: 'rgba(8,12,16,0.82)',
+              color: spaceDeliveryPiles ? C.acc : C.dim,
+              fontFamily: F.display,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              padding: '6px 12px',
+              cursor: 'pointer'
+            }}
+            hoverStyle={{ color: C.acc, border: `1px solid ${C.acc}` }}
+          >
+            SPACE PILES · {spaceDeliveryPiles ? 'ON' : 'OFF'}
+          </Btn>
         )}
         {!loading && (
           <div
