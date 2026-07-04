@@ -569,6 +569,7 @@ export default function CargoGridPage(): React.ReactElement {
   const order = useStore((s) => s.order)
   const route = useStore((s) => s.route)
   const locations = useStore((s) => s.locations)
+  const startLocation = useStore((s) => s.startLocation)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const turnInDestination = useStore((s) => s.turnInDestination)
@@ -637,7 +638,27 @@ export default function CargoGridPage(): React.ReactElement {
   const setFrozenBoxes = useStore((s) => s.setLoadingBoxes)
   useEffect(() => {
     if (loading) {
-      setFrozenSteps((prev) => prev ?? liveSteps)
+      // every walk opens on step 0: empty ship at the depot, park crates, head out
+      setFrozenSteps((prev) => {
+        if (prev) return prev
+        const first = liveSteps[0]
+        const step0: LoadingStep = {
+          nodeKey: '__start__',
+          label: startLocation || first?.label || 'START',
+          code: '',
+          region: '',
+          trip: first?.trip ?? 0,
+          start: true,
+          kind: 'load',
+          boundFor: '',
+          groupPos: 0,
+          groupTotal: 0,
+          lines: [],
+          loadIds: [],
+          dropIds: []
+        }
+        return [step0, ...liveSteps]
+      })
       setFrozenBoxes((prev) => prev ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[]))
     } else {
       setFrozenSteps(null)
@@ -1430,16 +1451,16 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
-  // a move that displaces cargo is never refused: the displaced stops go back
-  // to the router instead. Cargo aboard is seeded, the walked steps stay as
-  // history, and everything past the current step re-solves from where the
-  // ship is sitting
-  const resolveTail = (fx?: Map<string, Placement>): void => {
+  // a plan that went off the rails gets thrown away, never argued with: the
+  // stops ahead re-solve from where the ship sits, cargo aboard seeded, walked
+  // steps kept as history. replanCurrent also hands the OPEN step back to the
+  // router (its pickup wouldn't seat), letting it defer or re-split
+  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
     for (const key of Object.keys(loadedPins)) aboard.add(key.split('#')[0])
-    if (cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
+    if (!replanCurrent && cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
     const tailRoute = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
       locations,
@@ -1454,15 +1475,18 @@ export default function CargoGridPage(): React.ReactElement {
     )
     if (!tailRoute) return
     let tail = buildLoadingSteps(contracts, tailRoute, order)
-    // the tail re-plans this visit's remaining work; anything the open card
-    // already covers would walk twice
-    const curIds = new Set([...cur.loadIds, ...cur.dropIds])
-    while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => curIds.has(l.objectiveId)))
-      tail = tail.slice(1)
+    const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : loadIdx + 1)
+    if (!replanCurrent) {
+      // the tail re-plans this visit's remaining work; anything the open card
+      // already covers would walk twice
+      const curIds = new Set([...cur.loadIds, ...cur.dropIds])
+      while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => curIds.has(l.objectiveId)))
+        tail = tail.slice(1)
+    }
     // visit keys must stay unique across the splice
-    const tripBase = Math.max(0, ...loadSteps.slice(0, loadIdx + 1).map((s) => s.trip)) + 1
+    const tripBase = Math.max(0, ...prefix.map((s) => s.trip)) + 1
     tail = tail.map((s) => ({ ...s, trip: s.trip + tripBase }))
-    const combined = loadSteps.slice(0, loadIdx + 1).concat(tail)
+    const combined = prefix.concat(tail)
     // depth order follows the new drop order
     const dn = new Map<string, number>()
     let n = 0
@@ -1484,6 +1508,30 @@ export default function CargoGridPage(): React.ReactElement {
     // for. Pins still bind; the future re-packs fresh
     prevRef.current = null
   }
+
+  // when the open step's own cargo has no seat, the router gets one shot at
+  // re-solving before anything is asked of the user; the won't-fit card is
+  // only for walls that survive the negotiation
+  const negotiatedRef = useRef('')
+  const [negotiated, setNegotiated] = useState(false)
+  useEffect(() => {
+    negotiatedRef.current = ''
+    setNegotiated(false)
+  }, [loadIdx])
+  useEffect(() => {
+    if (!loading || !loadingPack || drag) return
+    const cur = loadSteps[loadIdx]
+    if (!cur || cur.kind !== 'load' || !cur.loadIds.length) return
+    const snap = loadingPack.snaps[loadIdx]
+    if (!snap?.unplaced.length) return
+    const mine = new Set((loadingPack.stepBoxes[loadIdx] ?? []).map((b) => b.id))
+    if (!snap.unplaced.some((u) => mine.has(u.id) && !looseBoxes.includes(boxKey(u)))) return
+    const key = `${cur.nodeKey}|${[...cur.loadIds].sort().join(',')}`
+    if (negotiatedRef.current === key) return
+    negotiatedRef.current = key
+    setNegotiated(true)
+    resolveTail(undefined, true)
+  }, [loading, loadingPack, loadIdx, drag, loadSteps, looseBoxes])
 
   const commitDrag = (): void => {
     setDrag((d) => {
@@ -1869,6 +1917,7 @@ export default function CargoGridPage(): React.ReactElement {
               onUndoDefer={(id) => setObjectiveDeferred(id, false)}
               capacity={result.capacity}
               reserved={crates.reduce((a, c) => a + c.size, 0)}
+              negotiated={negotiated}
               done={done}
               idx={loadIdx}
               total={loadSteps.length}
@@ -2392,6 +2441,7 @@ function LoadingPanel({
   onUndoDefer,
   capacity,
   reserved,
+  negotiated,
   done,
   idx,
   total,
@@ -2420,6 +2470,7 @@ function LoadingPanel({
   onUndoDefer: (id: string) => void
   capacity: number
   reserved: number
+  negotiated: boolean
   done: boolean
   idx: number
   total: number
@@ -2519,7 +2570,7 @@ function LoadingPanel({
       </Btn>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 44px 10px 16px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
-          STEP {idx + 1} / {total}
+          STEP {steps[0]?.start ? idx : idx + 1} / {steps[0]?.start ? total - 1 : total}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
@@ -2541,6 +2592,23 @@ function LoadingPanel({
           const isCurrent = gi === idx
           const isPast = gi < idx
           const load = s.kind === 'load'
+          if (s.start)
+            return (
+              <div key="start" ref={isCurrent ? currentRef : undefined} style={{ borderLeft: `3px solid ${C.acc}`, padding: '9px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: C.acc, boxShadow: isCurrent ? GLOW : 'none', flex: 'none' }} />
+                  <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color: isCurrent ? C.text : C.dim }}>
+                    EMPTY HOLD
+                  </span>
+                  {isCurrent && (
+                    <span style={{ marginLeft: 'auto', fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: C.acc }}>● NOW</span>
+                  )}
+                </div>
+                <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>
+                  Set up your hold, then head out.
+                </div>
+              </div>
+            )
           const accent = (load ? objColors.get(s.lines[0]?.objectiveId) : C.acc) ?? C.green
           return (
             <div
@@ -2583,6 +2651,7 @@ function LoadingPanel({
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
                   canStash={canStash}
+                  negotiated={negotiated}
                   onStashOffGrid={onStashOffGrid}
                   onComeBack={onComeBack}
                 />
@@ -2647,7 +2716,7 @@ function LoadingPanel({
             style={{ flex: 1, border: `1px solid ${C.acc}`, background: C.accFillStrong, color: C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: 'pointer' }}
             hoverStyle={{ background: 'rgba(255,210,30,0.26)' }}
           >
-            LOADED · NEXT
+            {step?.start ? 'HEAD OUT' : 'LOADED · NEXT'}
           </Btn>
         ) : (
           <>
@@ -2827,6 +2896,7 @@ function PickupDecision({
   destLabel,
   loadIds,
   canStash,
+  negotiated,
   onStashOffGrid,
   onComeBack
 }: {
@@ -2835,11 +2905,15 @@ function PickupDecision({
   destLabel: string
   loadIds: string[]
   canStash: boolean
+  negotiated: boolean
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
 }): React.ReactElement | null {
   const [choice, setChoice] = useState<string | null>(null)
   if (decision.kind === 'none') return null
+  // a won't-fit only surfaces after the router already re-solved and the wall
+  // held; dig-outs aren't a fit problem and show right away
+  if (decision.kind !== 'digout' && !negotiated) return null
 
   const dig = decision.kind === 'digout'
   const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)

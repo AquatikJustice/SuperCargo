@@ -157,6 +157,8 @@ export interface LoadingStep {
   code: string
   region: string
   trip: number
+  /** the synthetic step 0: empty ship at the depot, set up before heading out */
+  start?: boolean
   kind: 'load' | 'drop'
   /** load destination, else the stop */
   boundFor: string
@@ -333,7 +335,8 @@ export function filterDeferredSteps(
     const away = movedFrom.get(i)
     const incoming = movedTo.get(i) ?? []
     const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId)).concat(incoming)
-    if (!lines.length) return
+    // a step that lost all its lines drops out; a born-empty step (step 0) stays
+    if (!lines.length && s.lines.length) return
     if (lines.length === s.lines.length && !away && !incoming.length) {
       out.push(s)
       return
