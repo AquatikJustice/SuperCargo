@@ -1706,8 +1706,7 @@ export default function CargoGridPage(): React.ReactElement {
         <Placeholder
           phase="Cargo Grid"
           lines={[
-            'No active cargo to lay out yet. Add contracts on the Manifest, then come back',
-            'here to see every box placed in the ship in delivery order, first drop-off on top.'
+            'No cargo to lay out yet. Add contracts on the Manifest, then come back to load.'
           ]}
         />
       </div>
@@ -1731,7 +1730,7 @@ export default function CargoGridPage(): React.ReactElement {
         <Stat label="BAYS" value={String(grids.filter((g) => g.autoLoad !== false).length)} />
         <span
           style={{ fontFamily: F.body, fontSize: 13, color: over ? C.red : C.green, textShadow: GLOW }}
-          title={result.squeezed ? 'Everything fits, but the roomy per-stop spacing ran out, so the boxes are packed tight.' : undefined}
+          title={result.squeezed ? 'Everything fits, packed tight.' : undefined}
         >
           {over
             ? '▲ OVER CAPACITY (overflow not shown)'
@@ -1742,7 +1741,7 @@ export default function CargoGridPage(): React.ReactElement {
         {!over && setAside.count > 0 && (
           <span
             style={{ fontFamily: F.body, fontSize: 13, color: '#d9a441', textShadow: GLOW }}
-            title="To unload in delivery order you'll set these boxes aside to reach the ones underneath. Everything still fits."
+            title="You'll set these aside to reach the cargo underneath."
           >
             ↺ set aside {setAside.count} to unload{setAside.big ? ` (${setAside.big} big)` : ''}
           </span>
@@ -1750,7 +1749,7 @@ export default function CargoGridPage(): React.ReactElement {
         {loading && offGrid.count > 0 && (
           <span
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: F.body, fontSize: 13, color: C.amber }}
-            title="Cargo you chose to carry off-grid, riding loose in the hold rather than in a bay slot."
+            title="Cargo riding loose in the hold, not in a bay slot."
           >
             <OffGridGlyph />
             <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
@@ -1953,12 +1952,12 @@ export default function CargoGridPage(): React.ReactElement {
               {loadSteps.length > 0 ? (
                 <ModeCard
                   title="START LOADING"
-                  desc="We plan your cargo for you and walk you through it stop by stop. Drag any box in the hold to place it yourself along the way."
+                  desc="We plan the load and walk you through it stop by stop. Drag boxes to rearrange."
                   onClick={startLoading}
                 />
               ) : (
                 <div style={{ textAlign: 'center', fontFamily: F.body, fontSize: 14, color: C.dim, background: 'rgba(8,12,16,0.9)', border: `1px solid ${C.lineStrong}`, borderRadius: 8, padding: '18px 22px' }}>
-                  No route yet for this cargo. Add or fix it on the Manifest, then come back to load.
+                  No route yet, fix the cargo on the Manifest then come back to load.
                 </div>
               )}
             </div>
@@ -2459,7 +2458,7 @@ function LoadingPanel({
         </span>
         {!isLoad && (
           <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-            NEXT just previews · nothing locks until the game finishes the contract
+            NEXT previews · nothing locks until the contract completes
           </span>
         )}
       </div>
@@ -2531,9 +2530,7 @@ function LoadingPanel({
             ALSO HERE · SKIP THE RETURN
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
-            {grab.count} boxes / {grab.scu} SCU planned for a return at step {grab.stepNo}. Grab them now and that
-            stop drops off the route. They might not stack pretty — place or stash them however you need, we track
-            every box.
+            {grab.count} boxes / {grab.scu} SCU planned for a return at step {grab.stepNo}; grab them now to drop that stop.
           </div>
           <Btn
             onClick={onGrab}
@@ -2571,7 +2568,7 @@ function LoadingPanel({
       )}
       {isLoad && (
         <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
-          drag any box in the hold to place it yourself · double-click undoes
+          drag moves · R rotates · Ctrl+click selects more · double-click unlocks a box · right-click removes a crate
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
@@ -2601,7 +2598,7 @@ function LoadingPanel({
       {modal && (
         <TurnInModal
           heading={destLabel}
-          sub="you can change this until the game finishes the contract"
+          sub="you can change this until the contract completes"
           items={turnInItems}
           onSave={(entries) => {
             onTurnIn(entries)
@@ -2705,7 +2702,7 @@ function SplitDropRow({ line }: { line: LoadingStep['lines'][number] }): React.R
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.ghost }}>[{line.ref}]</span>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber, marginTop: 3 }}>
-        drop this trip&apos;s {line.scu} SCU (trip {line.tripPos}/{line.tripTotal}) · {rest} SCU rides a later trip; turn in the full contract then
+        drop this trip&apos;s {line.scu} SCU (trip {line.tripPos}/{line.tripTotal}) · {rest} SCU rides a later trip
       </div>
     </div>
   )
@@ -2788,21 +2785,21 @@ function PickupDecision({
 
   const options = dig
     ? [
-        { id: 'load', title: 'Load it now', desc: `Tightest trip. Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
-        { id: 'come', title: 'Come back for it', desc: 'Skip the whole pickup for now, grab it on a later pass. No digging.', run: () => onComeBack(loadIds) }
+        { id: 'load', title: 'Load it now', desc: `Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
+        { id: 'come', title: 'Come back for it', desc: 'Skip this pickup and grab it on a later pass.', run: () => onComeBack(loadIds) }
       ]
     : [
         // no stash on ships with no off-grid: the boxes would just vanish
         ...(canStash
-          ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `The rest loads normally; ${offBreakdown} rides in empty corners of the hold.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
+          ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `${offBreakdown} rides loose in the hold, the rest loads normally.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
           : []),
-        { id: 'come', title: `Come back for ${destLabel}'s load`, desc: 'Nothing from this pickup loads now. Its room frees up for later stops and you grab the whole thing on a later trip.', run: () => onComeBack(loadIds) }
+        { id: 'come', title: `Come back for ${destLabel}'s load`, desc: 'Leave the whole pickup for a later trip.', run: () => onComeBack(loadIds) }
       ]
 
   const confirmCopy: Record<string, string> = {
-    load: `Loading now. ${setAside.count} boxes will be set aside to dig out earlier stops.`,
-    come: dig ? 'Skipped for now. Grab it on a later pass, no digging.' : 'Whole pickup left for a later trip. Its room is free for later stops.',
-    stash: `Stashed off-grid. ${offBreakdown} / ${fmt(offScu)} SCU riding loose from this stop.`
+    load: `Loading now, ${setAside.count} boxes set aside to dig out earlier stops.`,
+    come: dig ? 'Skipped for a later pass.' : 'Whole pickup left for a later trip.',
+    stash: `Stashed off-grid: ${offBreakdown} / ${fmt(offScu)} SCU riding loose.`
   }
 
   return (
@@ -2816,10 +2813,10 @@ function PickupDecision({
 
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#b7c0c3', marginBottom: 10 }}>
         {dig
-          ? "Loading this now sits it on top of cargo you deliver sooner. To reach that cargo you'll set some boxes aside by hand."
+          ? "This sits on cargo you deliver sooner, so you'll set some boxes aside by hand to reach it."
           : canStash
-            ? 'This won’t all fit the grid. Wedge the overflow into empty corners of the hold, or leave the whole pickup for a later trip.'
-            : 'This won’t all fit the grid, and this ship has nowhere to carry loose boxes. Leave the whole pickup for a later trip.'}
+            ? 'This won’t all fit the grid, so stash the overflow loose or leave the pickup for later.'
+            : 'This won’t all fit and this ship can’t carry loose boxes, so leave the pickup for later.'}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0 12px 11px', borderLeft: `2px solid ${C.amber}`, marginBottom: 12 }}>
