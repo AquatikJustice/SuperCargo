@@ -22,6 +22,8 @@ interface Bay {
   grid: CargoGrid
   occ: Uint8Array
   owner: Int16Array
+  /** which stop owns each depth slice; a slice holds one destination only. */
+  slice: Int16Array
   used: number
 }
 
@@ -29,12 +31,14 @@ const idx = (g: CargoGrid, x: number, y: number, z: number): number => x + z * g
 
 function makeBay(grid: CargoGrid): Bay {
   const n = grid.w * grid.l * grid.h
-  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), used: 0 }
+  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), slice: new Int16Array(grid.l).fill(-1), used: 0 }
 }
 
 function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number): boolean {
   const g = s.grid
   if (x + fw > g.w || z + fl > g.l || y + fh > g.h) return false
+  // a depth slice belongs to one destination, so stops never share a footprint
+  for (let dz = 0; dz < fl; dz++) if (s.slice[z + dz] !== -1 && s.slice[z + dz] !== stop) return false
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) if (s.occ[idx(g, x + dx, y + dy, z + dz)]) return false
@@ -59,6 +63,8 @@ function fill(s: Bay, p: Placement, owner: number): void {
         s.occ[i] = 1
         s.owner[i] = owner
       }
+  // crates (fixtures) sit in a slice without owning it, so cargo can pack beside them
+  if (owner >= 0) for (let dz = 0; dz < p.l; dz++) if (p.z + dz < g.l) s.slice[p.z + dz] = owner
   s.used += p.w * p.l * p.h
 }
 
@@ -99,6 +105,18 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
   const giOf = (gridId: string): number => bays.findIndex((b) => b.grid.id === gridId)
   const homes = new Map<string, Placement>()
 
+  // Seat every locked box first and claim its slices, so no matter which
+  // destination each pin belongs to, the packed cargo lands clear of it.
+  const pinnedIds = new Set<string>()
+  if (opts.pins)
+    for (const [id, p] of opts.pins) {
+      const b = byId.get(p.gridId)
+      if (!b) continue
+      fill(b, p, p.box.stopIdx)
+      homes.set(id, p)
+      pinnedIds.add(id)
+    }
+
   const byStop = new Map<number, PackBox[]>()
   for (const b of boxes) (byStop.get(b.stopIdx) ?? byStop.set(b.stopIdx, []).get(b.stopIdx)!).push(b)
   const stops = [...byStop.keys()].sort((a, b) => a - b)
@@ -116,16 +134,14 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
     }
 
     for (const box of stopBoxes) {
-      const dims = BOX_DIMS[box.size]
-      if (!dims) { unplaced.push(box); continue }
-      // a locked box keeps its spot and counts as this stop's block, so the next
-      // destination lands behind it instead of packing in around it
-      const pin = opts.pins?.get(box.id)
-      if (pin) {
-        const b = byId.get(pin.gridId)
-        if (b) { fill(b, pin, stop); homes.set(box.id, pin); reach(giOf(pin.gridId), pin.z + pin.l) }
+      // a locked box is already seated; just fold its depth into this block
+      if (pinnedIds.has(box.id)) {
+        const p = homes.get(box.id)!
+        reach(giOf(p.gridId), p.z + p.l)
         continue
       }
+      const dims = BOX_DIMS[box.size]
+      if (!dims) { unplaced.push(box); continue }
       let done = false
       for (let gi = frontGi; gi < bays.length; gi++) {
         const s = bays[gi]
