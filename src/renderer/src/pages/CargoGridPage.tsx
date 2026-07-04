@@ -1281,13 +1281,10 @@ export default function CargoGridPage(): React.ReactElement {
             evicted = fresh.size
           }
           if (evicted) {
-            const step = crunchAt >= 0 ? loadSteps[crunchAt] : undefined
-            const where = step ? destLabelOf(step.boundFor) || step.label : ''
-            const boxes = evicted === 1 ? 'a box loses its spot' : `${evicted} boxes lose their spot`
             setDropNotice(
               crunchAt >= 0 && crunchAt !== loadIdx
-                ? `This spot is free now, but the run needs it later: ${boxes} around ${where || `step ${crunchAt + 1}`}. Stash more off-grid, or leave this for a later trip`
-                : `No room to move what this displaces - ${boxes}. Drop somewhere clear, or stash something off-grid first`
+                ? 'This spot is reserved for a later pickup.'
+                : 'No room to move the displaced boxes.'
             )
           } else if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
