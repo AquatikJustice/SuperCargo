@@ -1058,15 +1058,22 @@ export default function CargoGridPage(): React.ReactElement {
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
+  // what the open pickup needs the user to settle: won't-fit (must stash or come
+  // back) or dig-out (a heads-up). Drives the red overlay AND the advance gate.
+  const currentDecision = useMemo(() => {
+    if (currentLoad?.kind !== 'load') return null
+    return bucketDecision(setAside, result.unplaced, new Set(currentLoad.loadIds))
+  }, [currentLoad, setAside, result])
+  // won't-fit has no "load anyway" - the user has to stash the overflow or leave
+  // the pickup, so hold the NEXT button until they do. dig-out doesn't block.
+  const blockAdvance = currentDecision?.kind === 'overload'
   // cargo you'd dig to reach: lit red ONLY on the step whose DIG-OUT warning is
   // showing, so it's a heads-up for this load decision, not a permanent state.
   // live within the step, so restacking to clear the dig-out drops the red
   const blockedKeys = useMemo(() => {
-    if (currentLoad?.kind !== 'load') return new Set<string>()
-    const decision = bucketDecision(setAside, result.unplaced, new Set(currentLoad.loadIds))
-    if (decision.kind !== 'digout') return new Set<string>()
+    if (currentDecision?.kind !== 'digout') return new Set<string>()
     return new Set(setAside.blocked.map((b) => boxKey(b)))
-  }, [currentLoad, setAside, result])
+  }, [currentDecision, setAside])
   // green outline of where the plan wants this step's boxes, one box per bay.
   // frozen when the step opens so it keeps showing the recommendation even after
   // the user drags cargo off it. keyed by step so a rewind or advance recaptures
@@ -1692,9 +1699,7 @@ export default function CargoGridPage(): React.ReactElement {
     prevRef.current = keep.size ? keep : null
   }
 
-  // does the open step's own cargo have a box with no seat? the won't-fit card
-  // shows straight from the frozen pack, and the router's attempt to fit it (or
-  // defer/re-split it) is deferred to the LOADED button, not fired on arrival
+  // does the open step's own cargo have a box with no seat?
   const curUnfit = useMemo(() => {
     if (!loading || !loadingPack) return false
     const cur = loadSteps[loadIdx]
@@ -1704,6 +1709,19 @@ export default function CargoGridPage(): React.ReactElement {
     const mine = new Set((loadingPack.stepBoxes[loadIdx] ?? []).map((b) => b.id))
     return snap.unplaced.some((u) => mine.has(u.id) && !looseBoxes.includes(boxKey(u)))
   }, [loading, loadingPack, loadIdx, loadSteps, looseBoxes])
+
+  // a won't-fit step gets the router one shot at re-splitting or deferring the
+  // overflow the moment you arrive - once, before the card asks you to decide, so
+  // the card and the held NEXT button reflect what actually can't fit. One shot
+  // per step: a second pass on the re-solved plan is how the feedback storms start
+  const negotiatedStep = useRef(-1)
+  useEffect(() => {
+    if (!loading || !loadingPack || drag) return
+    if (!curUnfit || negotiatedStep.current === loadIdx) return
+    negotiatedStep.current = loadIdx
+    resolveTail(undefined, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
   // moving one box shouldn't shuffle the rest. Pin every box still standing on
   // its own feet where it sits, so the re-pack echoes the layout instead of
@@ -2079,6 +2097,7 @@ export default function CargoGridPage(): React.ReactElement {
               setAside={setAside}
               unplaced={result.unplaced}
               canStash={!!offPad}
+              blockAdvance={blockAdvance}
               onStashOffGrid={(boxes) => {
                 const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
                 boxes.forEach((b) => {
@@ -2133,11 +2152,11 @@ export default function CargoGridPage(): React.ReactElement {
                   }
                 }
                 // gate: the future re-packs only when the plan's inputs changed
-                // since the last checkpoint, or the router still owes this step's
-                // overflow a seat. Just rearranging boxes never lands here.
+                // since the last checkpoint (defer/grab/stash/crates). Just
+                // rearranging boxes never lands here; won't-fit already re-solved
+                // on arrival. A blocked step can't get here at all.
                 const sig = compositionSig()
-                if (curUnfit) resolveTail(undefined, true)
-                else if (sig !== lastSolvedSig.current) resolveTail()
+                if (sig !== lastSolvedSig.current) resolveTail()
                 lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
@@ -2614,6 +2633,7 @@ function LoadingPanel({
   setAside,
   unplaced,
   canStash,
+  blockAdvance,
   onStashOffGrid,
   onComeBack,
   grab,
@@ -2642,6 +2662,7 @@ function LoadingPanel({
   setAside: SetAside
   unplaced: PackBox[]
   canStash: boolean
+  blockAdvance: boolean
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
   grab: { scu: number; count: number; stepNo: number } | null
@@ -2881,15 +2902,24 @@ function LoadingPanel({
           </div>
         </div>
       )}
+      {blockAdvance && (
+        <div style={{ margin: '0 16px', padding: '9px 11px', border: `1px solid ${C.amber}`, borderRadius: 5, background: 'rgba(201,176,126,0.08)', flex: 'none' }}>
+          <span style={{ fontFamily: F.body, fontSize: 12, lineHeight: 1.5, color: C.amber }}>
+            This pickup won't fit as-is. {canStash ? 'Stash the overflow off grid or come back for it' : 'Come back for it on a later trip'} before you move on.
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {arrowBtn('‹', onBack, idx === 0)}
         {isLoad ? (
           <Btn
             onClick={onLoaded}
-            style={{ flex: 1, border: `1px solid ${C.acc}`, background: C.accFillStrong, color: C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: 'pointer' }}
-            hoverStyle={{ background: 'rgba(255,210,30,0.26)' }}
+            disabled={blockAdvance}
+            title={blockAdvance ? 'Settle the overflow above first' : undefined}
+            style={{ flex: 1, border: `1px solid ${blockAdvance ? C.lineStrong : C.acc}`, background: blockAdvance ? 'transparent' : C.accFillStrong, color: blockAdvance ? C.ghost : C.text, textShadow: blockAdvance ? 'none' : GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: blockAdvance ? 'default' : 'pointer' }}
+            hoverStyle={blockAdvance ? {} : { background: 'rgba(255,210,30,0.26)' }}
           >
-            {step?.start ? 'HEAD OUT' : 'LOADED · NEXT'}
+            {step?.start ? 'HEAD OUT' : blockAdvance ? "WON'T FIT · DECIDE ABOVE" : 'LOADED · NEXT'}
           </Btn>
         ) : (
           <>
