@@ -254,7 +254,6 @@ function Box({
           transparent={opacity < 1}
           opacity={opacity}
         />
-        {offGrid && <Edges color={C.amber} />}
       </RoundedBox>
       <RoundedBox
         args={bandArgs}
@@ -1530,7 +1529,12 @@ export default function CargoGridPage(): React.ReactElement {
               canStash={!!offPad}
               onStashOffGrid={(boxes) => {
                 const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
-                boxes.forEach((b) => setBoxLoose(`${b.objectiveId}#${b.slot}`, true, at))
+                boxes.forEach((b) => {
+                  const key = `${b.objectiveId}#${b.slot}`
+                  // a stale pin would keep holding the bay spot it left
+                  if (loadedPins[key]) clearLoadedPin(key)
+                  setBoxLoose(key, true, at)
+                })
               }}
               onComeBack={(ids) => {
                 // the deferred pickup's steps vanish from the walk; keep the
