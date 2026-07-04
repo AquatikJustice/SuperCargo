@@ -12,11 +12,11 @@ import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
-import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
+import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
 import { fixtureMap } from '@shared/hold'
-import { walkPack } from '@shared/walkPack'
+import { walkPack, packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView, LoadedPin, StorAllCrate } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -864,10 +864,9 @@ export default function CargoGridPage(): React.ReactElement {
 
   const plan = useMemo<FrozenBox[]>(() => {
     const boxes = livePack as PackBox[]
-    const { placements } = packInto(grids, [], boxes, true)
-    const pos = new Map(placements.map((p) => [p.box.id, p]))
-    return boxes.map((b) => freezeBox(objMeta, b, pos.get(b.id)))
-  }, [livePack, grids, objMeta])
+    const { homes } = packRun(grids, boxes, { gap: spaceDeliveryPiles ? 1 : 0, fixtures })
+    return boxes.map((b) => freezeBox(objMeta, b, homes.get(b.id)))
+  }, [livePack, grids, objMeta, spaceDeliveryPiles, fixtures])
   const result = useMemo(() => {
     const loadable = grids.filter((g) => g.autoLoad !== false)
     const capacity = loadable.reduce((a, g) => a + g.w * g.l * g.h, 0)
