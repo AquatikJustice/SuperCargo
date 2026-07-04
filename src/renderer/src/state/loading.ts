@@ -312,11 +312,17 @@ export function filterDeferredSteps(
     while (i < steps.length) {
       let e = i
       let lastLoad = -1
+      let open = false
       while (e < steps.length && steps[e].nodeKey === steps[i].nodeKey) {
-        if (steps[e].kind === 'load') lastLoad = e
+        if (steps[e].kind === 'load') {
+          lastLoad = e
+          // a visit whose loads are all ticked is behind the walker; landing
+          // grabbed cargo there files it into the past, unreachable
+          if (!steps[e].loadIds.length || steps[e].loadIds.some((id) => !ticked(id))) open = true
+        }
         e++
       }
-      if (lastLoad >= 0 && !target.has(steps[i].nodeKey)) target.set(steps[i].nodeKey, lastLoad)
+      if (lastLoad >= 0 && open && !target.has(steps[i].nodeKey)) target.set(steps[i].nodeKey, lastLoad)
       i = e
     }
     steps.forEach((s, j) => {
