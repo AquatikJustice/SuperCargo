@@ -22,7 +22,6 @@ interface Bay {
   grid: CargoGrid
   occ: Uint8Array
   owner: Int16Array
-  born: Int32Array // load step of the box in each cell, for the no-later-support rule
   used: number
 }
 
@@ -30,26 +29,27 @@ const idx = (g: CargoGrid, x: number, y: number, z: number): number => x + z * g
 
 function makeBay(grid: CargoGrid): Bay {
   const n = grid.w * grid.l * grid.h
-  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), born: new Int32Array(n).fill(-1), used: 0 }
+  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), used: 0 }
 }
 
-function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number, step: number): boolean {
+function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number): boolean {
   const g = s.grid
   if (x + fw > g.w || z + fl > g.l || y + fh > g.h) return false
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) if (s.occ[idx(g, x + dx, y + dy, z + dz)]) return false
+  // floor, or resting fully on this stop's own cargo, so each stop is a clean tower
   if (y > 0) {
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) {
         const b = idx(g, x + dx, y - 1, z + dz)
-        if (!s.occ[b] || s.owner[b] !== stop || s.born[b] > step) return false
+        if (!s.occ[b] || s.owner[b] !== stop) return false
       }
   }
   return true
 }
 
-function fill(s: Bay, p: Placement, owner: number, step: number): void {
+function fill(s: Bay, p: Placement, owner: number): void {
   const g = s.grid
   for (let dy = 0; dy < p.h; dy++)
     for (let dz = 0; dz < p.l; dz++)
@@ -58,7 +58,6 @@ function fill(s: Bay, p: Placement, owner: number, step: number): void {
         if (i < 0 || i >= s.occ.length) continue
         s.occ[i] = 1
         s.owner[i] = owner
-        s.born[i] = step
       }
   s.used += p.w * p.l * p.h
 }
@@ -71,34 +70,31 @@ function findSpot(
   l: number,
   h: number,
   minZ: number,
-  stop: number,
-  step: number
+  stop: number
 ): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
   const orients: Array<[number, number, boolean]> = w === l ? [[w, l, false]] : [[w, l, false], [l, w, true]]
   for (let z = Math.max(0, minZ); z + 1 <= g.l; z++)
     for (let y = 0; y + h <= g.h; y++)
       for (let x = 0; x < g.w; x++)
-        for (const [fw, fl, rotated] of orients) if (canPlace(s, x, y, z, fw, fl, h, stop, step)) return { x, y, z, fw, fl, rotated }
+        for (const [fw, fl, rotated] of orients) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
   return null
 }
 
 export interface RunOpts {
   gap?: number
-  /** load step per box id (first boarding), default 0. Drives the no-later-support rule. */
-  loadStep?: ReadonlyMap<string, number>
   pins?: ReadonlyMap<string, Placement>
   fixtures?: ReadonlyMap<string, Placement>
 }
 
-// Static layout: one fixed home per box, sectioned by destination.
+// One packing pass: each destination its own front-to-back section, biggest box
+// first so it anchors the floor. Every box aboard at once.
 export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}): { homes: Map<string, Placement>; unplaced: PackBox[] } {
   const gap = opts.gap ?? 0
-  const stepOf = (id: string): number => opts.loadStep?.get(id) ?? 0
   const bays = grids.filter((g) => g.autoLoad !== false).map(makeBay)
   const byId = new Map(bays.map((b) => [b.grid.id, b]))
 
-  if (opts.fixtures) for (const f of opts.fixtures.values()) { const b = byId.get(f.gridId); if (b) fill(b, f, FIXTURE, -1) }
+  if (opts.fixtures) for (const f of opts.fixtures.values()) { const b = byId.get(f.gridId); if (b) fill(b, f, FIXTURE) }
 
   const homes = new Map<string, Placement>()
   const pinned = new Set<string>()
@@ -106,7 +102,7 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
     for (const [id, p] of opts.pins) {
       const b = byId.get(p.gridId)
       if (!b) continue
-      fill(b, p, p.box.stopIdx, stepOf(id))
+      fill(b, p, p.box.stopIdx)
       homes.set(id, p)
       pinned.add(id)
     }
@@ -135,10 +131,10 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
         const s = bays[gi]
         if (s.grid.maxSize && box.size > s.grid.maxSize) continue
         const minZ = gi === frontGi ? frontZ : 0
-        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop, stepOf(box.id))
+        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop)
         if (!spot) continue
         const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
-        fill(s, p, stop, stepOf(box.id))
+        fill(s, p, stop)
         homes.set(box.id, p)
         const reach = spot.z + spot.fl
         if (gi > endGi || (gi === endGi && reach > endZ)) { endGi = gi; endZ = reach }
@@ -162,40 +158,34 @@ export interface WalkOpts {
   gap?: number
 }
 
-// Per-step snapshots off the static layout: reveal boxes as they board, hide them
-// as they leave, everyone else stays put.
+// Per-step snapshots. Each step repacks only what's aboard right then, so a stop
+// delivered earlier frees its room for a later pickup instead of holding the hold
+// hostage for the whole run. Everything in one snapshot is aboard together, so the
+// section layout can't float.
 export function walkPack(grids: CargoGrid[], events: LoadEvent[], opts: WalkOpts = {}): { snaps: LoadSnap[]; concessions: never[] } {
   const loose = opts.loose ?? new Set<string>()
   const boxOf = new Map<string, PackBox>()
-  const loadStep = new Map<string, number>()
-  const onGrid: PackBox[] = []
-  events.forEach((ev, i) => {
-    for (const b of ev.load)
-      if (!boxOf.has(b.id)) {
-        boxOf.set(b.id, b)
-        loadStep.set(b.id, i)
-        if (!loose.has(b.id)) onGrid.push(b)
-      }
-  })
-
-  const { homes, unplaced } = packRun(grids, onGrid, { gap: opts.gap, loadStep, pins: opts.pins, fixtures: opts.fixtures })
-  const homeless = new Set(unplaced.map((b) => b.id))
+  for (const ev of events) for (const b of ev.load) if (!boxOf.has(b.id)) boxOf.set(b.id, b)
 
   const aboard = new Set<string>()
   const snaps: LoadSnap[] = []
   for (const ev of events) {
     for (const id of ev.drop) aboard.delete(id)
     for (const b of ev.load) aboard.add(b.id)
-    const placements: Placement[] = []
-    const stepUnplaced: PackBox[] = []
+    const onGrid: PackBox[] = []
     const stepLoose: PackBox[] = []
     for (const id of aboard) {
       const box = boxOf.get(id)!
       if (loose.has(id)) stepLoose.push(box)
-      else if (homeless.has(id)) stepUnplaced.push(box)
-      else { const p = homes.get(id); if (p) placements.push(p) }
+      else onGrid.push(box)
     }
-    snaps.push({ placements, unplaced: stepUnplaced, loose: stepLoose })
+    const pins = opts.pins && [...opts.pins.keys()].some((id) => aboard.has(id))
+      ? new Map([...opts.pins].filter(([id]) => aboard.has(id)))
+      : undefined
+    const { homes, unplaced } = packRun(grids, onGrid, { gap: opts.gap, pins, fixtures: opts.fixtures })
+    const placements: Placement[] = []
+    for (const b of onGrid) { const p = homes.get(b.id); if (p) placements.push(p) }
+    snaps.push({ placements, unplaced, loose: stepLoose })
   }
 
   return { snaps, concessions: [] }
