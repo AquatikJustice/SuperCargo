@@ -784,12 +784,13 @@ export default function CargoGridPage(): React.ReactElement {
         const pl = prevRef.current.get(boxKey(b))
         if (pl) prev.set(b.id, pl)
       }
-    const raw = planHold(grids, events, {
+    const whole = planHold(grids, events, {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
       prev: prev.size ? prev : undefined,
       fixtures
-    }).snaps
+    })
+    const raw = whole.snaps
     const m = new Map<string, Placement>()
     for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
     prevRef.current = m
@@ -801,7 +802,7 @@ export default function CargoGridPage(): React.ReactElement {
       loose: ('loose' in s ? s.loose : []) as PackBox[],
       count: s.placements.length + s.unplaced.length
     }))
-    return { snaps, stepBoxes: events.map((e) => e.load) }
+    return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
   }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures])
 
   const budgetBoxes = (
@@ -1079,6 +1080,48 @@ export default function CargoGridPage(): React.ReactElement {
     }
     return null
   }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result])
+
+  // if it fits, it sits: a return-visit pickup that packs cleanly into the
+  // hold as it stands right now just joins this stop's list. The card only
+  // asks when the fit is volume-only and the stack would get ugly
+  const grabbedOnce = useRef('')
+  const [grabAsk, setGrabAsk] = useState(false)
+  useEffect(() => {
+    grabbedOnce.current = ''
+    setGrabAsk(false)
+  }, [loadIdx])
+  useEffect(() => {
+    if (!loading || !grabOffer || !loadingPack || !frozenSteps || drag) return
+    const env = packEnvRef.current
+    if (!env) return
+    const key = `${loadIdx}|${grabOffer.ids.join(',')}`
+    if (grabbedOnce.current === key) return
+    grabbedOnce.current = key
+    const steps2 = filterDeferredSteps(
+      frozenSteps,
+      new Set(deferredObjectives),
+      (id) => tickedObj.has(id),
+      new Set([...grabbedObjectives, ...grabOffer.ids])
+    )
+    const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
+      loose: env.looseIds.size ? env.looseIds : undefined,
+      pins: env.pins.size ? env.pins : undefined,
+      prev: env.prev.size ? env.prev : undefined,
+      fixtures
+    })
+    const base = new Set<string>()
+    for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
+    let dirty = probe.concessions.length > loadingPack.conc
+    if (!dirty)
+      outer: for (const s of probe.snaps)
+        for (const u of s.unplaced)
+          if (!base.has(u.id)) {
+            dirty = true
+            break outer
+          }
+    if (dirty) setGrabAsk(true)
+    else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
+  }, [loading, grabOffer, loadingPack, frozenSteps, drag, loadIdx, deferredObjectives, tickedObj, grabbedObjectives, grids, fixtures, setObjectiveGrabbed])
   const currentObjIds = useMemo(
     () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
     [currentLoad]
@@ -1909,7 +1952,7 @@ export default function CargoGridPage(): React.ReactElement {
                 ids.forEach((id) => setObjectiveDeferred(id, true))
                 if (shift) setLoadIdx((i) => Math.max(0, i - shift))
               }}
-              grab={grabOffer ? { scu: grabOffer.scu, count: grabOffer.count, stepNo: grabOffer.stepNo } : null}
+              grab={grabAsk && grabOffer ? { scu: grabOffer.scu, count: grabOffer.count, stepNo: grabOffer.stepNo } : null}
               onGrab={() => grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))}
               grabbedHere={currentLoad?.kind === 'load' ? currentLoad.loadIds.filter((id) => grabbedObjectives.includes(id)) : []}
               onUngrab={(ids) => ids.forEach((id) => setObjectiveGrabbed(id, false))}
