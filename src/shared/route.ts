@@ -889,8 +889,9 @@ export function planRoute(input: RouteInput): RouteResult {
     input = { ...input, capacity: Math.max(1, input.capacity - scu) }
   }
   const res = solveRoute(input)
-  // a hand-ordered route is the user's word; leave it alone
-  return res.method === 'manual' ? res : pullForward(res, input)
+  // a hand-ordered route is the user's word; a seeded mid-run solve skips the
+  // merge pass - pullForward's judge and its load math can't see cargo aboard
+  return res.method === 'manual' || input.aboard?.size ? res : pullForward(res, input)
 }
 
 function solveRoute(input: RouteInput): RouteResult {

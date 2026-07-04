@@ -8,9 +8,9 @@ import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, pickupVisitKey } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
-import { firstTripBudget } from '../state/route'
+import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
-import { gridsFor, shipFrame, isSecureBay, offGridFor, type CargoGrid } from '@shared/cargoGrids'
+import { gridsFor, shipFrame, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
@@ -568,6 +568,7 @@ export default function CargoGridPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const route = useStore((s) => s.route)
+  const locations = useStore((s) => s.locations)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
   const turnInDestination = useStore((s) => s.turnInDestination)
@@ -1429,6 +1430,58 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
+  // a move that displaces cargo is never refused: the displaced stops go back
+  // to the router instead. Cargo aboard is seeded, the walked steps stay as
+  // history, and everything past the current step re-solves from where the
+  // ship is sitting
+  const resolveTail = (fx?: Map<string, Placement>): void => {
+    const cur = loadSteps[loadIdx]
+    if (!loading || !frozenSteps || !cur) return
+    const aboard = new Set<string>()
+    for (const key of Object.keys(loadedPins)) aboard.add(key.split('#')[0])
+    if (cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
+    const tailRoute = computeRoutePlan(
+      contracts.filter((c) => !c.pendingOcr),
+      locations,
+      gridCapacity(activeShip, installed),
+      cur.label,
+      loadableGrids(activeShip, installed),
+      undefined,
+      deferredObjectives,
+      aboard,
+      cur.nodeKey,
+      fx ?? fixtures
+    )
+    if (!tailRoute) return
+    let tail = buildLoadingSteps(contracts, tailRoute, order)
+    // the tail re-plans this visit's remaining work; anything the open card
+    // already covers would walk twice
+    const curIds = new Set([...cur.loadIds, ...cur.dropIds])
+    while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => curIds.has(l.objectiveId)))
+      tail = tail.slice(1)
+    // visit keys must stay unique across the splice
+    const tripBase = Math.max(0, ...loadSteps.slice(0, loadIdx + 1).map((s) => s.trip)) + 1
+    tail = tail.map((s) => ({ ...s, trip: s.trip + tripBase }))
+    const combined = loadSteps.slice(0, loadIdx + 1).concat(tail)
+    // depth order follows the new drop order
+    const dn = new Map<string, number>()
+    let n = 0
+    for (const st of combined) {
+      if (st.kind !== 'drop') continue
+      for (const oid of st.dropIds) if (!dn.has(oid)) dn.set(oid, n)
+      n++
+    }
+    setFrozenSteps(combined)
+    if (frozenBoxes)
+      setFrozenBoxes(
+        frozenBoxes.map((b) => {
+          const nn = b.objectiveId ? dn.get(b.objectiveId) : undefined
+          return nn == null ? b : { ...b, stopIdx: nn }
+        })
+      )
+    setDropNotice('Re-routed the stops ahead.')
+  }
+
   const commitDrag = (): void => {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
@@ -1441,6 +1494,10 @@ export default function CargoGridPage(): React.ReactElement {
           const crate: StorAllCrate = { id, size: d.box.size, gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h }
           if (isNew) addStorAll(crate)
           else moveStorAll(d.key, crate)
+          const hyp = new Map(fixtures ?? [])
+          hyp.delete(d.key)
+          for (const [k, v] of fixtureMap([crate])) hyp.set(k, v)
+          resolveTail(hyp)
         } else if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
@@ -1460,13 +1517,11 @@ export default function CargoGridPage(): React.ReactElement {
             if (!pk) continue
             pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, w: s.w, l: s.l, h: s.h, rotated: s.rotated, pickupKey: pk }
           }
-          // a drop that would shove someone else's box clean off the ship is
-          // refused, not silently paid for with vanishing cargo. The spot can
-          // look wide open NOW and still be spoken for at the run's fullest
-          // moment, so the notice names where the crunch actually bites
+          // the drop always lands. A probe checks whether anyone lost their
+          // spot at any moment of the run; if so the tail goes back to the
+          // router rather than refusing the move
           const env = packEnvRef.current
           let evicted = 0
-          let crunchAt = -1
           if (env && Object.keys(pins).length) {
             const byKey = new Map(env.source.map((b) => [boxKey(b), b]))
             const hyp = new Map(env.pins)
@@ -1479,30 +1534,23 @@ export default function CargoGridPage(): React.ReactElement {
             const probe = planHold(grids, env.events, {
               loose: env.looseIds.size ? env.looseIds : undefined,
               pins: hyp,
-              prev: env.prev.size ? env.prev : undefined
+              prev: env.prev.size ? env.prev : undefined,
+              fixtures
             })
             const before = new Set<string>()
             for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
             const dragged = new Set(Object.keys(pins))
             const fresh = new Set<string>()
-            probe.snaps.forEach((s2, i) => {
+            probe.snaps.forEach((s2) => {
               for (const u of s2.unplaced)
-                if (!before.has(u.id) && !dragged.has(boxKey(u))) {
-                  if (!fresh.has(u.id) && crunchAt < 0) crunchAt = i
-                  fresh.add(u.id)
-                }
+                if (!before.has(u.id) && !dragged.has(boxKey(u))) fresh.add(u.id)
             })
             evicted = fresh.size
           }
-          if (evicted) {
-            setDropNotice(
-              crunchAt >= 0 && crunchAt !== loadIdx
-                ? 'This spot is reserved for a later pickup.'
-                : 'No room to move the displaced boxes.'
-            )
-          } else if (Object.keys(pins).length) {
+          if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
             addLoadedPins(pins)
+            if (evicted) resolveTail()
           }
         }
         if (ghost.members) setSel(new Set())
