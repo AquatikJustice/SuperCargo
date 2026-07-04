@@ -1887,6 +1887,25 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, frozenSteps, stepPos, loadedPins])
 
+  // a delivery can pull the floor out from under locked cargo; the snap shows
+  // it settled, and moving the pin down with it makes that real, so later
+  // stops plan around where the box actually sits instead of the hole it left
+  useEffect(() => {
+    if (!loading || !loadingPack || drag) return
+    const snap = loadingPack.snaps[loadIdx]
+    if (!snap) return
+    const moved: Record<string, LoadedPin> = {}
+    for (const p of snap.placements) {
+      const key = boxKey(p.box)
+      const lp = loadedPins[key]
+      if (!lp) continue
+      if (p.gridId !== lp.gridId || p.x !== lp.x || p.y !== lp.y || p.z !== lp.z)
+        moved[key] = { ...lp, gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated }
+    }
+    if (Object.keys(moved).length) addLoadedPins(moved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loadingPack, loadIdx, drag, loadedPins])
+
   // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
   // at a step now ahead of the cursor reset; deferrals resolve in frozen space
   // since their steps are pruned from the walk. Only fires stepping back, and

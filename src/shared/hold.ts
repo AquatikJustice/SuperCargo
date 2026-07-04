@@ -1187,19 +1187,54 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   const { slots, byBox, verdicts } = pass
   const concessions = pass.concessions.filter((c) => !movedIds.has(c.boxId))
 
+  // a seat is one position for the box's whole stay, but a delivery can pull
+  // the floor out from under a pinned stack mid-stay (re-solves reorder drops
+  // after pins are made). Each step's snap settles what remains straight down,
+  // like the game does. The slot keeps its seat; the walk makes a settle real
+  // by promoting it into the pin, and future stops plan around it from there
+  const anchorSlots = slots.filter((q) => q.anchor)
+  const overCD = (a: Slot, b: Slot): boolean =>
+    a.c < b.c + b.cw && b.c < a.c + a.cw && a.d < b.d + b.dl && b.d < a.d + a.dl
+  const settleSnap = (res: Slot[]): Map<Slot, number> => {
+    const y2 = new Map<Slot, number>()
+    const yOf = (q: Slot): number => y2.get(q) ?? q.y
+    for (const s of [...res].sort((a, b) => a.y - b.y)) {
+      if (yOf(s) === 0) continue
+      let top = 0
+      for (const q of res) {
+        if (q === s || q.bay !== s.bay || !overCD(q, s)) continue
+        const t = yOf(q) + q.h
+        if (t <= yOf(s)) top = Math.max(top, t)
+      }
+      for (const q of anchorSlots) {
+        if (q.bay !== s.bay || !overCD(q, s)) continue
+        const t = q.y + q.h
+        if (t <= yOf(s)) top = Math.max(top, t)
+      }
+      if (top < yOf(s)) y2.set(s, top)
+    }
+    return y2
+  }
+
   const snaps: LoadSnap[] = []
   for (let i = 0; i < events.length; i++) {
     const placements: Placement[] = []
     const unplaced: PackBox[] = []
     const looseNow: PackBox[] = []
+    const res: Slot[] = []
     for (const box of boxOf.values()) {
       if (loadOf(box.id) > i || dropOf(box.id) <= i) continue
       if (loose?.has(box.id)) looseNow.push(box)
       else {
         const s = byBox.get(box.id)
-        if (s) placements.push(toPlacement(bays[s.bay], s))
+        if (s) res.push(s)
         else unplaced.push(box)
       }
+    }
+    const fall = settleSnap(res)
+    for (const s of res) {
+      const ny = fall.get(s)
+      placements.push(toPlacement(bays[s.bay], ny === undefined ? s : { ...s, y: ny }))
     }
     snaps.push({ placements, unplaced, loose: looseNow })
   }
