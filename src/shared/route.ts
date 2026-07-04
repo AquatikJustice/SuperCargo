@@ -601,7 +601,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), { fixtures: input.fixtures })
       const bad = new Set<number>()
       for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
-      // an aboard job can't load later - it's already on the ship
+      // an aboard job can't load later; it's already on the ship
       for (const i of aboardSet) bad.delete(i)
       if (bad.size < best.homeless) best = { walk, homeless: bad.size }
       if (!bad.size || round >= 2) break
@@ -890,7 +890,7 @@ export function planRoute(input: RouteInput): RouteResult {
   }
   const res = solveRoute(input)
   // a hand-ordered route is the user's word; a seeded mid-run solve skips the
-  // merge pass - pullForward's judge and its load math can't see cargo aboard
+  // merge pass: pullForward's judge and its load math can't see cargo aboard
   return res.method === 'manual' || input.aboard?.size ? res : pullForward(res, input)
 }
 

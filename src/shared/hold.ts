@@ -211,9 +211,9 @@ interface Relax {
 
 // strict legality for one candidate slot: free cells, own-stop support held
 // the whole window, row exclusivity, peel order, insertable, no flank pair.
-// Mirrors the checks findSpot applies on its strict rung - keep in lockstep.
+// Mirrors the checks findSpot applies on its strict rung; keep in lockstep.
 // A hand-pinned rival only binds physically: it never claims row ownership,
-// and in keep mode it doesn't impose lane order either - the user parked it
+// and in keep mode it doesn't impose lane order either; the user parked it
 // there, settled neighbors stay put and any dig cost is theirs to see.
 // relax rungs match findSpot's: peel skips row+lane, build skips insert,
 // build or flank skips the sandwich test
@@ -251,7 +251,7 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
 }
 
 // the v0.5.2 wall builder: first fit scanning depth-ascending, bottom-up,
-// then across from the bay's own wall. Long boxes run INTO the bay - the
+// then across from the bay's own wall. Long boxes run INTO the bay; the
 // whole section is scanned for a depth-stretched fit before the box may
 // turn across, which is what draws the long clean lines; turned boxes only
 // cap the ends. The final delivery scans from the far wall backward so it
@@ -265,7 +265,7 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   const faces: Array<[number, number]> =
     dims.w === dims.l || bay.cross === 'y' ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   // a box that outgrows its stop's section turns across at the cap before
-  // poking a lone column deeper - a poke drags full-width row ownership
+  // poking a lone column deeper; a poke drags full-width row ownership
   // with it and the rows it steals are exactly what the next stop needed
   let ownDeep = d0
   for (const r of rivals) if (!r.anchor && r.stop === probe.stop) ownDeep = Math.max(ownDeep, r.d + r.dl)
@@ -362,7 +362,7 @@ function findSpot(
         if (rivals.some((r) => cellsClash(t, r))) continue
         if (y > 0) {
           // rests only on its own stop's boxes (or anchors), held the whole
-          // window, and never on a smaller box - biggest bottom is literal;
+          // window, and never on a smaller box: biggest bottom is literal;
           // different stops never stack on each other
           let held = true
           for (let dc = 0; dc < cwf && held; dc++)
@@ -417,7 +417,7 @@ function findSpot(
         const dKey = deep ? bay.dl - (t.d + dlf) : t.d
         // small boxes nestle before edging: more own-stop faces touched beats
         // a spot at the rim, and kissing the hull counts once a box is
-        // already nestling. Bigger boxes keep pure geometry - contact-chasing
+        // already nestling. Bigger boxes keep pure geometry; contact-chasing
         // there walls off space and costs the route real trips
         const wallKiss = (bay.wallHigh ? t.c + cwf === bay.cw : t.c === 0) ? 1 : 0
         const snug = probe.box.size <= 4 && contacts ? -(contacts + wallKiss) : 0
@@ -565,11 +565,11 @@ function seatConceding(
         for (const bay of bayList) {
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
           // the scanner visits every cell, so on the strict rung it finds a
-          // spot whenever one exists - shaped passes use it here too so a
+          // spot whenever one exists; shaped passes use it here too so a
           // bucket too big for any bay still comes out as long lines. The
           // final delivery keeps its bulkhead anchor even here: a mega
           // bucket packing shallow floods the fronts everyone after it
-          // needs. Deep stays off the relaxed rungs - forcing it there made
+          // needs. Deep stays off the relaxed rungs; forcing it there made
           // a near-full hold trade real placements for the anchor
           const s =
             shaping && !rung.kind
@@ -971,7 +971,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
 
   // neat shapes when they're free; a near-full hold keeps whichever world
   // owes fewer concessions, and once boxes are homeless the flat world also
-  // takes ties - shapes have no business winning under that kind of pressure
+  // takes ties; shapes have no business winning under that kind of pressure
   let pass = solve(true)
   let shapedWon = true
   if (homeless(pass) || pass.concessions.length) {
@@ -1045,7 +1045,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       if (count.size < 2) continue
       const scu = group.reduce((a, s) => a + s.box.size, 0)
       // pinned and kept cargo is nailed down: it can't move, but it still
-      // votes - only a bay holding every nailed box can be the family's home
+      // votes; only a bay holding every nailed box can be the family's home
       const nailedBays = new Set(group.filter((s) => nailed(s.box.id)).map((s) => s.bay))
       if (nailedBays.size > 1) continue
       // consolidation target: its biggest cluster's bay first, then the rest;

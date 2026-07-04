@@ -291,7 +291,7 @@ export function buildLoadingSteps(
 
 // a mid-walk come-back pulls the whole pickup out of the frozen walk: its load
 // and drop steps vanish and the deferred cargo waits for the next trip's route.
-// Ticked objectives never filter - that cargo is physically aboard. A grabbed
+// Ticked objectives never filter; that cargo is physically aboard. A grabbed
 // pickup loads at its node's first visit instead of the planned return, and a
 // return visit that empties out drops from the walk.
 export function filterDeferredSteps(
