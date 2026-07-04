@@ -130,6 +130,57 @@ type Ax = 0 | 1 | 2
 const axOf = (c: string): Ax => (c === 'x' ? 0 : c === 'y' ? 1 : 2)
 const sizeOf = (g: CargoGrid): [number, number, number] => [g.w, g.h, g.l]
 
+interface Cell {
+  key: string
+  gridId: string
+  x: number
+  y: number
+  z: number
+  w: number
+  l: number
+  h: number
+}
+
+// which boxes are held up by the floor or, transitively, by a box that is.
+// Runs in each bay's own frame (floor axis + face), so a tilted or roof-floored
+// bay resolves the same as a plain y-down one. Anything NOT in this set lost its
+// footing (its supporter was dragged away) and should be left to settle.
+function groundedSet(cells: Cell[], gridById: Map<string, CargoGrid>, pre?: ReadonlySet<string>): Set<string> {
+  const pos = (c: Cell, a: Ax): number => (a === 0 ? c.x : a === 1 ? c.y : c.z)
+  const ext = (c: Cell, a: Ax): number => (a === 0 ? c.w : a === 1 ? c.h : c.l)
+  const grounded = new Set<string>(pre)
+  const byGrid = new Map<string, Cell[]>()
+  for (const c of cells) (byGrid.get(c.gridId) ?? byGrid.set(c.gridId, []).get(c.gridId)!).push(c)
+  for (const [gid, group] of byGrid) {
+    const g = gridById.get(gid)
+    if (!g) {
+      for (const c of group) grounded.add(c.key)
+      continue
+    }
+    const floor = g.floor ?? 'y-'
+    const up = axOf(floor[0])
+    const flip = floor[1] === '+'
+    const span = sizeOf(g)[up]
+    const cross = ([0, 1, 2] as Ax[]).filter((a) => a !== up)
+    const spans = (a: Cell, b: Cell): boolean =>
+      cross.every((ca) => pos(a, ca) < pos(b, ca) + ext(b, ca) && pos(b, ca) < pos(a, ca) + ext(a, ca))
+    const onFloor = (c: Cell): boolean => (flip ? pos(c, up) + ext(c, up) >= span : pos(c, up) <= 0)
+    const rests = (b: Cell, s: Cell): boolean =>
+      spans(b, s) && (flip ? pos(b, up) + ext(b, up) === pos(s, up) : pos(b, up) === pos(s, up) + ext(s, up))
+    for (const c of group) if (onFloor(c)) grounded.add(c.key)
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const c of group)
+        if (!grounded.has(c.key) && group.some((s) => grounded.has(s.key) && rests(c, s))) {
+          grounded.add(c.key)
+          changed = true
+        }
+    }
+  }
+  return grounded
+}
+
 // world-extent per axis for a hand-held box in this bay: h grows off the
 // floor face, l runs the exit axis, w takes the axis that's left
 function extentsFor(g: CargoGrid, dims: { w: number; l: number; h: number }, rotated: boolean): [number, number, number] {
@@ -770,6 +821,18 @@ export default function CargoGridPage(): React.ReactElement {
     return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
   }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures, spaceDeliveryPiles])
 
+  // which pickup each aboard box arrived on, so freezing the layout can pin a
+  // box under the same key it would carry if you'd hand-placed it there
+  const pickupKeyById = useMemo(() => {
+    const m = new Map<string, string>()
+    if (!loadingPack) return m
+    loadSteps.forEach((s, i) => {
+      const pk = pickupVisitKey(s.nodeKey, s.trip)
+      for (const b of loadingPack.stepBoxes[i] ?? []) if (!m.has(b.id)) m.set(b.id, pk)
+    })
+    return m
+  }, [loadingPack, loadSteps])
+
   const budgetBoxes = (
     all: ReturnType<typeof packBoxes>,
     budgetFor: (id: string) => number
@@ -892,12 +955,10 @@ export default function CargoGridPage(): React.ReactElement {
       minZ = Math.min(minZ, g.z || 0); maxZ = Math.max(maxZ, (g.z || 0) + g.l)
     }
     const shipMinX = minX, shipMinY = minY, shipMinZ = minZ, shipMaxX = maxX, shipMaxY = maxY, shipMaxZ = maxZ
-    // authored spot wins; otherwise park past the ship's starboard edge, on the deck, centered on the hold's length
+    // park the pane past the ship's starboard edge, on the deck, centered on the hold's length
     const off: CargoGrid | null = offPad && {
       id: OFF_GRID_ID, name: 'OFF GRID', source: 'override', autoLoad: false,
-      x: offPad.x ?? maxX + OFF_GAP,
-      y: offPad.y ?? minY,
-      z: offPad.z ?? minZ + (maxZ - minZ - offPad.l) / 2,
+      x: maxX + OFF_GAP, y: minY, z: minZ + (maxZ - minZ - offPad.l) / 2,
       w: offPad.w, l: offPad.l, h: offPad.h, scu: offPad.w * offPad.l * offPad.h
     }
     if (off) {
@@ -1646,6 +1707,33 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
+  // moving one box shouldn't shuffle the rest. Pin every box still standing on
+  // its own feet where it sits, so the re-pack echoes the layout instead of
+  // re-dealing it. Boxes that were riding on what you just moved are left out -
+  // they lost their footing, so the packer settles them straight down.
+  const freezeVisible = (moved: Set<string>): Record<string, LoadedPin> => {
+    if (!loading) return {}
+    const cells: Cell[] = result.placements
+      .filter((p) => !moved.has(boxKey(p.box)))
+      .map((p) => ({ key: boxKey(p.box), gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h }))
+    // crates are permanent platforms: a box perched on one still has its footing
+    const platforms = new Set<string>()
+    for (const c of crates) {
+      const key = `crate:${c.id}`
+      platforms.add(key)
+      cells.push({ key, gridId: c.gridId, x: c.x, y: c.y, z: c.z, w: c.w, l: c.l, h: c.h })
+    }
+    const grounded = groundedSet(cells, gridById, platforms)
+    const pins: Record<string, LoadedPin> = {}
+    for (const p of result.placements) {
+      const key = boxKey(p.box)
+      if (moved.has(key) || !grounded.has(key)) continue
+      const pk = loadedPins[key]?.pickupKey ?? pickupKeyById.get(p.box.id)
+      if (!pk) continue
+      pins[key] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated, pickupKey: pk }
+    }
+    return pins
+  }
 
   const commitDrag = (): void => {
     setDrag((d) => {
@@ -1663,17 +1751,22 @@ export default function CargoGridPage(): React.ReactElement {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
           const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
+          const moved = new Set(spots.map((s) => s.key))
           for (const s of spots) {
             if (loadedPins[s.key]) clearLoadedPin(s.key)
             setBoxLoose(s.key, true, at)
             setLooseSpot(s.key, { gridId: OFF_GRID_ID, x: s.x, y: s.y, z: s.z, rotated: s.rotated })
           }
+          const frozen = freezeVisible(moved)
+          if (Object.keys(frozen).length) addLoadedPins(frozen)
         } else {
-          // pin only what you actually dragged. The packer is deterministic, so
-          // the rest stays put on its own; freezing the whole hold on every drag
-          // just left phantom pins on boxes you never touched
+          // placing a box pins it there and nothing else moves; the future only
+          // re-packs when you advance. a box pulled off the pane rejoins the plan,
+          // loaded now. an already-aboard box keeps the pickup it arrived on; a
+          // fresh one takes this step's, so restacking works on a drop step too
           const here = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
-          const pins: Record<string, LoadedPin> = {}
+          const moved = new Set(spots.map((s) => s.key))
+          const pins: Record<string, LoadedPin> = freezeVisible(moved)
           for (const s of spots) {
             const pk = loadedPins[s.key]?.pickupKey ?? here
             if (!pk) continue
