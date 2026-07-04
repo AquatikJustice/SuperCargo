@@ -366,7 +366,7 @@ function ByDestination({
             // color tracks turn-in fullness
             const tiColor =
               item.turnedInScu === undefined
-                ? C.textBody
+                ? C.amber
                 : item.turnedInScu >= item.scu
                   ? C.green
                   : item.turnedInScu <= 0
@@ -390,7 +390,7 @@ function ByDestination({
                 style={{
                   fontFamily: F.mono,
                   fontSize: 17,
-                  color: C.text,
+                  color: C.amber,
                   textShadow: GLOW,
                   textAlign: 'right',
                   textDecoration: item.delivered || item.turnedInScu !== undefined ? 'line-through' : 'none'
@@ -404,7 +404,7 @@ function ByDestination({
                   style={{
                     fontFamily: F.body,
                     fontSize: 15,
-                    color: C.textBody,
+                    color: C.amber,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis'
@@ -477,7 +477,7 @@ function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; sho
               <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
-              <span style={{ fontFamily: F.body, fontSize: 15, color: C.textBody, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontFamily: F.body, fontSize: 15, color: C.green, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {it.commodity}
               </span>
               <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{it.ref}]</span>

@@ -6,14 +6,14 @@ import sairaFont from '@fontsource/saira/files/saira-latin-600-normal.woff?url'
 import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff?url'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
-import { packBoxes, pickupVisitKey } from '../state/manifest'
+import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
-import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
+import { setAsideToUnload, looseSummary, bucketDecision, BIG, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
 import { planHold, fixtureMap } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
@@ -157,7 +157,6 @@ function Box({
   selected,
   offGrid,
   onStart,
-  onReset,
   onDragMove,
   onHover,
   onLeave
@@ -171,7 +170,6 @@ function Box({
   selected?: boolean
   offGrid?: boolean
   onStart?: (e: ThreeEvent) => void
-  onReset?: () => void
   onDragMove?: (shipX: number, shipZ: number, ray?: THREE.Ray) => void
   onHover: (h: Omit<HoverInfo, 'x' | 'y'>, e: ThreeEvent) => void
   onLeave: () => void
@@ -236,19 +234,9 @@ function Box({
         onPointerDown={
           draggable
             ? (e) => {
-                // the second click of a double must not grab the box, or the
-                // double-click never lands
-                if (e.nativeEvent.button !== 0 || e.nativeEvent.detail > 1) return
+                if (e.nativeEvent.button !== 0) return
                 e.stopPropagation()
                 onStart?.(e)
-              }
-            : undefined
-        }
-        onDoubleClick={
-          draggable
-            ? (e) => {
-                e.stopPropagation()
-                onReset?.()
               }
             : undefined
         }
@@ -600,20 +588,7 @@ export default function CargoGridPage(): React.ReactElement {
   )
 
   // number by drop-off, route order
-  const { dropNum, objColor } = useMemo(() => {
-    const num = new Map<string, number>()
-    if (route) {
-      let n = 0
-      for (const step of route.steps) {
-        if (!step.dropRefs.length) continue
-        for (const r of step.dropRefs) if (!num.has(r.objectiveId)) num.set(r.objectiveId, n)
-        n++
-      }
-    }
-    const oc = new Map<string, string>()
-    for (const [oid, n] of num) oc.set(oid, stopColor(n))
-    return { dropNum: num, objColor: oc }
-  }, [route])
+  const { num: dropNum, color: objColor } = useMemo(() => objectiveStops(route), [route])
 
   // restamp drop-off number + color
   const applyDropSeq = <T extends { objectiveId?: string; stopIdx: number; color: string }>(
@@ -2005,14 +1980,6 @@ export default function CargoGridPage(): React.ReactElement {
               ? '✓ FITS · PACKED TIGHT'
               : '✓ EVERYTHING FITS'}
         </span>
-        {!over && setAside.count > 0 && (
-          <span
-            style={{ fontFamily: F.body, fontSize: 13, color: '#d9a441', textShadow: GLOW }}
-            title="You'll set these aside to reach the cargo underneath."
-          >
-            ↺ set aside {setAside.count} to unload{setAside.big ? ` (${setAside.big} big)` : ''}
-          </span>
-        )}
         {loading && offGrid.count > 0 && (
           <span
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: F.body, fontSize: 13, color: C.amber }}
@@ -2125,55 +2092,34 @@ export default function CargoGridPage(): React.ReactElement {
           </div>
         )}
         <div style={{ ...(portrait && loading ? { order: 1, flex: 'none', height: '42%', minHeight: 220 } : { flex: 1 }), minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', color: C.acc, textShadow: GLOW }}>
-              LOADING MODE
-            </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn
-                onClick={() => setShelfOpen((v) => !v)}
-                title="Park Stor-All crates for personal storage"
-                style={{
-                  border: `1px solid ${shelfOpen ? STOR_ORANGE : C.lineStrong}`,
-                  background: 'transparent',
-                  color: shelfOpen ? STOR_ORANGE : C.dim,
-                  fontFamily: F.display,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.14em',
-                  padding: '6px 12px',
-                  cursor: 'pointer'
-                }}
-                hoverStyle={{ color: STOR_ORANGE, border: `1px solid ${STOR_ORANGE}` }}
-              >
-                STOR-ALL
-              </Btn>
-              <Btn
-                onClick={() => setLoading(false)}
-                title="Back to the load planner"
-                style={{
-                  border: `1px solid ${C.lineStrong}`,
-                  background: 'transparent',
-                  color: C.dim,
-                  fontFamily: F.display,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.14em',
-                  padding: '6px 12px',
-                  cursor: 'pointer'
-                }}
-                hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
-              >
-                EXIT
-              </Btn>
-            </div>
-          </div>
-        )}
         <div
           ref={wrap}
           style={{ position: 'relative', flex: 1, minHeight: portrait ? 170 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
         >
+        {loading && (
+          <Btn
+            onClick={() => setShelfOpen((v) => !v)}
+            title="Park Stor-All crates for personal storage"
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              zIndex: 4,
+              border: `1px solid ${shelfOpen ? STOR_ORANGE : C.lineStrong}`,
+              background: 'rgba(8,12,16,0.82)',
+              color: shelfOpen ? STOR_ORANGE : C.dim,
+              fontFamily: F.display,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              padding: '6px 12px',
+              cursor: 'pointer'
+            }}
+            hoverStyle={{ color: STOR_ORANGE, border: `1px solid ${STOR_ORANGE}` }}
+          >
+            STOR-ALL
+          </Btn>
+        )}
         {dropNotice && (
           <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 4, maxWidth: '86%', background: 'rgba(8,12,16,0.94)', border: `1px solid ${C.amber}`, borderRadius: 6, padding: '8px 14px', fontFamily: F.body, fontSize: 13.5, color: C.text }}>
             {dropNotice}
@@ -2200,6 +2146,20 @@ export default function CargoGridPage(): React.ReactElement {
             <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.dim }}>
               Drag onto the grid. Right-click a crate to remove it.
             </span>
+          </div>
+        )}
+        {loading && (
+          <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 4, pointerEvents: 'none', background: 'rgba(8,12,16,0.82)', border: `1px solid ${C.lineFaint}`, borderRadius: 6, padding: '8px 11px', fontFamily: F.mono, fontSize: 10.5, lineHeight: 1.7, color: C.dim, display: 'flex', flexDirection: 'column' }}>
+            {[
+              ['Drag', 'move a box'],
+              ['R', 'rotate'],
+              ['Ctrl click', 'select more'],
+              ['Right click', 'remove a crate']
+            ].map(([key, what]) => (
+              <div key={key}>
+                <b style={{ color: C.body, fontWeight: 600 }}>{key}</b> to {what}
+              </div>
+            ))}
           </div>
         )}
         {!loading && (
@@ -2352,7 +2312,6 @@ export default function CargoGridPage(): React.ReactElement {
                     offGrid
                     draggable
                     onStart={(e) => startDrag(key, pl, offGridBay, e)}
-                    onReset={() => setBoxLoose(key, false)}
                     onDragMove={drag ? handleDragMove : undefined}
                     onHover={onHover}
                     onLeave={() => setHover(null)}
@@ -2382,9 +2341,6 @@ export default function CargoGridPage(): React.ReactElement {
                 selected={!!mkey && sel.has(mkey)}
                 onStart={(e) => {
                   if (mkey) startDrag(mkey, pl, g, e)
-                }}
-                onReset={() => {
-                  if (mkey) clearLoadedPin(mkey)
                 }}
                 onDragMove={drag ? handleDragMove : undefined}
                 onHover={onHover}
@@ -2726,11 +2682,6 @@ function LoadingPanel({
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
         </span>
-        {!isLoad && (
-          <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 12, color: C.ghost }}>
-            NEXT previews · nothing locks until the contract completes
-          </span>
-        )}
       </div>
 
       <div style={{ padding: '0 16px 10px', flex: 'none' }}>
@@ -2776,7 +2727,11 @@ function LoadingPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ width: 10, height: 10, borderRadius: 2, background: accent, boxShadow: isCurrent ? GLOW : 'none', flex: 'none' }} />
                 <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color: isCurrent ? C.text : C.dim }}>
-                  {load ? `LOAD · bound for ${destLabelOf(s.boundFor)}` : `DELIVER → ${destLabelOf(s.boundFor)}`}
+                  {load ? (
+                    <>LOAD → Going to <b style={{ fontWeight: 700 }}>{destLabelOf(s.boundFor)}</b></>
+                  ) : (
+                    'DELIVER'
+                  )}
                 </span>
                 {isCurrent && (
                   <span style={{ marginLeft: 'auto', fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: C.acc }}>● NOW</span>
@@ -2798,7 +2753,6 @@ function LoadingPanel({
               {load && isCurrent && (
                 <PickupDecision
                   decision={bucketDecision(setAside, unplaced, new Set(s.loadIds))}
-                  setAside={setAside}
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
                   canStash={canStash}
@@ -2852,11 +2806,6 @@ function LoadingPanel({
               </div>
             ))}
           </div>
-        </div>
-      )}
-      {isLoad && (
-        <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
-          drag moves · R rotates · Ctrl+click selects more · double-click unlocks a box · right-click removes a crate
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
@@ -2919,10 +2868,10 @@ function LoadLineRow({ line, color }: { line: LoadingStep['lines'][number]; colo
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
         {line.tell ? (
           <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
-            find the contract with <b style={{ color: C.text }}>{line.tell}</b>
+            Find the contract with <b style={{ color: C.text }}>{line.tell}</b>
           </span>
         ) : (
-          <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ no standout box, match the whole set</span>
+          <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ No standout box, match the whole set</span>
         )}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
@@ -2973,7 +2922,7 @@ function DropLineRow({
           ✓ turned in: {turnInSummary(turnedInScu, line.totalScu)}
         </div>
       ) : (
-        <div style={{ fontFamily: F.body, fontSize: 12.5, color: C.ghost, marginTop: 3 }}>not turned in yet</div>
+        <div style={{ fontFamily: F.body, fontSize: 12.5, color: C.ghost, marginTop: 3 }}>Not turned in yet</div>
       )}
     </div>
   )
@@ -3013,7 +2962,7 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
   if (!mine.length) return null
   const summary = looseSummary(mine)
   return (
-    <div style={{ marginTop: 10, padding: '11px 13px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)' }}>
+    <div style={{ marginTop: 12, paddingTop: 13, borderTop: `1px solid ${C.line}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <OffGridGlyph size={13} />
         <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', color: C.amber }}>
@@ -3031,7 +2980,7 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 9, paddingTop: 8, borderTop: `1px solid rgba(230,182,94,0.25)`, fontFamily: F.mono, fontSize: 12, color: C.amber }}>
+      <div style={{ marginTop: 8, fontFamily: F.mono, fontSize: 12, color: C.amber }}>
         {summary.groups.length} {summary.groups.length === 1 ? 'bucket' : 'buckets'} · {summary.count}{' '}
         {summary.count === 1 ? 'box' : 'boxes'} / {fmt(summary.scu)} SCU off-grid for this stop
       </div>
@@ -3043,7 +2992,6 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
 // (overload), surface the honest cost + the choices. Quiet (renders nothing) otherwise.
 function PickupDecision({
   decision,
-  setAside,
   destLabel,
   loadIds,
   canStash,
@@ -3052,7 +3000,6 @@ function PickupDecision({
   onComeBack
 }: {
   decision: BucketDecision
-  setAside: SetAside
   destLabel: string
   loadIds: string[]
   canStash: boolean
@@ -3069,7 +3016,11 @@ function PickupDecision({
   const dig = decision.kind === 'digout'
   const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)
   const offBreakdown = listBreakdown(decision.overloadBoxes.map((b) => b.size))
-  const bigNote = setAside.big ? `${setAside.big} big · ` : ''
+  const digCount = decision.digBoxes.length
+  const digScu = decision.digBoxes.reduce((a, b) => a + b.size, 0)
+  const digBreakdown = listBreakdown(decision.digBoxes.map((b) => b.size))
+  const digBig = decision.digBoxes.filter((b) => b.size >= BIG).length
+  const bigNote = digBig ? `${digBig} big · ` : ''
 
   const pick = (id: string, run: () => void): void => {
     setChoice(id)
@@ -3078,7 +3029,7 @@ function PickupDecision({
 
   const options = dig
     ? [
-        { id: 'load', title: 'Load it now', desc: `Set aside ${setAside.count} boxes to dig out earlier stops.`, run: () => {} },
+        { id: 'load', title: 'Load it now', desc: `Set aside ${digCount} boxes to dig out earlier stops.`, run: () => {} },
         { id: 'come', title: 'Come back for it', desc: 'Skip this pickup and grab it on a later pass.', run: () => onComeBack(loadIds) }
       ]
     : [
@@ -3090,51 +3041,44 @@ function PickupDecision({
       ]
 
   const confirmCopy: Record<string, string> = {
-    load: `Loading now, ${setAside.count} boxes set aside to dig out earlier stops.`,
+    load: `Loading now, ${digCount} boxes set aside to dig out earlier stops.`,
     come: dig ? 'Skipped for a later pass.' : 'Whole pickup left for a later trip.',
     stash: `Stashed off-grid: ${offBreakdown} / ${fmt(offScu)} SCU riding loose.`
   }
 
+  const accent = dig ? '#a99cd0' : '#c9b07e'
+
   return (
-    <div style={{ marginTop: 10, border: `1px solid ${dig ? '#a99cd0' : '#c9b07e'}`, borderLeftWidth: 3, borderRadius: 6, background: 'rgba(255,255,255,0.02)', padding: '11px 13px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: F.display, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: C.amber }}>
+    <div style={{ marginTop: 12, paddingTop: 13, borderTop: `1px solid ${C.line}` }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 9 }}>
+        <span style={{ fontFamily: F.display, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: accent }}>
           {dig ? 'DIG-OUT' : "WON'T FIT"}
         </span>
-        <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.ghost }}>· bound for {destLabel}</span>
+        <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.ghost }}>Going to <b style={{ fontWeight: 700, color: C.dim }}>{destLabel}</b></span>
       </div>
 
-      <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#b7c0c3', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+        {dig ? <span style={{ color: accent, fontSize: 18, lineHeight: 1, flex: 'none' }}>↺</span> : <OffGridGlyph />}
+        <span style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
+          {dig ? `Set aside ${digCount} boxes · ${digBreakdown}` : `${offBreakdown} · ${fmt(offScu)} SCU won't fit`}
+        </span>
+      </div>
+      <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#a8b0b3', marginBottom: 13 }}>
         {dig
-          ? "This sits on cargo you deliver sooner, so you'll set some boxes aside by hand to reach it."
+          ? `These sit on cargo you deliver sooner — ${bigNote}${fmt(digScu)} SCU comes off by hand to reach them.`
           : canStash
-            ? 'This won’t all fit the grid, so stash the overflow loose or leave the pickup for later.'
-            : 'This won’t all fit and this ship can’t carry loose boxes, so leave the pickup for later.'}
+            ? 'Small boxes wedge into corners; the big ones have nowhere to hide. Stash the overflow loose, or leave the pickup for later.'
+            : 'This won’t all fit and the ship can’t carry loose boxes, so leave the pickup for later.'}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0 12px 11px', borderLeft: `2px solid ${C.amber}`, marginBottom: 12 }}>
-        {dig ? <span style={{ color: C.amber, fontSize: 16, lineHeight: 1 }}>↺</span> : <OffGridGlyph />}
-        <div>
-          <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
-            {dig ? `SET ASIDE ${setAside.count} BOXES` : `${offBreakdown} · ${fmt(offScu)} SCU WON'T FIT`}
-          </div>
-          <div style={{ fontFamily: F.body, fontSize: 12, color: '#a8b0b3', marginTop: 2 }}>
-            {dig ? `${bigNote}${fmt(setAside.scu)} SCU moved by hand` : 'Small boxes wedge into corners safely. Big ones have nowhere to hide.'}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', color: C.ghost, marginBottom: 4 }}>
-        CHOOSE ONE
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {options.map((o, i) => (
-          <DecisionOption key={o.id} title={o.title} desc={o.desc} selected={choice === o.id} first={i === 0} onClick={() => pick(o.id, o.run)} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {options.map((o) => (
+          <DecisionOption key={o.id} title={o.title} desc={o.desc} selected={choice === o.id} onClick={() => pick(o.id, o.run)} />
         ))}
       </div>
 
       {choice && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11, paddingTop: 10, borderTop: `1px solid ${C.lineFaint}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.4" style={{ flex: 'none' }}>
             <path d="M20 6L9 17l-5-5" />
           </svg>
@@ -3145,7 +3089,7 @@ function PickupDecision({
   )
 }
 
-function DecisionOption({ title, desc, selected, first, onClick }: { title: string; desc: string; selected: boolean; first: boolean; onClick: () => void }): React.ReactElement {
+function DecisionOption({ title, desc, selected, onClick }: { title: string; desc: string; selected: boolean; onClick: () => void }): React.ReactElement {
   return (
     <Btn
       onClick={onClick}
@@ -3154,15 +3098,14 @@ function DecisionOption({ title, desc, selected, first, onClick }: { title: stri
         alignItems: 'flex-start',
         gap: 11,
         textAlign: 'left',
-        border: 'none',
-        borderTop: first ? 'none' : `1px solid ${C.lineFaint}`,
-        borderLeft: `2px solid ${selected ? C.acc : 'transparent'}`,
+        border: `1px solid ${selected ? C.acc : C.lineStrong}`,
+        borderRadius: 5,
         background: selected ? 'rgba(255,210,30,0.08)' : 'transparent',
-        padding: '10px 12px',
+        padding: '11px 13px',
         cursor: 'pointer',
         width: '100%'
       }}
-      hoverStyle={selected ? {} : { background: 'rgba(255,255,255,0.02)' }}
+      hoverStyle={selected ? {} : { border: `1px solid ${C.acc}`, background: 'rgba(255,255,255,0.03)' }}
     >
       <span style={{ flex: 'none', width: 16, height: 16, marginTop: 2, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: selected ? C.acc : 'transparent', border: selected ? 'none' : `1.5px solid rgba(255,255,255,0.3)` }}>
         {selected && (

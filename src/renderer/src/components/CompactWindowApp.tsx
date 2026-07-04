@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
 import { buildLoadingSteps, filterDeferredSteps, type LoadingStep } from '../state/loading'
-import { offGridByObjective } from '../state/manifest'
+import { offGridByObjective, objectiveStops } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
 const GREEN = '#8fe9b0'
@@ -86,9 +86,11 @@ export default function CompactWindowApp(): React.ReactElement {
   const dropLines = here.filter((s) => s.kind === 'drop').flatMap((s) => s.lines)
   const loadLines = here.filter((s) => s.kind === 'load').flatMap((s) => s.lines)
   const offGrid = useMemo(() => offGridByObjective(contracts, looseBoxes), [contracts, looseBoxes])
+  // same per-objective stop colors the grid paints, so the overlay reads as one design
+  const { color: objColor } = useMemo(() => objectiveStops(route), [route])
   const dropOffGrid = dropLines
-    .map((l) => ({ commodity: l.commodity, tally: offGrid.get(l.objectiveId) }))
-    .filter((x): x is { commodity: string; tally: NonNullable<typeof x.tally> } => !!x.tally)
+    .map((l) => ({ commodity: l.commodity, color: objColor.get(l.objectiveId), tally: offGrid.get(l.objectiveId) }))
+    .filter((x): x is { commodity: string; color: string | undefined; tally: NonNullable<typeof x.tally> } => !!x.tally)
   const offGridBoxes = dropOffGrid.reduce((n, x) => n + x.tally.count, 0)
   const handedOver = useMemo(
     () =>
@@ -137,6 +139,7 @@ export default function CompactWindowApp(): React.ReactElement {
                         key={`drop-${l.objectiveId}`}
                         breakdown={l.breakdown}
                         commodity={l.commodity}
+                        color={objColor.get(l.objectiveId)}
                         delivered={handedOver.has(l.objectiveId)}
                         tripPos={l.tripPos}
                         tripTotal={l.tripTotal}
@@ -145,13 +148,13 @@ export default function CompactWindowApp(): React.ReactElement {
                   </div>
                 )}
                 {offGridBoxes > 0 && (
-                  <div style={{ margin: '2px 12px 8px', padding: '9px 12px', borderLeft: `2px solid ${C.amber}`, background: 'rgba(230,182,94,0.08)' }}>
-                    <div style={{ fontFamily: F.display, fontSize: 10.5, letterSpacing: '0.14em', color: C.amber, marginBottom: 6 }}>
+                  <div>
+                    <SectionLabel color={C.amber}>
                       GRAB OFF-GRID · {offGridBoxes} {offGridBoxes === 1 ? 'BOX' : 'BOXES'}
-                    </div>
+                    </SectionLabel>
                     {dropOffGrid.map((x, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
-                        <span style={{ width: 6, height: 6, background: C.amber, transform: 'rotate(45deg)', flex: 'none' }} />
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 14px' }}>
+                        <span style={{ width: 6, height: 6, background: x.color ?? C.amber, transform: 'rotate(45deg)', flex: 'none' }} />
                         <span style={{ fontFamily: F.mono, fontSize: 12, color: WHITE }}>{x.tally.breakdown}</span>
                         <span style={{ fontFamily: F.body, fontSize: 12.5, color: GREEN }}>{x.commodity}</span>
                       </div>
@@ -166,6 +169,7 @@ export default function CompactWindowApp(): React.ReactElement {
                         key={`load-${l.objectiveId}`}
                         breakdown={l.breakdown}
                         commodity={l.commodity}
+                        color={objColor.get(l.objectiveId)}
                         tell={l.tell}
                         tripPos={l.tripPos}
                         tripTotal={l.tripTotal}
@@ -239,6 +243,7 @@ function Panel({ children, opacity }: { children: React.ReactNode; opacity: numb
 function LoadLine({
   breakdown,
   commodity,
+  color,
   tell,
   delivered,
   tripPos,
@@ -246,11 +251,13 @@ function LoadLine({
 }: {
   breakdown: string
   commodity: string
+  color?: string
   tell?: string | null
   delivered?: boolean
   tripPos?: number
   tripTotal?: number
 }): React.ReactElement {
+  const dot = color ?? '#e6ab3e'
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '7px 14px', opacity: delivered ? 0.55 : 1 }}>
       <span
@@ -260,11 +267,9 @@ function LoadLine({
           marginTop: 5,
           flex: 'none',
           transform: 'rotate(45deg)',
-          background: delivered
-            ? 'linear-gradient(135deg, #8fe9b0, #5fd089)'
-            : 'linear-gradient(135deg, #ffe49a 0%, #e6ab3e 52%, #c2862a 100%)',
-          border: '1px solid rgba(255,240,190,0.85)',
-          boxShadow: '0 0 5px rgba(230,176,60,0.5)'
+          background: delivered ? 'linear-gradient(135deg, #8fe9b0, #5fd089)' : dot,
+          border: '1px solid rgba(255,255,255,0.55)',
+          boxShadow: delivered ? 'none' : `0 0 5px ${dot}`
         }}
       />
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -272,15 +277,15 @@ function LoadLine({
           <span style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.3, color: 'rgba(196,214,230,0.85)' }}>
             {tell ? (
               <>
-                find the contract with <b style={{ color: WHITE }}>{tell}</b>
+                Find the contract with <b style={{ color: WHITE }}>{tell}</b>
               </>
             ) : (
-              'match by full box set'
+              'Match by full box set'
             )}
           </span>
         )}
         <span style={{ fontSize: 15, lineHeight: 1.35, color: WHITE, textDecoration: delivered ? 'line-through' : 'none' }}>
-          <span style={{ color: C.amber, fontFamily: F.mono, fontWeight: 600 }}>{breakdown}</span>{' '}
+          <span style={{ color: dot, fontFamily: F.mono, fontWeight: 600 }}>{breakdown}</span>{' '}
           <span style={{ color: GREEN }}>{commodity}</span>
           {tripTotal && tripTotal > 1 && (
             <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber }}> · trip {tripPos}/{tripTotal}</span>

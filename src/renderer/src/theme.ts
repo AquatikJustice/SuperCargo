@@ -31,12 +31,24 @@ export const F = {
 export const GLOW = '0 0 7px rgba(255,210,30,0.45)'
 export const GLOW_SOFT = '0 0 5px rgba(255,210,30,0.20)'
 
-// golden angle keeps hues distinct
+// stepping hue by the golden angle looked even on paper but clustered in the
+// eye: a big arc of the wheel all reads as "green," so neighbouring stops came
+// out near-identical. hand-picked hues instead, ordered warm/cool so any run of
+// stops stays far apart. lightness drops a notch each time we wrap the palette.
+const STOP_HUES: [number, number, number][] = [
+  [0, 85, 66],   // red
+  [212, 90, 64], // blue
+  [32, 95, 58],  // orange
+  [265, 80, 72], // violet
+  [145, 62, 52], // green
+  [325, 90, 70], // pink
+  [184, 70, 50]  // cyan
+]
+
 export function stopColor(index: number): string {
-  const t = index * 137.508
-  const hue = Math.round(t % 360)
-  const light = 66 - (Math.floor(t / 360) % 3) * 9 // step lightness per wrap
-  return `hsl(${hue}, 58%, ${light}%)`
+  const [h, s, l] = STOP_HUES[index % STOP_HUES.length]
+  const wrap = Math.floor(index / STOP_HUES.length) % 3
+  return `hsl(${h}, ${s}%, ${l - wrap * 10}%)`
 }
 
 export function fmt(n: number): string {

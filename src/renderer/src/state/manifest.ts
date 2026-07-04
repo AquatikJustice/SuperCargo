@@ -263,6 +263,29 @@ export function deriveStopsWithPickups(
   return out
 }
 
+// number the drop-offs in route order and hand each objective its stop color, so
+// the grid, the loading panel, and the compact overlay all key off the same map
+export function objectiveStops(route: RoutePlan | null): {
+  num: Map<string, number>
+  color: Map<string, string>
+} {
+  const num = new Map<string, number>()
+  const color = new Map<string, string>()
+  if (route) {
+    let n = 0
+    for (const step of route.steps) {
+      if (!step.dropRefs.length) continue
+      for (const r of step.dropRefs) {
+        if (num.has(r.objectiveId)) continue
+        num.set(r.objectiveId, n)
+        color.set(r.objectiveId, stopColor(n))
+      }
+      n++
+    }
+  }
+  return { num, color }
+}
+
 // one card per route visit
 export function deriveRouteStops(
   contracts: HaulingContract[],

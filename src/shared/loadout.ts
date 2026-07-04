@@ -38,7 +38,7 @@ export function looseSummary(boxes: PackBox[]): LooseSummary {
 }
 
 const DEFAULT_EXIT = { axis: 'z' as const, dir: -1 as const }
-const BIG = 24 // containers this size or larger are the heavy ones to call out
+export const BIG = 24 // containers this size or larger are the heavy ones to call out
 
 export interface SetAside {
   count: number
@@ -78,21 +78,23 @@ export interface BucketDecision {
   kind: 'none' | 'digout' | 'overload'
   /** overload only: this bucket's boxes that won't fit the grid */
   overloadBoxes: PackBox[]
+  /** digout only: this bucket's own boxes you'll set aside to reach earlier cargo */
+  digBoxes: PackBox[]
 }
 
 // what a pickup bucket needs the user to decide: it won't fit (overload), it buries
 // earlier-delivery cargo you'll dig out (digout), or nothing (just load it). The dig-out
-// COST the card shows is the whole-arrangement setAside, not this bucket's own boxes —
-// it counts the boxes you physically handle, which is the honest number.
+// cost is this bucket's own set-aside boxes, so the count matches why the card showed up
+// instead of a whole-hold tally that drags in stops you're nowhere near yet.
 export function bucketDecision(
   setAside: SetAside,
   unplaced: PackBox[],
   loadIds: ReadonlySet<string>
 ): BucketDecision {
   const overloadBoxes = unplaced.filter((b) => b.objectiveId != null && loadIds.has(b.objectiveId))
-  if (overloadBoxes.length) return { kind: 'overload', overloadBoxes }
-  const buries = setAside.boxes.some((b) => b.objectiveId != null && loadIds.has(b.objectiveId))
-  return { kind: buries ? 'digout' : 'none', overloadBoxes: [] }
+  if (overloadBoxes.length) return { kind: 'overload', overloadBoxes, digBoxes: [] }
+  const digBoxes = setAside.boxes.filter((b) => b.objectiveId != null && loadIds.has(b.objectiveId))
+  return { kind: digBoxes.length ? 'digout' : 'none', overloadBoxes: [], digBoxes }
 }
 
 const toOcc = (p: Placement, stopIdx: number): Occupied => ({
