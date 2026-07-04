@@ -106,7 +106,7 @@ export default function HistoryPage(): React.ReactElement {
       {confirmClear && (
         <ConfirmModal
           title="Clear history?"
-          body="This permanently removes every finished contract and its earnings. It can't be undone."
+          body="Wipes every finished contract and its earnings. No undo."
           confirmLabel="CLEAR HISTORY"
           onCancel={() => setConfirmClear(false)}
           onConfirm={() => {
@@ -272,7 +272,7 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 4px', flex: 'none' }}>
         <Btn
           onClick={() => exportRun(group)}
-          title="Download this run's data as JSON to share for debugging"
+          title="Export run as JSON"
           style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 10px', cursor: 'pointer' }}
           hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
         >
@@ -323,7 +323,7 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
       {confirmDel && (
         <ConfirmModal
           title={`Delete run ${runId}?`}
-          body="This permanently removes this run and every contract in it from history. It can't be undone."
+          body="Deletes this run and everything in it. No undo."
           confirmLabel="DELETE RUN"
           onCancel={() => setConfirmDel(false)}
           onConfirm={() => {
@@ -426,7 +426,7 @@ function RewardCell({ entry }: { entry: HistoryEntry }): React.ReactElement {
         setDraft(entry.reward ? String(entry.reward) : '')
         setEditing(true)
       }}
-      title="Click to set the full contract reward"
+      title="Set the reward"
       style={{
         border: 0,
         background: 'transparent',
@@ -553,7 +553,7 @@ function EmptyState(): React.ReactElement {
     >
       No finished contracts yet.
       <br />
-      Completed contracts (and any you abandon) land here automatically with their SCU, boxes, and stops. Add a payout to each to track earnings.
+      They land here once done, with their SCU, boxes and stops. Add a payout to track what you made.
     </div>
   )
 }

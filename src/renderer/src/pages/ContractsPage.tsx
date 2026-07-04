@@ -178,8 +178,7 @@ export default function ContractsPage(): React.ReactElement {
                     </div>
                     {c.objectives.length === 0 && (
                       <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim, padding: '12px 0' }}>
-                        No objective details captured yet. Add them manually, or capture the contract
-                        screen with OCR.
+                        No objectives yet. Add them or scan the contract.
                       </div>
                     )}
                     {c.objectives.map((o) => {
@@ -211,7 +210,7 @@ export default function ContractsPage(): React.ReactElement {
                           <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
                           <Btn
                             onClick={() => setEditTurnIn({ contractId: c.id, objectiveId: o.objectiveId, commodity: o.commodity, destination: o.destination, scu: o.scu, boxStr: o.boxStr, ref: c.ref, turnedInScu: ti })}
-                            title={isTurnedIn ? `Turned in: ${ti >= o.scu ? 'full' : ti <= 0 ? 'none' : `${ti} SCU`}. Click to change.` : 'Record what you handed over'}
+                            title={isTurnedIn ? `Turned in: ${ti >= o.scu ? 'full' : ti <= 0 ? 'none' : `${ti} SCU`}` : 'Record what you handed over'}
                             style={{ border: `1px solid ${tiColor}`, background: 'transparent', color: tiColor, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '5px 0', cursor: 'pointer', textAlign: 'center' }}
                             hoverStyle={{ background: 'rgba(255,255,255,0.06)', textShadow: GLOW }}
                           >
@@ -592,7 +591,7 @@ function EditableNum({
 function BlueprintBadge(): React.ReactElement {
   return (
     <span
-      title="Has a chance to award a blueprint"
+      title="Has a shot at a blueprint"
       style={{
         flex: 'none',
         display: 'inline-flex',

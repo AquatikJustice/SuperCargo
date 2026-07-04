@@ -107,7 +107,7 @@ export default function ManifestPage(): React.ReactElement {
       {turnIn && (
         <TurnInModal
           heading={turnIn.stop.code ? `${turnIn.stop.code} · ${turnIn.stop.name}` : turnIn.stop.name}
-          sub="Mark what you handed over. You can change it until the game finishes the contract."
+          sub="Mark what you handed over. You can change it until the contract completes."
           items={[
             {
               objectiveId: turnIn.item.objectiveId,
@@ -158,7 +158,7 @@ function MissingObjectivesBanner({
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.amber, flex: 'none' }} />
       <div style={{ flex: 1, fontFamily: F.body, fontSize: 13, color: C.textBody, lineHeight: 1.5 }}>
         {contracts.length === 1 ? '1 contract needs' : `${contracts.length} contracts need`} details.
-        Add them manually on the Contracts tab so they appear on the Manifest.
+        Add them on the Contracts tab.
       </div>
       <Btn
         onClick={() => onAdd(first.id)}
@@ -494,7 +494,7 @@ function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; sho
             {it.pickupKey ? (
               <Btn
                 onClick={() => setPickedUp(it.contractId, it.objectiveId, it.pickupKey as string, !it.picked)}
-                title={it.picked ? 'Mark as not yet collected' : 'Check off this pickup'}
+                title={it.picked ? 'Uncheck this pickup' : 'Check off this pickup'}
                 style={{ border: `1px solid ${C.green}`, background: 'transparent', color: C.green, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '6px 0', cursor: 'pointer', textAlign: 'center' }}
                 hoverStyle={{ background: 'rgba(95,208,137,0.10)', textShadow: GLOW }}
               >
@@ -554,7 +554,7 @@ function OffGridBadge({ variant, count }: { variant: 'tag' | 'rollup'; count?: n
   const rollup = variant === 'rollup'
   return (
     <span
-      title="Cargo off grid, not in a bay slot"
+      title="Cargo off grid"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -673,8 +673,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }): React.ReactElement {
       }}
     >
       <div style={{ fontFamily: F.body, fontSize: 14, color: C.dim, maxWidth: 460, lineHeight: 1.6 }}>
-        Accept a hauling contract in-game, or add one manually. SuperCargo consolidates every
-        objective into a single manifest grouped by destination, with box breakdowns.
+        Accept a hauling contract in-game, or add one manually.
       </div>
       <Btn
         onClick={onAdd}

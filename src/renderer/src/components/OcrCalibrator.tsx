@@ -105,9 +105,7 @@ export default function OcrCalibrator(): React.ReactElement {
             lineHeight: 1.6
           }}
         >
-          Capture a preview of your game display, then drag the box over the contract panel.
-          <br />
-          Capture while the mobiGlas contract screen is visible for the easiest alignment.
+          Capture your screen, then drag the box over the contract panel.
         </div>
       ) : (
         <div
@@ -159,10 +157,7 @@ export default function OcrCalibrator(): React.ReactElement {
 
       {preview && (
         <div style={{ marginTop: 8, fontFamily: F.body, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Drag the box over the contract panel, drag its corner to resize. It saves
-          automatically. Hit <span style={{ fontFamily: F.mono, color: C.faint }}>DONE</span> to
-          collapse the preview, or <span style={{ fontFamily: F.mono, color: C.faint }}>TEST READ</span> to
-          check it.
+          Drag to move, a corner to resize.
         </div>
       )}
 

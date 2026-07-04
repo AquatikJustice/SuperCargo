@@ -126,7 +126,7 @@ function WatcherStatusPanel(): React.ReactElement {
         padding: '0 22px',
         background: 'rgba(255,255,255,0.015)'
       }}
-      title={watcher.path ?? 'Set your game log location in Settings'}
+      title={watcher.path ?? 'Set the game log path in Settings'}
     >
       <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim, marginBottom: 5 }}>
         LOG WATCHER

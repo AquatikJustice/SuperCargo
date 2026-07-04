@@ -48,7 +48,7 @@ function Header({ remaining }: { remaining: number }): React.ReactElement {
             REVIEW ACTIVE CONTRACTS
           </div>
           <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Found in your session. The log doesn&apos;t carry cargo details, so add each one in yourself.
+            Found in your session. Add the cargo details yourself.
           </div>
         </div>
       </div>
@@ -132,8 +132,7 @@ function ItemCard({ item }: { item: ScannedContract }): React.ReactElement {
         </>
       ) : (
         <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim, lineHeight: 1.5, padding: '10px 0', borderTop: `1px solid ${C.lineSoft}`, borderBottom: `1px solid ${C.lineSoft}` }}>
-          The game log re-listed this contract without its objectives, so there&apos;s nothing to load yet.
-          Pull it up on your mobiGlas and scan the details.
+          No objectives logged yet. Pull it up on your mobiGlas and scan the details.
         </div>
       )}
 

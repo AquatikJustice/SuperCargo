@@ -123,7 +123,7 @@ export default function TurnInModal({
           {turnedInIds.length > 0 && (
             <Btn
               onClick={() => onUnmark(turnedInIds)}
-              title="Clear this turn-in; the cargo reads as still aboard"
+              title="Clear this turn-in"
               style={{ border: `1px solid ${C.red}`, background: 'transparent', color: C.red, fontFamily: F.display, fontSize: 12, letterSpacing: '0.1em', padding: '9px 14px', cursor: 'pointer' }}
               hoverStyle={{ background: 'rgba(229,90,90,0.12)' }}
             >
@@ -140,7 +140,7 @@ export default function TurnInModal({
           {onSkip && (
             <Btn
               onClick={onSkip}
-              title="Move on without marking this delivery"
+              title="Move on without marking it"
               style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 12, letterSpacing: '0.1em', padding: '9px 14px', cursor: 'pointer' }}
               hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
             >

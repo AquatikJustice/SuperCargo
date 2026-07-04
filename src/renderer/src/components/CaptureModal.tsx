@@ -242,8 +242,8 @@ export default function CaptureModal(): React.ReactElement | null {
               </div>
               <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
                 {target
-                  ? `${target.ref} · ${target.title || 'contract'} - fill in what the game didn't log`
-                  : 'Enter delivery objectives to add to the manifest'}
+                  ? `${target.ref} · ${target.title || 'contract'}`
+                  : 'Add delivery objectives'}
               </div>
             </div>
           </div>
@@ -269,8 +269,7 @@ export default function CaptureModal(): React.ReactElement | null {
               ADJUST CAPTURE AREA
             </div>
             <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 14, lineHeight: 1.5 }}>
-              Capture a preview of your game display, then drag the box over the mobiGlas contract panel.
-              It saves automatically. Hit DONE when it&apos;s framed, then recapture.
+              Drag the box over the contract panel, then hit DONE.
             </div>
             <OcrCalibrator />
           </div>
@@ -363,7 +362,7 @@ export default function CaptureModal(): React.ReactElement | null {
                 <input
                   style={{ ...inputStyle, fontFamily: F.mono }}
                   inputMode="numeric"
-                  placeholder="full contract reward"
+                  placeholder="e.g. 50000"
                   value={reward || ''}
                   onChange={(e) =>
                     setReward(Math.max(0, parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) || 0))
@@ -375,7 +374,7 @@ export default function CaptureModal(): React.ReactElement | null {
                   </div>
                 ) : tab === 'ocr' && hasOcr ? (
                   <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 3 }}>
-                    not read - enter it (top-right of the contract)
+                    not captured, enter it above
                   </div>
                 ) : null}
               </div>
@@ -582,9 +581,7 @@ function OcrCapturePane({
   return (
     <div style={{ padding: '36px 24px', textAlign: 'center', fontFamily: F.body }}>
       <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim, lineHeight: 1.6, marginBottom: 22 }}>
-        Open the contract on your mobiGlas, then capture the screen. SuperCargo reads the
-        objectives and matches them to the live UEX commodity &amp; location lists, and you confirm
-        before anything is added.
+        Capture the contract; SuperCargo reads the objectives and matches them for you to confirm.
       </div>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Btn
@@ -699,8 +696,7 @@ function ContributePane({
         </MiniBtn>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-        This doesn&apos;t look like a hauling contract, so nothing will be added to the manifest. You can still
-        help train the OCR by checking the capture and correcting the text below.
+        Not a hauling contract, so nothing&apos;s added. You can still help train the OCR by fixing the text below.
       </div>
 
       <div style={labelStyle}>CAPTURED PANEL</div>
@@ -725,7 +721,7 @@ function ContributePane({
         </div>
       )}
       <div style={{ fontFamily: F.body, fontSize: 11, color: C.faint, marginTop: -8, marginBottom: 16, lineHeight: 1.5 }}>
-        If the panel isn&apos;t framed right, hit ADJUST CROP above, then RECAPTURE.
+        Not framed right? Adjust the crop, then recapture.
       </div>
 
       <div style={labelStyle}>CONTRACT TEXT (CORRECT TO MATCH THE SCREEN)</div>
@@ -747,12 +743,12 @@ function ContributePane({
           outline: 'none',
           resize: 'vertical'
         }}
-        placeholder="(no text recognized - type what the contract panel shows)"
+        placeholder="Text not found, please enter it manually."
       />
       <div style={{ fontFamily: F.body, fontSize: 11, color: collecting ? C.dim : C.amber, marginTop: 8, lineHeight: 1.5 }}>
         {collecting
-          ? 'Fix any misreads so the label matches the panel exactly, then contribute. Only this cropped panel image and your text are saved - nothing else.'
-          : 'Turn on "Contribute training data" in Settings -> OCR to keep this. Without it, contributing does nothing.'}
+          ? 'Fix any misreads, then contribute. Only the cropped image and your text are saved.'
+          : 'Turn on "Contribute training data" in Settings to keep this. Without it, contributing does nothing.'}
       </div>
     </div>
   )
@@ -801,7 +797,7 @@ function OcrReviewBanner({
           <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>{ms} ms</span>
         </div>
         <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, margin: '7px 0 10px', lineHeight: 1.5 }}>
-          Review and correct below. Names are our best match to the live data. Then confirm.
+          Review and correct below, then confirm.
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <MiniBtn onClick={onRecapture} disabled={recognizing}>

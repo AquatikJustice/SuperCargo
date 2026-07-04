@@ -55,8 +55,7 @@ export default function Onboarding(): React.ReactElement {
           SuperCargo
         </h1>
         <p style={{ margin: '0 0 28px', fontFamily: F.body, fontSize: 16, lineHeight: 1.6, color: C.textBody }}>
-          SuperCargo watches your Star Citizen game log to pick up the hauling contracts you accept, then builds
-          a packing plan and an optimized delivery route for your ship. Before you start, two quick choices. You can change both anytime in Settings.
+          SuperCargo turns your hauling contracts into a packing plan and delivery route. Two quick choices first, both changeable in Settings.
         </p>
 
         <ConsentCard
@@ -65,10 +64,8 @@ export default function Onboarding(): React.ReactElement {
           onToggle={() => setCapture((v) => !v)}
           recommended
         >
-          The game log gives us your commodities, destinations and amounts, but never the max cargo box size,
-          which we need to get your box counts right. With this on, SuperCargo briefly screenshots your display
-          after you accept a contract to read that number. The image is processed on your PC and not saved or
-          sent anywhere (unless you opt in below).
+          Your game log doesn't include some info, so SuperCargo takes a screenshot of the contract so it can read it.
+          This stays only on your PC unless you enable sharing below.
         </ConsentCard>
 
         <ConsentCard
@@ -76,9 +73,7 @@ export default function Onboarding(): React.ReactElement {
           on={contribute}
           onToggle={() => setContribute((v) => !v)}
         >
-          Share an anonymous picture of the contract panel plus the text you confirm, to help the app read
-          contracts better. Tagged with a random ID only. No account, no personal info. Off by default; you can
-          stop anytime.
+          Share an anonymous screenshot of your contract plus your reviewed text to improve the OCR. Disabled by default.
         </ConsentCard>
 
         <div style={{ marginTop: 8 }}>
@@ -95,7 +90,7 @@ export default function Onboarding(): React.ReactElement {
               textDecoration: 'underline'
             }}
           >
-            {showPolicy ? 'Hide privacy policy' : 'Read the full privacy policy'}
+            {showPolicy ? 'Hide privacy policy' : 'View privacy policy'}
           </button>
           {showPolicy && (
             <div

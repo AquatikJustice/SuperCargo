@@ -177,7 +177,7 @@ function createCompactWindow(): void {
     skipTaskbar: true,
     focusable: true,
     alwaysOnTop: true,
-    title: 'SuperCargo - Next Stop',
+    title: 'SuperCargo · Next Stop',
     icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

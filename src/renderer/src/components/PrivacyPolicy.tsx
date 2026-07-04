@@ -27,7 +27,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'Screen capture (OCR)',
     body: [
-      'To read details the game log does not include (chiefly the max cargo box size), SuperCargo can take a screenshot of your display and read the contract panel from it. This is OFF by default; you choose whether to enable it.',
+      'To read details the game log does not include (mainly the max cargo box size), SuperCargo can take a screenshot of your display and read the contract panel from it. This is OFF by default; you choose whether to enable it.',
       'The screenshot is processed on your computer to extract text. The image itself is not saved or sent anywhere, unless you opt in to the training program below.',
       'A capture grabs your whole display for a moment, so anything on screen at that instant is in the image while it is processed. You can disable capture, change its hotkey, or narrow the capture region at any time in Settings.'
     ]
@@ -35,7 +35,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'Helping improve recognition (optional, off by default)',
     body: [
-      'If, and only if, you turn this on, SuperCargo uploads a cropped, grayscale image of the contract panel together with the text you confirmed, to help train a better recognition model.',
+      'Only if you turn this on, SuperCargo uploads a cropped, grayscale image of the contract panel together with the text you confirmed, to help train a better recognition model.',
       'Uploads are tagged with a random ID generated on your device. They are not tied to your name, account, or computer, and no other personal information is attached.',
       'You can turn this off at any time in Settings; turning it off stops all future uploads. Please avoid capturing anything you do not want shared while this is enabled.'
     ]
@@ -49,7 +49,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'What it does NOT do',
     body: [
-      'No user accounts or sign-in. No advertising or third-party analytics. Your data is never sold. The only outbound network calls are: UEXcorp syncing (if you add a key), update checks, and opt-in training uploads.'
+      'No user accounts or sign-in. No advertising or third-party analytics. Your data is never sold. The only network traffic is: UEXcorp syncing (if you add a key), update checks, and opt-in training uploads.'
     ]
   },
   {

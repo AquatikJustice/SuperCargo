@@ -1533,7 +1533,7 @@ export default function CargoGridPage(): React.ReactElement {
         return { gridId: g.id, x: spot[0], y: spot[1], z: spot[2], w: ext[0], h: ext[1], l: ext[2], valid: true }
       }
     }
-    // a crate stays aboard - it comes off via the shelf, not the pane
+    // a crate stays aboard; it comes off via the shelf, not the pane
     if (offGridBay && !isCrate) {
       const gx = offGridBay.x
       const gz = offGridBay.z
@@ -1711,7 +1711,7 @@ export default function CargoGridPage(): React.ReactElement {
   }, [loading, loadingPack, loadIdx, loadSteps, looseBoxes])
 
   // a won't-fit step gets the router one shot at re-splitting or deferring the
-  // overflow the moment you arrive - once, before the card asks you to decide, so
+  // overflow the moment you arrive; just once, before the card asks you to decide, so
   // the card and the held NEXT button reflect what actually can't fit. One shot
   // per step: a second pass on the re-solved plan is how the feedback storms start
   const negotiatedStep = useRef(-1)
@@ -1948,7 +1948,7 @@ export default function CargoGridPage(): React.ReactElement {
     const snap = loadingPack.snaps[loadIdx]
     if (!snap) return
     // a delivered box's pin outlives its drop step. Left in place, the packer
-    // re-seats it as a phantom anchor at its old spot - and anchors skip the
+    // re-seats it as a phantom anchor at its old spot, and anchors skip the
     // overlap check, so a live box can end up inside it (box-in-box). Prune any
     // pin whose cargo is no longer aboard at the cursor.
     const active = new Set<string>()
@@ -2070,7 +2070,7 @@ export default function CargoGridPage(): React.ReactElement {
         {loading && offGrid.count > 0 && (
           <span
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: F.body, fontSize: 13, color: C.amber }}
-            title="Cargo off grid, not in a bay slot."
+            title="Cargo off grid"
           >
             <OffGridGlyph />
             <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
@@ -2131,7 +2131,7 @@ export default function CargoGridPage(): React.ReactElement {
               onUnmark={(ids) => unmarkTurnIn(ids)}
               onLoaded={() => {
                 // loaded step ticks the manifest pickups and locks each box
-                // where the plan put it - you can't restack what's aboard
+                // where the plan put it; you can't restack what's aboard
                 if (currentLoad?.kind === 'load') {
                   const key = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
                   for (const oid of currentLoad.loadIds) {

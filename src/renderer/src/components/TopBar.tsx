@@ -144,7 +144,7 @@ function RunChip(): React.ReactElement {
     <div ref={ref} className="no-drag" style={{ position: 'relative', marginLeft: 26, flex: 'none' }}>
       <Btn
         onClick={() => setOpen((o) => !o)}
-        title="Current run - start a new one"
+        title="Start a new run"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -226,9 +226,9 @@ function RunChip(): React.ReactElement {
           <p style={{ fontFamily: F.body, fontSize: 11, color: C.faint, lineHeight: 1.55, margin: '10px 0 0' }}>
             {activeCount > 0
               ? confirm
-                ? `Clears ${activeCount} contract${activeCount === 1 ? '' : 's'} off the manifest. Anything you've turned in gets filed to History first.`
-                : `Starts fresh and clears the ${activeCount} contract${activeCount === 1 ? '' : 's'} on the manifest.`
-              : 'A new run also starts on its own when you accept a contract with an empty manifest.'}
+                ? 'Clears the manifest. Turned-in contracts file to History first.'
+                : `Clears the ${activeCount} contract${activeCount === 1 ? '' : 's'} and starts fresh.`
+              : 'Also auto-starts when you accept into an empty manifest.'}
           </p>
         </div>
       )}
@@ -286,7 +286,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
         hoverStyle={{ border: `1px solid ${C.acc}`, textShadow: GLOW }}
       >
         {activeNeedsGrid && (
-          <span title="This ship's cargo grid isn't optimized for the loading system yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1, flex: 'none' }}>
+          <span title="Cargo grid not mapped for loading yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1, flex: 'none' }}>
             ⚠
           </span>
         )}
@@ -328,7 +328,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
             clearOnFocus
             search
             warn={needsGrid}
-            warnTitle="Cargo grid not optimized for the loading system yet"
+            warnTitle="Cargo grid not mapped for loading yet"
             onSelect={(name) => void updateSettings({ activeShip: name })}
             placeholder="Search ships..."
           />
@@ -375,7 +375,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           title="Pick a ship without the ⚠ for an accurate layout"
           style={{ flex: '0 1 auto', minWidth: 0, marginLeft: 4, fontFamily: F.body, fontSize: 12, color: '#e8b13a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
         >
-          Cargo grid not optimized for the loading system yet
+          Cargo grid not mapped for loading yet
         </span>
       )}
     </div>

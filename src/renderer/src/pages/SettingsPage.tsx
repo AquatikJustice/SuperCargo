@@ -154,7 +154,7 @@ export default function SettingsPage(): React.ReactElement {
             }}
             title={settings.gameLogPath}
           >
-            {settings.gameLogPath || 'Not set - browse or auto-detect'}
+            {settings.gameLogPath || 'Not set. Browse or auto-detect.'}
           </span>
           {watcher.connected ? (
             <Pill color={C.green} text="CONNECTED" />
@@ -212,7 +212,7 @@ export default function SettingsPage(): React.ReactElement {
         <span style={keyStyle}>Scan current session</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Pull in active contracts already accepted before SuperCargo was opened
+            Import contracts you accepted before opening SuperCargo
           </span>
           <SmallBtn
             onClick={() => {
@@ -310,7 +310,7 @@ export default function SettingsPage(): React.ReactElement {
         <span style={keyStyle}>
           Click-through
           <span style={{ display: 'block', fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
-            Clicks pass through to the game. You can’t move or click the overlay while this is on.
+            Clicks pass through to the game; you can’t touch the overlay while it’s on.
           </span>
         </span>
         <Toggle on={settings.overlayClickThrough} onClick={() => void updateSettings({ overlayClickThrough: !settings.overlayClickThrough })} />
@@ -389,8 +389,7 @@ export default function SettingsPage(): React.ReactElement {
             )
           })}
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, flexBasis: '100%', lineHeight: 1.6 }}>
-            Grabbing just the game window keeps SuperCargo out of the shot, so it works even on one monitor.
-            Switch to full display if you run the game in exclusive fullscreen.
+            Window: keeps SuperCargo out of the shot, fine on one monitor. Display: for exclusive fullscreen.
           </span>
         </div>
       </div>
@@ -463,7 +462,7 @@ export default function SettingsPage(): React.ReactElement {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Toggle on={settings.ocrAutoCapture} onClick={() => void updateSettings({ ocrAutoCapture: !settings.ocrAutoCapture })} />
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            Read the contract screen automatically after the log reports an accept
+            Read the contract screen automatically when you accept one
           </span>
         </div>
       </div>
@@ -496,10 +495,7 @@ export default function SettingsPage(): React.ReactElement {
             }
           />
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, lineHeight: 1.6, maxWidth: 540 }}>
-            Anonymously send the <strong style={{ color: C.body }}>picture of the contract panel</strong> and the text you
-            confirmed, to help the app read contracts better. No account, no name. Only that one image (the same one you see
-            in the capture window) is sent, and only after you confirm it. It uploads in the background and
-            retries if you&apos;re offline.
+            Send the contract screenshots and your reviewed text to improve OCR accuracy. It’s anonymous and disabled by default.
           </span>
         </div>
       </div>
@@ -528,7 +524,7 @@ export default function SettingsPage(): React.ReactElement {
             <>
               <Pill color={C.dim} text="NOT DETECTED" />
               <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-                Optional. Install StarStrings to surface blueprint chances &amp; reputation.
+                Optional. Install StarStrings to show blueprint chances &amp; reputation.
               </span>
             </>
           )}
@@ -540,7 +536,7 @@ export default function SettingsPage(): React.ReactElement {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <input
             value={settings.contractsDataPath}
-            placeholder="Auto-located next to Game.log - set only to override"
+            placeholder="Auto-located next to Game.log. Set only to override."
             onChange={(e) => void updateSettings({ contractsDataPath: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
