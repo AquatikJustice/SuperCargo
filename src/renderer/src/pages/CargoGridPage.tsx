@@ -1613,10 +1613,14 @@ export default function CargoGridPage(): React.ReactElement {
           return nn == null ? b : { ...b, stopIdx: nn }
         })
       )
-    // the old plan's inertia is geometry from a dead route; dragging it into
-    // the new structure squeezes boxes out of seats the router just made room
-    // for. Pins still bind; the future re-packs fresh
-    prevRef.current = null
+    // inertia from the dead route strangles the new one, but zero inertia
+    // re-deals the boxes the user is LOOKING at and reshuffles which cargo
+    // goes homeless on an over-full run. Keep what's on screen right now;
+    // only the unseen future re-packs fresh
+    const snap = loadingPack?.snaps[loadIdx]
+    const keep = new Map<string, Placement>()
+    if (snap) for (const p of snap.placements) keep.set(boxKey(p.box), p)
+    prevRef.current = keep.size ? keep : null
   }
 
   // when the open step's own cargo has no seat, the router gets one shot at
