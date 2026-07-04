@@ -24,6 +24,8 @@ export interface HoldOpts {
   /** empty cells kept between different-stop blocks while space allows */
   gap?: number
   frames?: ReadonlyMap<string, Frame>
+  /** harness hook: called with a reason each time a prev-keep fails */
+  debug?: (msg: string) => void
 }
 
 export interface UnitVerdict {
@@ -207,8 +209,10 @@ interface Relax {
 // Mirrors the checks findSpot applies on its strict rung - keep in lockstep.
 // A hand-pinned rival only binds physically: it never claims row ownership,
 // and in keep mode it doesn't impose lane order either - the user parked it
-// there, settled neighbors stay put and any dig cost is theirs to see
-function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false): boolean {
+// there, settled neighbors stay put and any dig cost is theirs to see.
+// relax rungs match findSpot's: peel skips row+lane, build skips insert,
+// build or flank skips the sandwich test
+function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false, relax: Relax = {}): boolean {
   if (rivals.some((r) => cellsClash(t, r))) return false
   if (t.y > 0)
     for (let dc = 0; dc < t.cw; dc++)
@@ -228,15 +232,16 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
         )
           return false
       }
-  for (const r of rivals) {
-    if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
-    if (!laneClash(t, r) || (r.pinned && keep)) continue
-    const pad = r.stop !== t.stop ? gap : 0
-    if (r.drop < t.drop && r.d + r.dl + pad > t.d) return false
-    if (r.drop > t.drop && t.d + t.dl + pad > r.d) return false
-  }
-  if (!canInsert(aboardAtLoad, t)) return false
-  if (makesSandwich(rivals, t)) return false
+  if (!relax.peel)
+    for (const r of rivals) {
+      if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
+      if (!laneClash(t, r) || (r.pinned && keep)) continue
+      const pad = r.stop !== t.stop ? gap : 0
+      if (r.drop < t.drop && r.d + r.dl + pad > t.d) return false
+      if (r.drop > t.drop && t.d + t.dl + pad > r.d) return false
+    }
+  if (!relax.build && !canInsert(aboardAtLoad, t)) return false
+  if (!relax.build && !relax.flank && makesSandwich(rivals, t)) return false
   return true
 }
 
@@ -731,7 +736,7 @@ export function holdOracle(grids: CargoGrid[]): HoldOracle {
 }
 
 export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts = {}): HoldPlan {
-  const { loose, pins, prev, gap = 0, frames } = opts
+  const { loose, pins, prev, gap = 0, frames, debug } = opts
   const openable = grids.filter((g) => g.autoLoad !== false)
   const bays = openable.map((g, i) => bayCtx(g, i, frames?.get(g.id)))
   const bayById = new Map(bays.map((b) => [b.grid.id, b]))
@@ -809,7 +814,23 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             const t = fromPlacement(bay, { ...pl, box }, load, drop, false)
             const rivals = slots.filter((s) => s.bay === bay.idx && windowsOverlap(s, t))
             const support = rivals.filter((r) => r.load < load && r.drop > load)
-            let seat: Slot | null = fits(rivals, t, gap, support, true) ? t : null
+            // a spot the previous plan seated as a declared concession must
+            // keep on the same terms, or every conceded box re-deals on every
+            // re-plan; the ladder mirrors the seat ladder and re-declares
+            let seat: Slot | null = null
+            let cost: Concession['kind'] | null = null
+            const tiers: Array<[Relax, Concession['kind'] | null]> = [
+              [{}, null],
+              [{ peel: true }, 'peel'],
+              [{ peel: true, flank: true }, 'flank'],
+              [{ peel: true, flank: true, build: true }, 'build']
+            ]
+            for (const [rx, kind] of tiers)
+              if (fits(rivals, t, gap, support, true, rx)) {
+                seat = t
+                cost = kind
+                break
+              }
             // its supporter left: settle straight down in its own column
             // before the ladder gets to fling it somewhere fresh
             for (let y = 0; !seat && y < t.y; y++) {
@@ -820,7 +841,25 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
               slots.push(seat)
               byBox.set(box.id, seat)
               kept.add(box.id)
+              if (cost) concessions.push({ boxId: box.id, kind: cost })
               continue
+            }
+            if (debug) {
+              const clash = rivals.find((r) => cellsClash(t, r))
+              const row = rivals.find((r) => !r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl))
+              const lane = rivals.find((r) => !(r.pinned) && laneClash(t, r) && ((r.drop < t.drop && r.d + r.dl > t.d) || (r.drop > t.drop && t.d + t.dl > r.d)))
+              const why = clash
+                ? `clash ${clash.box.id}${clash.pinned ? '(pin)' : ''}@stop${clash.stop}`
+                : row
+                  ? `row ${row.box.id}@stop${row.stop}`
+                  : lane
+                    ? `lane ${lane.box.id}@stop${lane.stop}`
+                    : !canInsert(support, t)
+                      ? 'insert'
+                      : makesSandwich(rivals, t)
+                        ? 'sandwich'
+                        : 'support'
+              debug(`keep-fail ${box.id} stop=${stop} c${t.c} d${t.d} y${t.y}: ${why}`)
             }
           }
           rest.push(box)
