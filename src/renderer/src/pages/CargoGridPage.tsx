@@ -860,9 +860,6 @@ export default function CargoGridPage(): React.ReactElement {
     () => setAsideToUnload(grids.filter((g) => g.autoLoad !== false), result.placements),
     [grids, result]
   )
-  // cargo trapped behind later-delivery boxes: lit red so you can see what you'd
-  // dig to reach and restack to clear it. Live, so it updates as you rearrange
-  const blockedKeys = useMemo(() => new Set(setAside.blocked.map((b) => boxKey(b))), [setAside])
   // off-grid boxes aboard at the current step (they drop off as their stop is delivered)
   const looseNow = useMemo<PackBox[]>(() => {
     if (!(loading && loadingPack) || !loadingPack.snaps.length) return []
@@ -999,6 +996,15 @@ export default function CargoGridPage(): React.ReactElement {
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
+  // cargo you'd dig to reach: lit red ONLY on the step whose DIG-OUT warning is
+  // showing, so it's a heads-up for this load decision, not a permanent state.
+  // live within the step, so restacking to clear the dig-out drops the red
+  const blockedKeys = useMemo(() => {
+    if (currentLoad?.kind !== 'load') return new Set<string>()
+    const decision = bucketDecision(setAside, result.unplaced, new Set(currentLoad.loadIds))
+    if (decision.kind !== 'digout') return new Set<string>()
+    return new Set(setAside.blocked.map((b) => boxKey(b)))
+  }, [currentLoad, setAside, result])
   // green outline of where the plan wants this step's boxes, one box per bay.
   // frozen when the step opens so it keeps showing the recommendation even after
   // the user drags cargo off it. keyed by step so a rewind or advance recaptures
