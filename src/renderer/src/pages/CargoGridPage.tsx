@@ -1479,7 +1479,6 @@ export default function CargoGridPage(): React.ReactElement {
           return nn == null ? b : { ...b, stopIdx: nn }
         })
       )
-    setDropNotice('Re-routed the stops ahead.')
   }
 
   const commitDrag = (): void => {
