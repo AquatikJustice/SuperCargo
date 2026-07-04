@@ -1862,6 +1862,18 @@ export default function CargoGridPage(): React.ReactElement {
     return { byPickup, byObjective }
   }, [loadSteps])
 
+  // a pin must belong to a step at or behind the cursor. Anything else is a
+  // squatter from a dead walk (re-minted trip numbers, an older freeze, a
+  // resumed session) eating hold space the plan can't see past
+  useEffect(() => {
+    if (!loading || !frozenSteps) return
+    for (const [key, p] of Object.entries(loadedPins)) {
+      const at = stepPos.byPickup.get(p.pickupKey)
+      if (at === undefined || at > loadIdx) clearLoadedPin(key)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, frozenSteps, stepPos, loadIdx, loadedPins])
+
   // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
   // at a step now ahead of the cursor reset; deferrals resolve in frozen space
   // since their steps are pruned from the walk. Only fires stepping back, and
