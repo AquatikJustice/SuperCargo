@@ -96,22 +96,11 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
 
   if (opts.fixtures) for (const f of opts.fixtures.values()) { const b = byId.get(f.gridId); if (b) fill(b, f, FIXTURE) }
 
+  const giOf = (gridId: string): number => bays.findIndex((b) => b.grid.id === gridId)
   const homes = new Map<string, Placement>()
-  const pinned = new Set<string>()
-  if (opts.pins)
-    for (const [id, p] of opts.pins) {
-      const b = byId.get(p.gridId)
-      if (!b) continue
-      fill(b, p, p.box.stopIdx)
-      homes.set(id, p)
-      pinned.add(id)
-    }
 
   const byStop = new Map<number, PackBox[]>()
-  for (const b of boxes) {
-    if (pinned.has(b.id)) continue
-    ;(byStop.get(b.stopIdx) ?? byStop.set(b.stopIdx, []).get(b.stopIdx)!).push(b)
-  }
+  for (const b of boxes) (byStop.get(b.stopIdx) ?? byStop.set(b.stopIdx, []).get(b.stopIdx)!).push(b)
   const stops = [...byStop.keys()].sort((a, b) => a - b)
 
   const unplaced: PackBox[] = []
@@ -122,10 +111,21 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
     const stopBoxes = byStop.get(stop)!.sort((a, b) => b.size - a.size)
     let endGi = frontGi
     let endZ = frontZ
+    const reach = (gi: number, z: number): void => {
+      if (gi > endGi || (gi === endGi && z > endZ)) { endGi = gi; endZ = z }
+    }
 
     for (const box of stopBoxes) {
       const dims = BOX_DIMS[box.size]
       if (!dims) { unplaced.push(box); continue }
+      // a locked box keeps its spot and counts as this stop's block, so the next
+      // destination lands behind it instead of packing in around it
+      const pin = opts.pins?.get(box.id)
+      if (pin) {
+        const b = byId.get(pin.gridId)
+        if (b) { fill(b, pin, stop); homes.set(box.id, pin); reach(giOf(pin.gridId), pin.z + pin.l) }
+        continue
+      }
       let done = false
       for (let gi = frontGi; gi < bays.length; gi++) {
         const s = bays[gi]
@@ -136,8 +136,7 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
         const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
         fill(s, p, stop)
         homes.set(box.id, p)
-        const reach = spot.z + spot.fl
-        if (gi > endGi || (gi === endGi && reach > endZ)) { endGi = gi; endZ = reach }
+        reach(gi, spot.z + spot.fl)
         done = true
         break
       }
