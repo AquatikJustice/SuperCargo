@@ -24,14 +24,24 @@ interface Bay {
   owner: Int16Array
   /** which stop owns each depth slice; a slice holds one destination only. */
   slice: Int16Array
+  /** stacks hug the high-x wall and build toward the low-x aisle. */
+  wallHigh: boolean
   used: number
 }
 
 const idx = (g: CargoGrid, x: number, y: number, z: number): number => x + z * g.w + y * (g.w * g.l)
 
+// which x side is the wall to build off of. Aisle marks the open side, so we hug
+// the opposite. Default: low-x wall.
+function wallHigh(grid: CargoGrid): boolean {
+  const f = grid.faces
+  if (!f) return false
+  return f['x+'] === 'wall' || f['x-'] === 'aisle'
+}
+
 function makeBay(grid: CargoGrid): Bay {
   const n = grid.w * grid.l * grid.h
-  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), slice: new Int16Array(grid.l).fill(-1), used: 0 }
+  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), slice: new Int16Array(grid.l).fill(-1), wallHigh: wallHigh(grid), used: 0 }
 }
 
 function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number): boolean {
@@ -68,8 +78,9 @@ function fill(s: Bay, p: Placement, owner: number): void {
   s.used += p.w * p.l * p.h
 }
 
-// First fit at or beyond z = minZ, scanned z (front) then y (bottom-up) then x, so
-// each section fills a full-height wall before stepping back and stays tight in z.
+// First fit, scanned z (front) then x (from the wall toward the aisle) then y, so
+// each column stacks all the way UP before the next one starts across, and the
+// wall fills before the aisle.
 function findSpot(
   s: Bay,
   w: number,
@@ -81,9 +92,11 @@ function findSpot(
   const g = s.grid
   const orients: Array<[number, number, boolean]> = w === l ? [[w, l, false]] : [[w, l, false], [l, w, true]]
   for (let z = Math.max(0, minZ); z + 1 <= g.l; z++)
-    for (let y = 0; y + h <= g.h; y++)
-      for (let x = 0; x < g.w; x++)
+    for (let xi = 0; xi < g.w; xi++) {
+      const x = s.wallHigh ? g.w - 1 - xi : xi
+      for (let y = 0; y + h <= g.h; y++)
         for (const [fw, fl, rotated] of orients) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
+    }
   return null
 }
 
