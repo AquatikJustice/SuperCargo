@@ -48,6 +48,8 @@ export default function ManifestPage(): React.ReactElement {
 
   // usable bays only, no elevators or secure storage
   const capMax = gridCapacity(activeShip, installedModules[activeShip])
+  const storAlls = useStore((s) => s.storAlls)
+  const reserved = (storAlls[activeShip] ?? []).reduce((a, c) => a + c.size, 0)
   const loadSteps = useMemo(() => (route ? buildLoadingSteps(contracts, route, order) : []), [route, contracts, order])
   const { series, peak } = useMemo(() => loadProfile(loadSteps), [loadSteps])
   // what's on the ship right now: 0 until you're actually walking the load
@@ -85,7 +87,7 @@ export default function ManifestPage(): React.ReactElement {
         <SummaryStat label="STOPS" value={String(stops.length)} />
         <SummaryStat label="DISTANCE" value={route ? fmtDistance(route.totalDistance) : '—'} />
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <LoadBar current={aboard} peak={peak} capacity={capMax} />
+          <LoadBar current={aboard} peak={peak} capacity={capMax} reserved={reserved} />
         </div>
       </div>
 

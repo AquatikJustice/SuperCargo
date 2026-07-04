@@ -750,6 +750,24 @@ export function holdOracle(grids: CargoGrid[], fixtures?: ReadonlyMap<string, Pl
   }
 }
 
+/** Stor-All crates as the fixtures input planHold and holdOracle take */
+export function fixtureMap(
+  crates: ReadonlyArray<{ id: string; size: number; gridId: string; x: number; y: number; z: number; w: number; l: number; h: number }>
+): Map<string, Placement> {
+  return new Map(
+    crates.map((c) => [
+      c.id,
+      {
+        box: { id: c.id, size: c.size, color: '', dest: '', stopIdx: -1 },
+        gridId: c.gridId,
+        x: c.x, y: c.y, z: c.z,
+        w: c.w, l: c.l, h: c.h,
+        rotated: false
+      }
+    ])
+  )
+}
+
 export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts = {}): HoldPlan {
   const { loose, pins, fixtures, prev, gap = 0, frames, debug } = opts
   const openable = grids.filter((g) => g.autoLoad !== false)

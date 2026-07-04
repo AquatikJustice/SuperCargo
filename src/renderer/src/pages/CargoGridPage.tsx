@@ -15,9 +15,9 @@ import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
-import { planHold } from '@shared/hold'
+import { planHold, fixtureMap } from '@shared/hold'
 import { BOX_DIMS } from '@shared/boxGeometry'
-import type { FrozenBox, GridView, LoadedPin } from '@shared/types'
+import type { FrozenBox, GridView, LoadedPin, StorAllCrate } from '@shared/types'
 import { Btn } from '../components/ui'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
@@ -28,6 +28,9 @@ const GAP = 0.08
 
 const BOX_GRAY = '#787d82'
 const BOX_GRAY_LOADED = '#5b6065'
+const STOR_BODY = '#191b1f'
+const STOR_ORANGE = '#e07f28'
+const STOR_STEEL = '#8f959b'
 const STRIPE_T = 0.3
 const STRIPE_MARGIN = 0.06
 const STRIPE_PROUD = 0.012 // past the face, no z-fight
@@ -356,6 +359,149 @@ function Box({
   )
 }
 
+function StorAllBox({
+  crate,
+  grid,
+  origin,
+  onStart,
+  onRemove,
+  onDragMove,
+  onHover,
+  onLeave
+}: {
+  crate: StorAllCrate
+  grid: CargoGrid
+  origin: [number, number, number]
+  onStart?: (e: ThreeEvent) => void
+  onRemove?: () => void
+  onDragMove?: (shipX: number, shipZ: number, ray?: THREE.Ray) => void
+  onHover: (h: Omit<HoverInfo, 'x' | 'y'>, e: ThreeEvent) => void
+  onLeave: () => void
+}): React.ReactElement {
+  const bcx = center(grid.x || 0, grid.w, origin[0])
+  const bcy = center(grid.y || 0, grid.h, origin[1])
+  const bcz = center(grid.z || 0, grid.l, origin[2])
+  const cx = center((grid.x || 0) + crate.x, crate.w, origin[0]) - bcx
+  const cy = center((grid.y || 0) + crate.y, crate.h, origin[1]) - bcy
+  const cz = center((grid.z || 0) + crate.z, crate.l, origin[2]) - bcz
+  const W = crate.w - GAP
+  const H = crate.h - GAP
+  const L = crate.l - GAP
+  const exts: [number, number, number] = [W, H, L]
+  const bevel = Math.min(0.09, Math.min(W, H, L) / 2 - 0.02)
+  const floorFace = grid.floor ?? 'y-'
+  const upAx = axOf(floorFace[0])
+  const grow = floorFace[1] === '-' ? 1 : -1
+  const others = [0, 1, 2].filter((a) => a !== upAx) as [Ax, Ax]
+  const c = new THREE.Vector3(cx, cy, cz)
+  const u = new THREE.Vector3(upAx === 0 ? grow : 0, upAx === 1 ? grow : 0, upAx === 2 ? grow : 0)
+  const rail = 0.1
+  const eps = 0.02
+  return (
+    <group position={[bcx, bcy, bcz]} rotation={bayRot(grid)}>
+      <RoundedBox
+        args={[W, H, L]}
+        radius={bevel}
+        smoothness={3}
+        steps={1}
+        castShadow
+        receiveShadow
+        position={[cx, cy, cz]}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          onHover({ commodity: 'Stor-All', size: crate.size, dest: 'Personal storage', color: STOR_ORANGE }, e)
+        }}
+        onPointerOut={() => onLeave()}
+        onPointerMove={
+          onDragMove
+            ? (e) => {
+                e.stopPropagation()
+                onDragMove(e.point.x + origin[0], e.point.z + origin[2], e.ray)
+              }
+            : undefined
+        }
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          onStart?.(e)
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          onRemove?.()
+        }}
+      >
+        <meshStandardMaterial color={STOR_BODY} roughness={0.88} metalness={0.05} />
+      </RoundedBox>
+      {/* silver cage rails on the edges running floor to lid */}
+      {([-1, 1] as const).flatMap((sa) =>
+        ([-1, 1] as const).map((sb) => {
+          const args: [number, number, number] = [rail, rail, rail]
+          args[upAx] = exts[upAx] + 0.05
+          const off = [0, 0, 0]
+          off[others[0]] = sa * (exts[others[0]] / 2)
+          off[others[1]] = sb * (exts[others[1]] / 2)
+          return (
+            <mesh key={`r${sa}${sb}`} position={[cx + off[0], cy + off[1], cz + off[2]]} raycast={() => null} castShadow>
+              <boxGeometry args={args} />
+              <meshStandardMaterial color={STOR_STEEL} roughness={0.45} metalness={0.45} />
+            </mesh>
+          )
+        })
+      )}
+      {/* orange latch caps on the lid */}
+      {([-1, 1] as const).map((s) => {
+        const off = [0, 0, 0]
+        off[upAx] = grow * (exts[upAx] / 2)
+        off[others[0]] = s * (exts[others[0]] / 4)
+        const args: [number, number, number] = [0, 0, 0]
+        args[upAx] = 0.12
+        args[others[0]] = Math.min(0.5, exts[others[0]] * 0.3)
+        args[others[1]] = Math.min(0.34, exts[others[1]] * 0.3)
+        return (
+          <mesh key={`l${s}`} position={[cx + off[0], cy + off[1], cz + off[2]]} raycast={() => null}>
+            <boxGeometry args={args} />
+            <meshStandardMaterial color={STOR_ORANGE} roughness={0.7} metalness={0.1} />
+          </mesh>
+        )
+      })}
+      {/* orange X and name on the four side faces */}
+      {others.flatMap((na) =>
+        ([1, -1] as const).map((sign) => {
+          const n = new THREE.Vector3(na === 0 ? sign : 0, na === 1 ? sign : 0, na === 2 ? sign : 0)
+          const right = new THREE.Vector3().crossVectors(u, n)
+          const rot = new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, u, n))
+          const rightAx = right.x !== 0 ? 0 : right.y !== 0 ? 1 : 2
+          const fw = exts[rightAx as Ax]
+          const fh = exts[upAx]
+          const p = c.clone().addScaledVector(n, exts[na] / 2 + eps)
+          const arm = Math.min(fw, fh) * 0.52
+          const fs = Math.min(0.22, (fw * 0.9) / 5.6)
+          return (
+            <group key={`x${na}${sign}`} position={[p.x, p.y, p.z]} rotation={[rot.x, rot.y, rot.z]}>
+              {([1, -1] as const).map((d) => (
+                <mesh key={d} rotation={[0, 0, (d * Math.PI) / 4]} position={[0, -fh * 0.06, 0]} raycast={() => null}>
+                  <boxGeometry args={[arm, arm * 0.3, 0.025]} />
+                  <meshStandardMaterial color={STOR_ORANGE} roughness={0.75} metalness={0} />
+                </mesh>
+              ))}
+              <Text
+                font={sairaFont}
+                position={[0, fh * 0.34, 0.015]}
+                fontSize={fs}
+                color={STOR_ORANGE}
+                anchorX="center"
+                anchorY="middle"
+                letterSpacing={0.08}
+              >
+                STOR-ALL
+              </Text>
+            </group>
+          )
+        })
+      )}
+    </group>
+  )
+}
+
 function GridShell({
   grid,
   origin,
@@ -565,6 +711,12 @@ export default function CargoGridPage(): React.ReactElement {
   const loadedPins = useStore((s) => s.loadedPins)
   const addLoadedPins = useStore((s) => s.addLoadedPins)
   const resetWalkDecisions = useStore((s) => s.resetWalkDecisions)
+  const storAlls = useStore((s) => s.storAlls)
+  const addStorAll = useStore((s) => s.addStorAll)
+  const moveStorAll = useStore((s) => s.moveStorAll)
+  const removeStorAll = useStore((s) => s.removeStorAll)
+  const crates = useMemo(() => storAlls[activeShip] ?? [], [storAlls, activeShip])
+  const fixtures = useMemo(() => (crates.length ? fixtureMap(crates) : undefined), [crates])
   // every plan feeds the next one: during the walk, boxes that still fit the
   // spot the user saw keep it (planHold prev), so ticks, defers and hand
   // pins re-seat only what they actually displace
@@ -609,7 +761,8 @@ export default function CargoGridPage(): React.ReactElement {
     const raw = planHold(grids, events, {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
-      prev: prev.size ? prev : undefined
+      prev: prev.size ? prev : undefined,
+      fixtures
     }).snaps
     const m = new Map<string, Placement>()
     for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
@@ -623,7 +776,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: events.map((e) => e.load) }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures])
 
   const budgetBoxes = (
     all: ReturnType<typeof packBoxes>,
@@ -922,6 +1075,7 @@ export default function CargoGridPage(): React.ReactElement {
     return m
   }, [grids, offGridBay])
   const [dropNotice, setDropNotice] = useState<string | null>(null)
+  const [shelfOpen, setShelfOpen] = useState(false)
   useEffect(() => {
     if (!dropNotice) return
     const t = setTimeout(() => setDropNotice(null), 5000)
@@ -980,19 +1134,64 @@ export default function CargoGridPage(): React.ReactElement {
   // occupied cells, minus whatever's in hand
   const occCells = useMemo(() => {
     const m = new Map<string, Set<string>>()
-    for (const p of result.placements) {
-      if (dragKeys?.has(boxKey(p.box))) continue
-      let set = m.get(p.gridId)
+    const mark = (gridId: string, x: number, y: number, z: number, w: number, h: number, l: number): void => {
+      let set = m.get(gridId)
       if (!set) {
         set = new Set()
-        m.set(p.gridId, set)
+        m.set(gridId, set)
       }
-      for (let dy = 0; dy < p.h; dy++)
-        for (let dz = 0; dz < p.l; dz++)
-          for (let dx = 0; dx < p.w; dx++) set.add(`${p.x + dx},${p.y + dy},${p.z + dz}`)
+      for (let dy = 0; dy < h; dy++)
+        for (let dz = 0; dz < l; dz++)
+          for (let dx = 0; dx < w; dx++) set.add(`${x + dx},${y + dy},${z + dz}`)
+    }
+    for (const p of result.placements) {
+      if (dragKeys?.has(boxKey(p.box))) continue
+      mark(p.gridId, p.x, p.y, p.z, p.w, p.h, p.l)
+    }
+    for (const c of crates) {
+      if (dragKeys?.has(c.id)) continue
+      mark(c.gridId, c.x, c.y, c.z, c.w, c.h, c.l)
     }
     return m
-  }, [result, dragKeys])
+  }, [result, dragKeys, crates])
+
+  // a dragged crate can rest on the floor or on another crate, never on cargo:
+  // cargo columns read as full-height walls so the ghost slides past them
+  const crateOcc = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    const setOf = (gridId: string): Set<string> => {
+      let s = m.get(gridId)
+      if (!s) {
+        s = new Set()
+        m.set(gridId, s)
+      }
+      return s
+    }
+    for (const p of result.placements) {
+      const g = gridById.get(p.gridId)
+      if (!g) continue
+      const up = axOf((g.floor ?? 'y-')[0])
+      const size = sizeOf(g)
+      const set = setOf(p.gridId)
+      for (let dy = 0; dy < p.h; dy++)
+        for (let dz = 0; dz < p.l; dz++)
+          for (let dx = 0; dx < p.w; dx++) {
+            const cell = [p.x + dx, p.y + dy, p.z + dz]
+            for (let uu = 0; uu < size[up]; uu++) {
+              cell[up] = uu
+              set.add(`${cell[0]},${cell[1]},${cell[2]}`)
+            }
+          }
+    }
+    for (const c of crates) {
+      if (dragKeys?.has(c.id)) continue
+      const set = setOf(c.gridId)
+      for (let dy = 0; dy < c.h; dy++)
+        for (let dz = 0; dz < c.l; dz++)
+          for (let dx = 0; dx < c.w; dx++) set.add(`${c.x + dx},${c.y + dy},${c.z + dz}`)
+    }
+    return m
+  }, [result, dragKeys, crates, gridById])
 
   // pane cells taken by other loose boxes, so a drop or reshuffle doesn't overlap
   const offOcc = useMemo(() => {
@@ -1121,6 +1320,8 @@ export default function CargoGridPage(): React.ReactElement {
     const fw = anchor ? anchor.w : dragRot ? dims.l : dims.w
     const fl = anchor ? anchor.l : dragRot ? dims.w : dims.l
     const fh = dims.h
+    const isCrate = drag.key.startsWith('storall:')
+    const cellsOf = (gid: string): Set<string> => (isCrate ? crateOcc.get(gid) : occCells.get(gid)) ?? new Set()
     // spun or re-floored bays aim through the pointer ray at their own floor
     // plane; the ground-plane projection below never lands on a 45deg pallet.
     // Nearest hit wins. Groups stay flat-bay-only
@@ -1141,7 +1342,7 @@ export default function CargoGridPage(): React.ReactElement {
         const others = [0, 1, 2].filter((a) => a !== up) as [Ax, Ax]
         const raw = [0, 0, 0] as [number, number, number]
         for (const a of others) raw[a] = Math.max(0, Math.min(size[a] - ext[a], Math.floor(hitBest.at[a])))
-        const occ = occCells.get(g.id) ?? new Set<string>()
+        const occ = cellsOf(g.id)
         // slide the footprint around the aim so a stack's whole face is a target
         let spot: [number, number, number] | null = null
         let deep = -1
@@ -1171,8 +1372,9 @@ export default function CargoGridPage(): React.ReactElement {
         return { gridId: g.id, x: spot[0], y: spot[1], z: spot[2], w: ext[0], h: ext[1], l: ext[2], valid: true }
       }
     }
-    // the pane is a single-box target: a group stays a ship-side move
-    if (offGridBay && !group) {
+    // the pane is a single-box target: a group stays a ship-side move,
+    // and a crate stays aboard - it comes off via the shelf, not the pane
+    if (offGridBay && !group && !isCrate) {
       const gx = offGridBay.x
       const gz = offGridBay.z
       if (shipX >= gx && shipX < gx + offGridBay.w && shipZ >= gz && shipZ < gz + offGridBay.l) {
@@ -1189,7 +1391,7 @@ export default function CargoGridPage(): React.ReactElement {
       const lx = Math.max(0, Math.min(g.w - fw, Math.floor(shipX - gx)))
       const lz = Math.max(0, Math.min(g.l - fl, Math.floor(shipZ - gz)))
       if (!group) {
-        const b = bestAnchor(occCells.get(g.id) ?? new Set(), g, Math.floor(shipX - gx), Math.floor(shipZ - gz), g.w, g.l, fw, fl, fh)
+        const b = bestAnchor(cellsOf(g.id), g, Math.floor(shipX - gx), Math.floor(shipZ - gz), g.w, g.l, fw, fl, fh)
         return { gridId: g.id, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
       }
       // rigid group: same cell offsets, each box falls to its own support.
@@ -1227,7 +1429,45 @@ export default function CargoGridPage(): React.ReactElement {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
         const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h, rotated: dragRot }]
-        if (ghost.gridId === OFF_GRID_ID) {
+        if (d.key.startsWith('storall:')) {
+          // a crate drop is guarded like a box drop: if its cells are spoken
+          // for at any point in the run, the crate doesn't land there
+          const isNew = d.key.startsWith('storall:new')
+          const id = isNew ? `storall:${Date.now().toString(36)}` : d.key
+          const crate: StorAllCrate = { id, size: d.box.size, gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h }
+          const env = packEnvRef.current
+          let evicted = 0
+          let crunchAt = -1
+          if (env) {
+            const hyp = new Map(fixtures ?? [])
+            hyp.delete(d.key)
+            for (const [k, v] of fixtureMap([crate])) hyp.set(k, v)
+            const probe = planHold(grids, env.events, {
+              loose: env.looseIds.size ? env.looseIds : undefined,
+              pins: env.pins.size ? env.pins : undefined,
+              prev: env.prev.size ? env.prev : undefined,
+              fixtures: hyp
+            })
+            const before = new Set<string>()
+            for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
+            probe.snaps.forEach((s2, i) => {
+              for (const u of s2.unplaced)
+                if (!before.has(u.id)) {
+                  if (crunchAt < 0) crunchAt = i
+                  before.add(u.id)
+                  evicted++
+                }
+            })
+          }
+          if (evicted) {
+            setDropNotice(
+              crunchAt >= 0 && crunchAt !== loadIdx
+                ? 'This spot is reserved for a later pickup.'
+                : 'No room to move the displaced boxes.'
+            )
+          } else if (isNew) addStorAll(crate)
+          else moveStorAll(d.key, crate)
+        } else if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
           if (loadedPins[d.key]) clearLoadedPin(d.key)
@@ -1346,6 +1586,34 @@ export default function CargoGridPage(): React.ReactElement {
     const sz = (g.z || 0) + pl.z + pl.l / 2
     setDragPos({ x: sx, z: sz })
     lastPt.current = { x: sx, z: sz }
+    setGhost(null)
+  }
+
+  const crateBox = (id: string, size: number): PackBox => ({ id, size, color: STOR_BODY, dest: '', stopIdx: -1 })
+
+  const startCrateDrag = (c: StorAllCrate, g: CargoGrid, e: ThreeEvent): void => {
+    const ne = e.nativeEvent
+    if (ne.ctrlKey || ne.metaKey || ne.shiftKey) return
+    setHover(null)
+    if (sel.size) setSel(new Set())
+    setDragRot(false)
+    setDrag({ key: c.id, box: crateBox(c.id, c.size) })
+    const sx = (g.x || 0) + c.x + c.w / 2
+    const sz = (g.z || 0) + c.z + c.l / 2
+    setDragPos({ x: sx, z: sz })
+    lastPt.current = { x: sx, z: sz }
+    setGhost(null)
+  }
+
+  // shelf hand-off: pointer goes down on a template, the crate rides the
+  // cursor onto the grid and lands on release
+  const spawnCrate = (size: number): void => {
+    setHover(null)
+    if (sel.size) setSel(new Set())
+    setDragRot(false)
+    setDrag({ key: `storall:new#${size}`, box: crateBox(`storall:new#${size}`, size) })
+    setDragPos(null)
+    lastPt.current = null
     setGhost(null)
   }
 
@@ -1559,6 +1827,7 @@ export default function CargoGridPage(): React.ReactElement {
               deferred={deferredLabels}
               onUndoDefer={(id) => setObjectiveDeferred(id, false)}
               capacity={result.capacity}
+              reserved={crates.reduce((a, c) => a + c.size, 0)}
               done={done}
               idx={loadIdx}
               total={loadSteps.length}
@@ -1620,24 +1889,44 @@ export default function CargoGridPage(): React.ReactElement {
             <span style={{ fontFamily: F.display, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', color: C.acc, textShadow: GLOW }}>
               LOADING MODE
             </span>
-            <Btn
-              onClick={() => setLoading(false)}
-              title="Back to the load planner"
-              style={{
-                border: `1px solid ${C.lineStrong}`,
-                background: 'transparent',
-                color: C.dim,
-                fontFamily: F.display,
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: '0.14em',
-                padding: '6px 12px',
-                cursor: 'pointer'
-              }}
-              hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
-            >
-              EXIT
-            </Btn>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn
+                onClick={() => setShelfOpen((v) => !v)}
+                title="Park Stor-All crates for personal storage"
+                style={{
+                  border: `1px solid ${shelfOpen ? STOR_ORANGE : C.lineStrong}`,
+                  background: 'transparent',
+                  color: shelfOpen ? STOR_ORANGE : C.dim,
+                  fontFamily: F.display,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.14em',
+                  padding: '6px 12px',
+                  cursor: 'pointer'
+                }}
+                hoverStyle={{ color: STOR_ORANGE, border: `1px solid ${STOR_ORANGE}` }}
+              >
+                STOR-ALL
+              </Btn>
+              <Btn
+                onClick={() => setLoading(false)}
+                title="Back to the load planner"
+                style={{
+                  border: `1px solid ${C.lineStrong}`,
+                  background: 'transparent',
+                  color: C.dim,
+                  fontFamily: F.display,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.14em',
+                  padding: '6px 12px',
+                  cursor: 'pointer'
+                }}
+                hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
+              >
+                EXIT
+              </Btn>
+            </div>
           </div>
         )}
         <div
@@ -1647,6 +1936,29 @@ export default function CargoGridPage(): React.ReactElement {
         {dropNotice && (
           <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 4, maxWidth: '86%', background: 'rgba(8,12,16,0.94)', border: `1px solid ${C.amber}`, borderRadius: 6, padding: '8px 14px', fontFamily: F.body, fontSize: 13.5, color: C.text }}>
             {dropNotice}
+          </div>
+        )}
+        {loading && shelfOpen && (
+          <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(8,12,16,0.94)', border: `1px solid ${C.lineStrong}`, borderRadius: 6, padding: 10, maxWidth: 190 }}>
+            <span style={{ fontFamily: F.display, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', color: STOR_ORANGE }}>
+              STOR-ALL
+            </span>
+            {[1, 2, 4, 8].map((size) => (
+              <div
+                key={size}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  spawnCrate(size)
+                }}
+                style={{ cursor: 'grab', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', border: `1px solid ${STOR_ORANGE}55`, borderRadius: 5, background: '#101216', fontFamily: F.body, fontSize: 13.5, color: C.text }}
+              >
+                <span style={{ width: 14, height: 14, flex: 'none', background: STOR_BODY, border: `2px solid ${STOR_ORANGE}`, borderRadius: 3 }} />
+                {size} SCU
+              </div>
+            ))}
+            <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.dim }}>
+              Drag onto the grid. Double-click a crate to remove it.
+            </span>
           </div>
         )}
         {!loading && (
@@ -1839,6 +2151,23 @@ export default function CargoGridPage(): React.ReactElement {
               />
             )
           })}
+          {crates.map((c) => {
+            const g = gridById.get(c.gridId)
+            if (!g || dragKeys?.has(c.id)) return null
+            return (
+              <StorAllBox
+                key={c.id}
+                crate={c}
+                grid={g}
+                origin={origin}
+                onStart={(e) => startCrateDrag(c, g, e)}
+                onRemove={() => removeStorAll(c.id)}
+                onDragMove={drag ? handleDragMove : undefined}
+                onHover={onHover}
+                onLeave={() => setHover(null)}
+              />
+            )
+          })}
           {drag && (
             <mesh
               position={[0, -origin[1], 0]}
@@ -2021,6 +2350,7 @@ function LoadingPanel({
   deferred,
   onUndoDefer,
   capacity,
+  reserved,
   done,
   idx,
   total,
@@ -2048,6 +2378,7 @@ function LoadingPanel({
   deferred: { id: string; label: string }[]
   onUndoDefer: (id: string) => void
   capacity: number
+  reserved: number
   done: boolean
   idx: number
   total: number
@@ -2160,7 +2491,7 @@ function LoadingPanel({
       </div>
 
       <div style={{ padding: '0 16px 10px', flex: 'none' }}>
-        <LoadBar current={aboard} peak={peak} capacity={capacity} />
+        <LoadBar current={aboard} peak={peak} capacity={capacity} reserved={reserved} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column' }}>

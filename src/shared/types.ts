@@ -177,6 +177,20 @@ export interface LoadedPin extends ManualPlacement {
   h?: number
 }
 
+/** a Stor-All crate parked in the hold as personal storage; the planner
+ *  treats its cells as gone. coords + extents are bay-local cells */
+export interface StorAllCrate {
+  id: string
+  size: number
+  gridId: string
+  x: number
+  y: number
+  z: number
+  w: number
+  l: number
+  h: number
+}
+
 export interface ManifestDoc {
   runId: string
   contracts: HaulingContract[]
@@ -205,6 +219,8 @@ export interface ManifestDoc {
   deferred?: string[]
   /** objectiveIds grabbed early at a node's first visit */
   grabbed?: string[]
+  /** parked Stor-All crates, keyed by ship */
+  storAlls?: Record<string, StorAllCrate[]>
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'

@@ -19,8 +19,10 @@ import type {
   FrozenBox,
   LoadedPin,
   ManualPlacement,
-  ScannedContract
+  ScannedContract,
+  StorAllCrate
 } from '@shared/types'
+import { fixtureMap } from '@shared/hold'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
 import { newRunId } from '@shared/run'
@@ -165,6 +167,8 @@ interface StoreState {
   deferredObjectives: string[]
   /** objectiveIds grabbed early at a node's first visit to skip the return */
   grabbedObjectives: string[]
+  /** parked Stor-All crates, keyed by ship */
+  storAlls: Record<string, StorAllCrate[]>
   /** missionIds dismissed by the user, kept so scan-session won't re-import them */
   dismissedMissions: string[]
   /** contracts a session scan found but that aren't reviewed into the list yet */
@@ -265,6 +269,9 @@ interface StoreState {
   setBoxLoose: (key: string, loose: boolean, at?: string) => void
   /** park an off-grid box at a spot in the virtual pane */
   setLooseSpot: (key: string, placement: ManualPlacement) => void
+  addStorAll: (crate: StorAllCrate) => void
+  moveStorAll: (id: string, crate: StorAllCrate) => void
+  removeStorAll: (id: string) => void
   /** lock freshly loaded boxes at the spot the plan gave them */
   addLoadedPins: (pins: Record<string, LoadedPin>) => void
   clearLoadedPin: (key: string) => void
@@ -328,8 +335,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, loadedPins, loadingActive, loadingIdx, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions })
+    const { runId, contracts, order, stopOrder, layout, startLocation, loadedPins, loadingActive, loadingIdx, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
   }
 
   // active ship's grids
@@ -353,10 +360,11 @@ export const useStore = create<StoreState>((set, get) => {
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
   const doReroute = async (): Promise<void> => {
-    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder, deferredObjectives } = get()
+    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
+    const crates = storAlls[settings.activeShip]
     // manual keeps order, auto re-solves
     const plan = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
@@ -365,7 +373,10 @@ export const useStore = create<StoreState>((set, get) => {
       startLocation,
       bays,
       isRouteAuto ? undefined : stopOrder,
-      deferredObjectives
+      deferredObjectives,
+      undefined,
+      undefined,
+      crates?.length ? fixtureMap(crates) : undefined
     )
     set({ route: plan })
     // compact only displays the route
@@ -528,6 +539,7 @@ export const useStore = create<StoreState>((set, get) => {
     looseAt: {},
     deferredObjectives: [],
     grabbedObjectives: [],
+    storAlls: {},
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
@@ -612,6 +624,7 @@ export const useStore = create<StoreState>((set, get) => {
         looseAt: manifest.looseAt ?? {},
         deferredObjectives: manifest.deferred ?? [],
         grabbedObjectives: manifest.grabbed ?? [],
+        storAlls: manifest.storAlls ?? {},
         dismissedMissions: manifest.dismissed ?? [],
         loadedPins: manifest.loadedPins ?? {},
         // resume walkthrough only with cargo
@@ -742,6 +755,7 @@ export const useStore = create<StoreState>((set, get) => {
           looseAt: doc.looseAt ?? {},
           deferredObjectives: doc.deferred ?? [],
           grabbedObjectives: doc.grabbed ?? [],
+          storAlls: doc.storAlls ?? {},
           dismissedMissions: doc.dismissed ?? [],
           loadedPins: doc.loadedPins ?? {},
           layout: doc.layout ?? null
@@ -1244,6 +1258,29 @@ export const useStore = create<StoreState>((set, get) => {
     setLooseSpot: (key, placement) => {
       set((s) => ({ looseSpots: { ...s.looseSpots, [key]: placement } }))
       persist()
+    },
+
+    addStorAll: (crate) => {
+      const ship = get().settings.activeShip
+      set((s) => ({ storAlls: { ...s.storAlls, [ship]: [...(s.storAlls[ship] ?? []), crate] } }))
+      persist()
+      scheduleReroute()
+    },
+
+    moveStorAll: (id, crate) => {
+      const ship = get().settings.activeShip
+      set((s) => ({
+        storAlls: { ...s.storAlls, [ship]: (s.storAlls[ship] ?? []).map((c) => (c.id === id ? crate : c)) }
+      }))
+      persist()
+      scheduleReroute()
+    },
+
+    removeStorAll: (id) => {
+      const ship = get().settings.activeShip
+      set((s) => ({ storAlls: { ...s.storAlls, [ship]: (s.storAlls[ship] ?? []).filter((c) => c.id !== id) } }))
+      persist()
+      scheduleReroute()
     },
 
     setObjectiveGrabbed: (objectiveId, grabbed) => {
