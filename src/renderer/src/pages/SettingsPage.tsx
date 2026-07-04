@@ -255,15 +255,6 @@ export default function SettingsPage(): React.ReactElement {
         <span style={keyStyle}>Always on top</span>
         <Toggle on={settings.alwaysOnTop} onClick={() => void updateSettings({ alwaysOnTop: !settings.alwaysOnTop })} />
       </div>
-      <div style={rowStyle}>
-        <span style={keyStyle}>
-          Space out delivery piles
-          <span style={{ display: 'block', fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
-            Leave a gap between cargo for different stops, when there's room.
-          </span>
-        </span>
-        <Toggle on={settings.spaceDeliveryPiles} onClick={() => void updateSettings({ spaceDeliveryPiles: !settings.spaceDeliveryPiles })} />
-      </div>
 
       <Section title="OVERLAY" />
       <div style={rowStyle}>
