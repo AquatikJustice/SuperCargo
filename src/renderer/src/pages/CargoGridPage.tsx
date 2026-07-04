@@ -570,6 +570,13 @@ export default function CargoGridPage(): React.ReactElement {
   // spot the user saw keep it (planHold prev), so ticks, defers and hand
   // pins re-seat only what they actually displace
   const prevRef = useRef<Map<string, Placement> | null>(null)
+  const packEnvRef = useRef<{
+    events: ReturnType<typeof buildLoadEvents>
+    looseIds: Set<string>
+    pins: Map<string, Placement>
+    prev: Map<string, Placement>
+    source: PackBox[]
+  } | null>(null)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -608,6 +615,8 @@ export default function CargoGridPage(): React.ReactElement {
     const m = new Map<string, Placement>()
     for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
     prevRef.current = m
+    // commitDrag probes hypothetical pins against this exact environment
+    packEnvRef.current = { events, looseIds, pins, prev, source }
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
@@ -913,6 +922,12 @@ export default function CargoGridPage(): React.ReactElement {
     if (offGridBay) m.set(offGridBay.id, offGridBay)
     return m
   }, [grids, offGridBay])
+  const [dropNotice, setDropNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (!dropNotice) return
+    const t = setTimeout(() => setDropNotice(null), 5000)
+    return () => clearTimeout(t)
+  }, [dropNotice])
   const [hover, setHover] = useState<HoverInfo | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
 
@@ -1230,10 +1245,44 @@ export default function CargoGridPage(): React.ReactElement {
           for (const s of spots) {
             const pk = loadedPins[s.key]?.pickupKey ?? here
             if (!pk) continue
-            if (looseBoxes.includes(s.key)) setBoxLoose(s.key, false)
             pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, w: s.w, l: s.l, h: s.h, rotated: s.rotated, pickupKey: pk }
           }
-          if (Object.keys(pins).length) addLoadedPins(pins)
+          // a drop that would shove someone else's box clean off the ship is
+          // refused, not silently paid for with vanishing cargo
+          const env = packEnvRef.current
+          let evicted = 0
+          if (env && Object.keys(pins).length) {
+            const byKey = new Map(env.source.map((b) => [boxKey(b), b]))
+            const hyp = new Map(env.pins)
+            for (const [key, lp] of Object.entries(pins)) {
+              const b = byKey.get(key)
+              const dims = b && BOX_DIMS[b.size]
+              if (!b || !dims) continue
+              hyp.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: lp.w ?? dims.w, l: lp.l ?? dims.l, h: lp.h ?? dims.h, rotated: lp.rotated })
+            }
+            const probe = planHold(grids, env.events, {
+              loose: env.looseIds.size ? env.looseIds : undefined,
+              pins: hyp,
+              prev: env.prev.size ? env.prev : undefined
+            })
+            const before = new Set<string>()
+            for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
+            const dragged = new Set(Object.keys(pins))
+            const fresh = new Set<string>()
+            for (const s2 of probe.snaps)
+              for (const u of s2.unplaced) if (!before.has(u.id) && !dragged.has(boxKey(u))) fresh.add(u.id)
+            evicted = fresh.size
+          }
+          if (evicted) {
+            setDropNotice(
+              evicted === 1
+                ? 'No room to move the displaced box - drop somewhere clear, or stash something off-grid first'
+                : `No room to move ${evicted} displaced boxes - drop somewhere clear, or stash something off-grid first`
+            )
+          } else if (Object.keys(pins).length) {
+            for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
+            addLoadedPins(pins)
+          }
         }
         if (ghost.members) setSel(new Set())
       }
@@ -1583,6 +1632,11 @@ export default function CargoGridPage(): React.ReactElement {
           ref={wrap}
           style={{ position: 'relative', flex: 1, minHeight: portrait ? 170 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
         >
+        {dropNotice && (
+          <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 4, maxWidth: '86%', background: 'rgba(8,12,16,0.94)', border: `1px solid ${C.amber}`, borderRadius: 6, padding: '8px 14px', fontFamily: F.body, fontSize: 13.5, color: C.text }}>
+            {dropNotice}
+          </div>
+        )}
         {!loading && (
           <div
             style={{
