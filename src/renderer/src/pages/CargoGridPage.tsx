@@ -1090,38 +1090,6 @@ export default function CargoGridPage(): React.ReactElement {
     grabbedOnce.current = ''
     setGrabAsk(false)
   }, [loadIdx])
-  useEffect(() => {
-    if (!loading || !grabOffer || !loadingPack || !frozenSteps || drag) return
-    const env = packEnvRef.current
-    if (!env) return
-    const key = `${loadIdx}|${grabOffer.ids.join(',')}`
-    if (grabbedOnce.current === key) return
-    grabbedOnce.current = key
-    const steps2 = filterDeferredSteps(
-      frozenSteps,
-      new Set(deferredObjectives),
-      (id) => tickedObj.has(id),
-      new Set([...grabbedObjectives, ...grabOffer.ids])
-    )
-    const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
-      loose: env.looseIds.size ? env.looseIds : undefined,
-      pins: env.pins.size ? env.pins : undefined,
-      prev: env.prev.size ? env.prev : undefined,
-      fixtures
-    })
-    const base = new Set<string>()
-    for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
-    let dirty = probe.concessions.length > loadingPack.conc
-    if (!dirty)
-      outer: for (const s of probe.snaps)
-        for (const u of s.unplaced)
-          if (!base.has(u.id)) {
-            dirty = true
-            break outer
-          }
-    if (dirty) setGrabAsk(true)
-    else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
-  }, [loading, grabOffer, loadingPack, frozenSteps, drag, loadIdx, deferredObjectives, tickedObj, grabbedObjectives, grids, fixtures, setObjectiveGrabbed])
   const currentObjIds = useMemo(
     () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
     [currentLoad]
@@ -1194,6 +1162,39 @@ export default function CargoGridPage(): React.ReactElement {
   const [dragPos, setDragPos] = useState<{ x: number; z: number } | null>(null)
   const [dragRot, setDragRot] = useState(false)
   const lastPt = useRef<{ x: number; z: number } | null>(null)
+
+  useEffect(() => {
+    if (!loading || !grabOffer || !loadingPack || !frozenSteps || drag) return
+    const env = packEnvRef.current
+    if (!env) return
+    const key = `${loadIdx}|${grabOffer.ids.join(',')}`
+    if (grabbedOnce.current === key) return
+    grabbedOnce.current = key
+    const steps2 = filterDeferredSteps(
+      frozenSteps,
+      new Set(deferredObjectives),
+      (id) => tickedObj.has(id),
+      new Set([...grabbedObjectives, ...grabOffer.ids])
+    )
+    const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
+      loose: env.looseIds.size ? env.looseIds : undefined,
+      pins: env.pins.size ? env.pins : undefined,
+      prev: env.prev.size ? env.prev : undefined,
+      fixtures
+    })
+    const base = new Set<string>()
+    for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
+    let dirty = probe.concessions.length > loadingPack.conc
+    if (!dirty)
+      outer: for (const s of probe.snaps)
+        for (const u of s.unplaced)
+          if (!base.has(u.id)) {
+            dirty = true
+            break outer
+          }
+    if (dirty) setGrabAsk(true)
+    else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
+  }, [loading, grabOffer, loadingPack, frozenSteps, drag, loadIdx, deferredObjectives, tickedObj, grabbedObjectives, grids, fixtures, setObjectiveGrabbed])
 
   const dragKeys = useMemo(
     () => (drag ? new Set(group ? group.map((m) => m.key) : [drag.key]) : null),
