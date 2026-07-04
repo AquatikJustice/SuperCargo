@@ -167,7 +167,8 @@ function groundedSet(cells: Cell[], gridById: Map<string, CargoGrid>, pre?: Read
     const rests = (b: Cell, s: Cell): boolean =>
       spans(b, s) && (flip ? pos(b, up) + ext(b, up) === pos(s, up) : pos(b, up) === pos(s, up) + ext(s, up))
     for (const c of group) if (onFloor(c)) grounded.add(c.key)
-    for (let changed = true; changed; ) {
+    let changed = true
+    while (changed) {
       changed = false
       for (const c of group)
         if (!grounded.has(c.key) && group.some((s) => grounded.has(s.key) && rests(c, s))) {
@@ -1607,10 +1608,9 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
-  // the route only needs re-solving when its inputs change: which pickups ride
-  // (defer/grab), what's stashed off-grid, and the crates taking up space. Just
-  // rearranging boxes in the hold never changes any of this, so it never forces
-  // a re-solve — what's on screen stays put until you advance.
+  // the route only re-solves when its inputs change: which pickups ride
+  // (defer/grab), what's stashed off-grid, the crates eating space. Rearranging
+  // boxes changes none of that, so it never triggers one.
   const compositionSig = (): string =>
     JSON.stringify({
       d: [...deferredObjectives].sort(),

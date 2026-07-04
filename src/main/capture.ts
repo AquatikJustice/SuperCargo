@@ -5,7 +5,7 @@ import type { NativeImage } from 'electron'
 import type { CropRect, DisplayInfo } from '@shared/types'
 
 // Electron's numeric display id gets reassigned across a full PC reboot, so we key on
-// position+resolution instead — that stays put as long as the physical layout doesn't change.
+// position+resolution instead, which stays put as long as the physical layout doesn't change.
 function displayKey(d: Electron.Display): string {
   const b = d.bounds
   return `${b.x}_${b.y}_${b.width}x${b.height}`
