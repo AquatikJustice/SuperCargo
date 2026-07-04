@@ -236,6 +236,7 @@ function Box({
         onPointerDown={
           draggable
             ? (e) => {
+                if (e.nativeEvent.button !== 0) return
                 e.stopPropagation()
                 onStart?.(e)
               }
@@ -422,11 +423,12 @@ function StorAllBox({
         }
         onPointerDown={(e) => {
           e.stopPropagation()
+          if (e.nativeEvent.button === 2) {
+            onRemove?.()
+            return
+          }
+          if (e.nativeEvent.button !== 0) return
           onStart?.(e)
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation()
-          onRemove?.()
         }}
       >
         <meshStandardMaterial color={STOR_BODY} roughness={0.88} metalness={0.05} />
@@ -1957,7 +1959,7 @@ export default function CargoGridPage(): React.ReactElement {
               </div>
             ))}
             <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.dim }}>
-              Drag onto the grid. Double-click a crate to remove it.
+              Drag onto the grid. Right-click a crate to remove it.
             </span>
           </div>
         )}
