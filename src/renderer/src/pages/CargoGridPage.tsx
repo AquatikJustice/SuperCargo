@@ -1822,6 +1822,15 @@ export default function CargoGridPage(): React.ReactElement {
     if (!loading || !loadingPack || drag) return
     const snap = loadingPack.snaps[loadIdx]
     if (!snap) return
+    // a delivered box's pin outlives its drop step. Left in place, the packer
+    // re-seats it as a phantom anchor at its old spot - and anchors skip the
+    // overlap check, so a live box can end up inside it (box-in-box). Prune any
+    // pin whose cargo is no longer aboard at the cursor.
+    const active = new Set<string>()
+    for (const p of snap.placements) active.add(boxKey(p.box))
+    for (const u of snap.unplaced) active.add(boxKey(u))
+    for (const b of snap.loose) active.add(boxKey(b))
+    for (const key of Object.keys(loadedPins)) if (!active.has(key)) clearLoadedPin(key)
     const moved: Record<string, LoadedPin> = {}
     for (const p of snap.placements) {
       const key = boxKey(p.box)
