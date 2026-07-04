@@ -1394,13 +1394,52 @@ export default function CargoGridPage(): React.ReactElement {
     const cellsOf = (gid: string): Set<string> => (isCrate ? crateOcc.get(gid) : occCells.get(gid)) ?? new Set()
     // spun or re-floored bays aim through the pointer ray at their own floor
     // plane; the ground-plane projection below never lands on a 45deg pallet.
-    // Nearest hit wins. Groups stay flat-bay-only
-    if (!group && dragRay.current) {
+    // Nearest hit wins
+    if (dragRay.current) {
       let hitBest: { g: CargoGrid; at: [number, number, number]; t: number } | null = null
       for (const g of grids) {
         if (g.autoLoad === false || (!g.rot && (g.floor ?? 'y-') === 'y-')) continue
         const hit = tiltedHit(g, dragRay.current)
         if (hit && (!hitBest || hit.t < hitBest.t)) hitBest = { g, at: hit.at, t: hit.t }
+      }
+      if (hitBest && group) {
+        // the formation's flat offsets map onto the bay's two floor-plane
+        // axes; each member rests on its own support, earlier members count
+        // as floor for the ones above
+        const g = hitBest.g
+        const size = sizeOf(g)
+        const floor = g.floor ?? 'y-'
+        const up = axOf(floor[0])
+        const others = [0, 1, 2].filter((a) => a !== up) as [Ax, Ax]
+        const a0 = Math.floor(hitBest.at[others[0]])
+        const b0 = Math.floor(hitBest.at[others[1]])
+        const occ = new Set(cellsOf(g.id))
+        const members: GhostSpot[] = []
+        let valid = true
+        let anchorAt: [number, number, number] | null = null
+        for (const m of group) {
+          const md = BOX_DIMS[m.box.size]
+          const ext = md ? extentsFor(g, md, m.rotated) : ([m.w, m.h, m.l] as [number, number, number])
+          const cell = [0, 0, 0] as [number, number, number]
+          cell[others[0]] = a0 + m.dx
+          cell[others[1]] = b0 + m.dz
+          const inside =
+            cell[others[0]] >= 0 && cell[others[1]] >= 0 &&
+            cell[others[0]] + ext[others[0]] <= size[others[0]] &&
+            cell[others[1]] + ext[others[1]] <= size[others[1]]
+          const got = inside ? dropOn(occ, g, cell, ext) : null
+          if (!got) valid = false
+          else
+            for (let ax = 0; ax < ext[0]; ax++)
+              for (let ay = 0; ay < ext[1]; ay++)
+                for (let az = 0; az < ext[2]; az++) occ.add(`${got[0] + ax},${got[1] + ay},${got[2] + az}`)
+          const at = got ?? cell
+          if (m.key === drag.key) anchorAt = at
+          members.push({ key: m.key, x: at[0], y: at[1], z: at[2], w: ext[0], l: ext[2], h: ext[1], rotated: m.rotated })
+        }
+        const a = anchorAt ?? [0, 0, 0]
+        const anchorSpot = members.find((mm) => mm.key === drag.key)
+        return { gridId: g.id, x: a[0], y: a[1], z: a[2], w: anchorSpot?.w ?? fw, h: anchorSpot?.h ?? fh, l: anchorSpot?.l ?? fl, valid, members }
       }
       if (hitBest) {
         const g = hitBest.g
@@ -1442,14 +1481,36 @@ export default function CargoGridPage(): React.ReactElement {
         return { gridId: g.id, x: spot[0], y: spot[1], z: spot[2], w: ext[0], h: ext[1], l: ext[2], valid: true }
       }
     }
-    // the pane is a single-box target: a group stays a ship-side move,
-    // and a crate stays aboard - it comes off via the shelf, not the pane
-    if (offGridBay && !group && !isCrate) {
+    // a crate stays aboard - it comes off via the shelf, not the pane
+    if (offGridBay && !isCrate) {
       const gx = offGridBay.x
       const gz = offGridBay.z
       if (shipX >= gx && shipX < gx + offGridBay.w && shipZ >= gz && shipZ < gz + offGridBay.l) {
-        const b = bestAnchor(offOcc, offGridBay, Math.floor(shipX - gx), Math.floor(shipZ - gz), offGridBay.w, offGridBay.l, fw, fl, fh)
-        return { gridId: OFF_GRID_ID, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
+        if (!group) {
+          const b = bestAnchor(offOcc, offGridBay, Math.floor(shipX - gx), Math.floor(shipZ - gz), offGridBay.w, offGridBay.l, fw, fl, fh)
+          return { gridId: OFF_GRID_ID, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
+        }
+        // whole group onto the pad, same offsets, each box to its own support
+        const lx = Math.max(0, Math.min(offGridBay.w - fw, Math.floor(shipX - gx)))
+        const lz = Math.max(0, Math.min(offGridBay.l - fl, Math.floor(shipZ - gz)))
+        const occ = new Set(offOcc)
+        const members: GhostSpot[] = []
+        let valid = true
+        let ay = 0
+        for (const m of group) {
+          const mx = lx + m.dx
+          const mz = lz + m.dz
+          const inside = mx >= 0 && mz >= 0 && mx + m.w <= offGridBay.w && mz + m.l <= offGridBay.l
+          const y = inside ? dropY(occ, offGridBay, mx, mz, m.w, m.l, m.h) : -1
+          if (y < 0) valid = false
+          else
+            for (let dy = 0; dy < m.h; dy++)
+              for (let dz = 0; dz < m.l; dz++)
+                for (let dx = 0; dx < m.w; dx++) occ.add(`${mx + dx},${y + dy},${mz + dz}`)
+          if (m.key === drag.key) ay = y < 0 ? 0 : y
+          members.push({ key: m.key, x: mx, y: y < 0 ? 0 : y, z: mz, w: m.w, l: m.l, h: m.h, rotated: m.rotated })
+        }
+        return { gridId: OFF_GRID_ID, x: lx, y: ay, z: lz, w: fw, l: fl, h: fh, valid, members }
       }
     }
     for (const g of grids) {
@@ -1613,10 +1674,12 @@ export default function CargoGridPage(): React.ReactElement {
         } else if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
-          if (loadedPins[d.key]) clearLoadedPin(d.key)
           const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
-          setBoxLoose(d.key, true, at)
-          setLooseSpot(d.key, { gridId: OFF_GRID_ID, x: ghost.x, y: ghost.y, z: ghost.z, rotated: dragRot })
+          for (const s of spots) {
+            if (loadedPins[s.key]) clearLoadedPin(s.key)
+            setBoxLoose(s.key, true, at)
+            setLooseSpot(s.key, { gridId: OFF_GRID_ID, x: s.x, y: s.y, z: s.z, rotated: s.rotated })
+          }
         } else {
           // placing a box pins it there; the re-plan keeps everything the drop
           // didn't displace. a box pulled off the pane rejoins the plan, loaded now.
