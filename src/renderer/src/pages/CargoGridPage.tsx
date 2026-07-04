@@ -702,6 +702,29 @@ export default function CargoGridPage(): React.ReactElement {
   const offGrid = useMemo(() => looseSummary(looseNow), [looseNow])
   // heavy once off-grid cargo is a real slice of the hold, not a box or two
   const offGridHeavy = result.capacity > 0 && offGrid.scu > result.capacity * 0.04
+
+  // blink detector: a replan must never change what's visible at the same
+  // step. When it does, name the boxes and the inputs that moved, so a report
+  // carries the cause instead of another round of guessing
+  const blinkRef = useRef<{ idx: number; ids: Set<string>; pins: number; loose: number; steps: number } | null>(null)
+  useEffect(() => {
+    if (!loading || !loadingPack || !loadingPack.snaps.length) {
+      blinkRef.current = null
+      return
+    }
+    const at = Math.min(Math.max(0, loadIdx), loadingPack.snaps.length - 1)
+    const ids = new Set(loadingPack.snaps[at]?.placements.map((p) => boxKey(p.box)) ?? [])
+    const was = blinkRef.current
+    blinkRef.current = { idx: at, ids, pins: Object.keys(loadedPins).length, loose: looseBoxes.length, steps: loadSteps.length }
+    if (!was || was.idx !== at) return
+    const gone = [...was.ids].filter((k) => !ids.has(k))
+    const came = [...ids].filter((k) => !was.ids.has(k))
+    if (!gone.length && !came.length) return
+    console.warn(
+      `[blink] step ${at + 1}: gone [${gone.join(', ')}] came [${came.join(', ')}] | pins ${was.pins}->${Object.keys(loadedPins).length} loose ${was.loose}->${looseBoxes.length} steps ${was.steps}->${loadSteps.length}`
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loadingPack, loadIdx])
   const visiblePlacements = result.placements
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
