@@ -44,7 +44,10 @@ export interface SetAside {
   count: number
   scu: number
   big: number
+  /** the movers: boxes you lift out of the way */
   boxes: PackBox[]
+  /** the cargo those movers sit in front of - what you're digging to reach */
+  blocked: PackBox[]
 }
 
 // Boxes you physically lift out of the way to unload in delivery order. Not the
@@ -55,6 +58,7 @@ export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): S
   const byGrid = new Map<string, Placement[]>()
   for (const p of placements) (byGrid.get(p.gridId) ?? byGrid.set(p.gridId, []).get(p.gridId)!).push(p)
   const movers = new Map<string, PackBox>()
+  const blocked = new Map<string, PackBox>()
   for (const g of grids) {
     const ps = byGrid.get(g.id)
     if (!ps) continue
@@ -67,11 +71,20 @@ export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): S
         if (q === p || q.box.stopIdx <= p.box.stopIdx || depth(q) >= depth(p)) continue
         const yOver = p.y < q.y + q.h && q.y < p.y + p.h
         const cross = onZ ? p.x < q.x + q.w && q.x < p.x + p.w : p.z < q.z + q.l && q.z < p.z + p.l
-        if (yOver && cross) movers.set(q.box.id, q.box)
+        if (yOver && cross) {
+          movers.set(q.box.id, q.box)
+          blocked.set(p.box.id, p.box)
+        }
       }
   }
   const boxes = [...movers.values()]
-  return { count: boxes.length, scu: boxes.reduce((a, b) => a + b.size, 0), big: boxes.filter((b) => b.size >= BIG).length, boxes }
+  return {
+    count: boxes.length,
+    scu: boxes.reduce((a, b) => a + b.size, 0),
+    big: boxes.filter((b) => b.size >= BIG).length,
+    boxes,
+    blocked: [...blocked.values()]
+  }
 }
 
 export interface BucketDecision {

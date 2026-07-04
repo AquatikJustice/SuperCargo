@@ -156,6 +156,7 @@ function Box({
   draggable,
   selected,
   offGrid,
+  blocked,
   onStart,
   onDragMove,
   onHover,
@@ -169,6 +170,7 @@ function Box({
   draggable?: boolean
   selected?: boolean
   offGrid?: boolean
+  blocked?: boolean
   onStart?: (e: ThreeEvent) => void
   onDragMove?: (shipX: number, shipZ: number, ray?: THREE.Ray) => void
   onHover: (h: Omit<HoverInfo, 'x' | 'y'>, e: ThreeEvent) => void
@@ -245,6 +247,8 @@ function Box({
           color={color}
           roughness={0.95}
           metalness={0}
+          emissive={blocked ? '#e02a2a' : '#000000'}
+          emissiveIntensity={blocked ? 0.5 : 0}
           transparent={opacity < 1}
           opacity={opacity}
         />
@@ -856,6 +860,9 @@ export default function CargoGridPage(): React.ReactElement {
     () => setAsideToUnload(grids.filter((g) => g.autoLoad !== false), result.placements),
     [grids, result]
   )
+  // cargo trapped behind later-delivery boxes: lit red so you can see what you'd
+  // dig to reach and restack to clear it. Live, so it updates as you rearrange
+  const blockedKeys = useMemo(() => new Set(setAside.blocked.map((b) => boxKey(b))), [setAside])
   // off-grid boxes aboard at the current step (they drop off as their stop is delivered)
   const looseNow = useMemo<PackBox[]>(() => {
     if (!(loading && loadingPack) || !loadingPack.snaps.length) return []
@@ -2307,6 +2314,7 @@ export default function CargoGridPage(): React.ReactElement {
                 mode={mode}
                 draggable={!!mkey}
                 selected={!!mkey && sel.has(mkey)}
+                blocked={blockedKeys.has(boxKey(pl.box))}
                 onStart={(e) => {
                   if (mkey) startDrag(mkey, pl, g, e)
                 }}
