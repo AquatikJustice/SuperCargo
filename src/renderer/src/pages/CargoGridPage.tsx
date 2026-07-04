@@ -1479,6 +1479,10 @@ export default function CargoGridPage(): React.ReactElement {
           return nn == null ? b : { ...b, stopIdx: nn }
         })
       )
+    // the old plan's inertia is geometry from a dead route; dragging it into
+    // the new structure squeezes boxes out of seats the router just made room
+    // for. Pins still bind; the future re-packs fresh
+    prevRef.current = null
   }
 
   const commitDrag = (): void => {
@@ -1493,10 +1497,27 @@ export default function CargoGridPage(): React.ReactElement {
           const crate: StorAllCrate = { id, size: d.box.size, gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h }
           if (isNew) addStorAll(crate)
           else moveStorAll(d.key, crate)
+          // re-solve only when the crate actually took someone's seat; a
+          // crate in genuinely free space changes nothing ahead
           const hyp = new Map(fixtures ?? [])
           hyp.delete(d.key)
           for (const [k, v] of fixtureMap([crate])) hyp.set(k, v)
-          resolveTail(hyp)
+          const env = packEnvRef.current
+          let displaced = 0
+          if (env) {
+            const probe = planHold(grids, env.events, {
+              loose: env.looseIds.size ? env.looseIds : undefined,
+              pins: env.pins.size ? env.pins : undefined,
+              prev: env.prev.size ? env.prev : undefined,
+              fixtures: hyp
+            })
+            const before = new Set<string>()
+            for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
+            const fresh = new Set<string>()
+            for (const s2 of probe.snaps) for (const u of s2.unplaced) if (!before.has(u.id)) fresh.add(u.id)
+            displaced = fresh.size
+          }
+          if (displaced) resolveTail(hyp)
         } else if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
