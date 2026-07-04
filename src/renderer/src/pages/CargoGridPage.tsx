@@ -1525,6 +1525,23 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
+  // the route only needs re-solving when its inputs change: which pickups ride
+  // (defer/grab), what's stashed off-grid, and the crates taking up space. Just
+  // rearranging boxes in the hold never changes any of this, so it never forces
+  // a re-solve — what's on screen stays put until you advance.
+  const compositionSig = (): string =>
+    JSON.stringify({
+      d: [...deferredObjectives].sort(),
+      g: [...grabbedObjectives].sort(),
+      l: [...looseBoxes].sort(),
+      c: crates.map((c) => c.size).sort((a, b) => a - b)
+    })
+  const lastSolvedSig = useRef('')
+  useEffect(() => {
+    if (loading) lastSolvedSig.current = compositionSig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
   // a plan that went off the rails gets thrown away, never argued with: the
   // stops ahead re-solve from where the ship sits, cargo aboard seeded, walked
   // steps kept as history. replanCurrent also hands the OPEN step back to the
@@ -1533,9 +1550,9 @@ export default function CargoGridPage(): React.ReactElement {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
-    for (const key of Object.keys(loadedPins)) aboard.add(key.split('#')[0])
-    // everything the user can SEE in the hold is aboard, pinned or not; a
-    // tail that re-emits it as a future pickup un-boards it from the view
+    // seed aboard from what's actually in the hold right now (the live snap), not
+    // from pins: a delivered box's pin can outlive its walked drop step, and
+    // seeding it would re-board already-delivered cargo and re-emit its delivery
     const curIds = new Set(cur.kind === 'load' ? cur.loadIds : [])
     for (const p of loadingPack?.snaps[loadIdx]?.placements ?? []) {
       const oid = p.box.objectiveId
@@ -1600,64 +1617,31 @@ export default function CargoGridPage(): React.ReactElement {
     prevRef.current = keep.size ? keep : null
   }
 
-  // when the open step's own cargo has no seat, the router gets one shot at
-  // re-solving before anything is asked of the user; the won't-fit card is
-  // only for walls that survive the negotiation
-  const negotiatedRef = useRef('')
-  const [negotiated, setNegotiated] = useState(false)
-  useEffect(() => {
-    negotiatedRef.current = ''
-    setNegotiated(false)
-  }, [loadIdx])
-  useEffect(() => {
-    if (!loading || !loadingPack || drag) return
+  // does the open step's own cargo have a box with no seat? the won't-fit card
+  // shows straight from the frozen pack, and the router's attempt to fit it (or
+  // defer/re-split it) is deferred to the LOADED button, not fired on arrival
+  const curUnfit = useMemo(() => {
+    if (!loading || !loadingPack) return false
     const cur = loadSteps[loadIdx]
-    if (!cur || cur.kind !== 'load' || !cur.loadIds.length) return
+    if (!cur || cur.kind !== 'load' || !cur.loadIds.length) return false
     const snap = loadingPack.snaps[loadIdx]
-    if (!snap?.unplaced.length) return
+    if (!snap?.unplaced.length) return false
     const mine = new Set((loadingPack.stepBoxes[loadIdx] ?? []).map((b) => b.id))
-    if (!snap.unplaced.some((u) => mine.has(u.id) && !looseBoxes.includes(boxKey(u)))) return
-    // one shot per arrival, no matter how the splice reshapes the step:
-    // a second attempt on the re-solved plan is how feedback storms start
-    if (negotiatedRef.current) return
-    negotiatedRef.current = '1'
-    setNegotiated(true)
-    resolveTail(undefined, true)
-  }, [loading, loadingPack, loadIdx, drag, loadSteps, looseBoxes])
+    return snap.unplaced.some((u) => mine.has(u.id) && !looseBoxes.includes(boxKey(u)))
+  }, [loading, loadingPack, loadIdx, loadSteps, looseBoxes])
 
   const commitDrag = (): void => {
     setDrag((d) => {
       if (d && ghost && ghost.valid) {
         const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h, rotated: dragRot }]
         if (d.key.startsWith('storall:')) {
-          // your crate outranks the plan: it always lands, and the route
-          // re-solves around the space it takes
+          // your crate always lands where you drop it; the route re-plans around
+          // the space it takes at the next checkpoint, never under your hands
           const isNew = d.key.startsWith('storall:new')
           const id = isNew ? `storall:${Date.now().toString(36)}` : d.key
           const crate: StorAllCrate = { id, size: d.box.size, gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h }
           if (isNew) addStorAll(crate)
           else moveStorAll(d.key, crate)
-          // re-solve only when the crate actually took someone's seat; a
-          // crate in genuinely free space changes nothing ahead
-          const hyp = new Map(fixtures ?? [])
-          hyp.delete(d.key)
-          for (const [k, v] of fixtureMap([crate])) hyp.set(k, v)
-          const env = packEnvRef.current
-          let displaced = 0
-          if (env) {
-            const probe = planHold(grids, env.events, {
-              loose: env.looseIds.size ? env.looseIds : undefined,
-              pins: env.pins.size ? env.pins : undefined,
-              prev: env.prev.size ? env.prev : undefined,
-              fixtures: hyp
-            })
-            const before = new Set<string>()
-            for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
-            const fresh = new Set<string>()
-            for (const s2 of probe.snaps) for (const u of s2.unplaced) if (!before.has(u.id)) fresh.add(u.id)
-            displaced = fresh.size
-          }
-          if (displaced) resolveTail(hyp)
         } else if (ghost.gridId === OFF_GRID_ID) {
           // dropped into the pane: it rides loose here, out of the plan; a
           // stale pin would keep haunting the bay it left
@@ -1668,10 +1652,10 @@ export default function CargoGridPage(): React.ReactElement {
             setLooseSpot(s.key, { gridId: OFF_GRID_ID, x: s.x, y: s.y, z: s.z, rotated: s.rotated })
           }
         } else {
-          // placing a box pins it there; the re-plan keeps everything the drop
-          // didn't displace. a box pulled off the pane rejoins the plan, loaded now.
-          // an already-aboard box keeps the pickup it arrived on; a fresh one takes
-          // this step's, so restacking works even while standing on a drop step
+          // placing a box pins it there and nothing else moves; the future only
+          // re-packs when you advance. a box pulled off the pane rejoins the plan,
+          // loaded now. an already-aboard box keeps the pickup it arrived on; a
+          // fresh one takes this step's, so restacking works on a drop step too
           const here = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
           const pins: Record<string, LoadedPin> = {}
           for (const s of spots) {
@@ -1679,40 +1663,9 @@ export default function CargoGridPage(): React.ReactElement {
             if (!pk) continue
             pins[s.key] = { gridId: ghost.gridId, x: s.x, y: s.y, z: s.z, w: s.w, l: s.l, h: s.h, rotated: s.rotated, pickupKey: pk }
           }
-          // the drop always lands. A probe checks whether anyone lost their
-          // spot at any moment of the run; if so the tail goes back to the
-          // router rather than refusing the move
-          const env = packEnvRef.current
-          let evicted = 0
-          if (env && Object.keys(pins).length) {
-            const byKey = new Map(env.source.map((b) => [boxKey(b), b]))
-            const hyp = new Map(env.pins)
-            for (const [key, lp] of Object.entries(pins)) {
-              const b = byKey.get(key)
-              const dims = b && BOX_DIMS[b.size]
-              if (!b || !dims) continue
-              hyp.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: lp.w ?? dims.w, l: lp.l ?? dims.l, h: lp.h ?? dims.h, rotated: lp.rotated })
-            }
-            const probe = planHold(grids, env.events, {
-              loose: env.looseIds.size ? env.looseIds : undefined,
-              pins: hyp,
-              prev: env.prev.size ? env.prev : undefined,
-              fixtures
-            })
-            const before = new Set<string>()
-            for (const s2 of loadingPack?.snaps ?? []) for (const u of s2.unplaced) before.add(u.id)
-            const dragged = new Set(Object.keys(pins))
-            const fresh = new Set<string>()
-            probe.snaps.forEach((s2) => {
-              for (const u of s2.unplaced)
-                if (!before.has(u.id) && !dragged.has(boxKey(u))) fresh.add(u.id)
-            })
-            evicted = fresh.size
-          }
           if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
             addLoadedPins(pins)
-            if (evicted) resolveTail()
           }
         }
         if (ghost.members) setSel(new Set())
@@ -2035,7 +1988,6 @@ export default function CargoGridPage(): React.ReactElement {
               onUndoDefer={(id) => setObjectiveDeferred(id, false)}
               capacity={result.capacity}
               reserved={crates.reduce((a, c) => a + c.size, 0)}
-              negotiated={negotiated}
               done={done}
               idx={loadIdx}
               total={loadSteps.length}
@@ -2064,6 +2016,13 @@ export default function CargoGridPage(): React.ReactElement {
                     addLoadedPins(pins)
                   }
                 }
+                // gate: the future re-packs only when the plan's inputs changed
+                // since the last checkpoint, or the router still owes this step's
+                // overflow a seat. Just rearranging boxes never lands here.
+                const sig = compositionSig()
+                if (curUnfit) resolveTail(undefined, true)
+                else if (sig !== lastSolvedSig.current) resolveTail()
+                lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {
@@ -2548,7 +2507,6 @@ function LoadingPanel({
   onUndoDefer,
   capacity,
   reserved,
-  negotiated,
   done,
   idx,
   total,
@@ -2577,7 +2535,6 @@ function LoadingPanel({
   onUndoDefer: (id: string) => void
   capacity: number
   reserved: number
-  negotiated: boolean
   done: boolean
   idx: number
   total: number
@@ -2756,7 +2713,6 @@ function LoadingPanel({
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
                   canStash={canStash}
-                  negotiated={negotiated}
                   onStashOffGrid={onStashOffGrid}
                   onComeBack={onComeBack}
                 />
@@ -2995,7 +2951,6 @@ function PickupDecision({
   destLabel,
   loadIds,
   canStash,
-  negotiated,
   onStashOffGrid,
   onComeBack
 }: {
@@ -3003,15 +2958,11 @@ function PickupDecision({
   destLabel: string
   loadIds: string[]
   canStash: boolean
-  negotiated: boolean
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
 }): React.ReactElement | null {
   const [choice, setChoice] = useState<string | null>(null)
   if (decision.kind === 'none') return null
-  // a won't-fit only surfaces after the router already re-solved and the wall
-  // held; dig-outs aren't a fit problem and show right away
-  if (decision.kind !== 'digout' && !negotiated) return null
 
   const dig = decision.kind === 'digout'
   const offScu = decision.overloadBoxes.reduce((a, b) => a + b.size, 0)
