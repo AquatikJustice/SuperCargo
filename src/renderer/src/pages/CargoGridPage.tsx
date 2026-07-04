@@ -1068,9 +1068,16 @@ export default function CargoGridPage(): React.ReactElement {
     if (currentLoad?.kind !== 'load') return null
     return bucketDecision(setAside, result.unplaced, new Set(currentLoad.loadIds))
   }, [currentLoad, setAside, result])
-  // won't-fit has no "load anyway" - the user has to stash the overflow or leave
-  // the pickup, so hold the NEXT button until they do. dig-out doesn't block.
-  const blockAdvance = currentDecision?.kind === 'overload'
+  // won't-fit has no "load anyway": stash or leave, so hold NEXT until they do.
+  // dig-out has a valid "load it now", but it's still a call to make, so hold NEXT
+  // until they pick load-and-dig or come-back (acknowledged per step).
+  const [decidedIdx, setDecidedIdx] = useState<number | null>(null)
+  const blockKind: 'overload' | 'digout' | null =
+    currentDecision?.kind === 'overload'
+      ? 'overload'
+      : currentDecision?.kind === 'digout' && decidedIdx !== loadIdx
+        ? 'digout'
+        : null
   // cargo you'd dig to reach: lit red ONLY on the step whose DIG-OUT warning is
   // showing, so it's a heads-up for this load decision, not a permanent state.
   // live within the step, so restacking to clear the dig-out drops the red
@@ -2101,7 +2108,8 @@ export default function CargoGridPage(): React.ReactElement {
               setAside={setAside}
               unplaced={result.unplaced}
               canStash={!!offPad}
-              blockAdvance={blockAdvance}
+              blockKind={blockKind}
+              onDecide={() => setDecidedIdx(loadIdx)}
               onStashOffGrid={(boxes) => {
                 const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
                 boxes.forEach((b) => {
@@ -2661,7 +2669,8 @@ function LoadingPanel({
   setAside,
   unplaced,
   canStash,
-  blockAdvance,
+  blockKind,
+  onDecide,
   onStashOffGrid,
   onComeBack,
   grab,
@@ -2690,7 +2699,8 @@ function LoadingPanel({
   setAside: SetAside
   unplaced: PackBox[]
   canStash: boolean
-  blockAdvance: boolean
+  blockKind: 'overload' | 'digout' | null
+  onDecide: () => void
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
   grab: { scu: number; count: number; stepNo: number } | null
@@ -2777,6 +2787,7 @@ function LoadingPanel({
   }
 
   const isLoad = step.kind === 'load'
+  const blockAdvance = blockKind != null
   const destLabel = destLabelOf(step.boundFor)
   // this location's contiguous steps
   let visitStart = idx
@@ -2879,6 +2890,7 @@ function LoadingPanel({
                   destLabel={destLabelOf(s.boundFor)}
                   loadIds={s.loadIds}
                   canStash={canStash}
+                  onDecide={onDecide}
                   onStashOffGrid={onStashOffGrid}
                   onComeBack={onComeBack}
                 />
@@ -2930,10 +2942,12 @@ function LoadingPanel({
           </div>
         </div>
       )}
-      {blockAdvance && (
+      {blockKind && (
         <div style={{ margin: '0 16px', padding: '9px 11px', border: `1px solid ${C.amber}`, borderRadius: 5, background: 'rgba(201,176,126,0.08)', flex: 'none' }}>
           <span style={{ fontFamily: F.body, fontSize: 12, lineHeight: 1.5, color: C.amber }}>
-            This pickup won't fit as-is. {canStash ? 'Stash the overflow off grid or come back for it' : 'Come back for it on a later trip'} before you move on.
+            {blockKind === 'overload'
+              ? `This pickup won't fit as-is. ${canStash ? 'Stash the overflow off grid or come back for it' : 'Come back for it on a later trip'} before you move on.`
+              : "You'll have to dig cargo out to unload here. Load it and dig, or come back for it, before you move on."}
           </span>
         </div>
       )}
@@ -2943,11 +2957,11 @@ function LoadingPanel({
           <Btn
             onClick={onLoaded}
             disabled={blockAdvance}
-            title={blockAdvance ? 'Settle the overflow above first' : undefined}
+            title={blockAdvance ? 'Make the call above first' : undefined}
             style={{ flex: 1, border: `1px solid ${blockAdvance ? C.lineStrong : C.acc}`, background: blockAdvance ? 'transparent' : C.accFillStrong, color: blockAdvance ? C.ghost : C.text, textShadow: blockAdvance ? 'none' : GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: blockAdvance ? 'default' : 'pointer' }}
             hoverStyle={blockAdvance ? {} : { background: 'rgba(255,210,30,0.26)' }}
           >
-            {step?.start ? 'HEAD OUT' : blockAdvance ? "WON'T FIT · DECIDE ABOVE" : 'LOADED · NEXT'}
+            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT · DECIDE ABOVE" : blockKind === 'digout' ? 'DIG-OUT · DECIDE ABOVE' : 'LOADED · NEXT'}
           </Btn>
         ) : (
           <>
@@ -3126,6 +3140,7 @@ function PickupDecision({
   destLabel,
   loadIds,
   canStash,
+  onDecide,
   onStashOffGrid,
   onComeBack
 }: {
@@ -3133,6 +3148,7 @@ function PickupDecision({
   destLabel: string
   loadIds: string[]
   canStash: boolean
+  onDecide: () => void
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
 }): React.ReactElement | null {
@@ -3148,6 +3164,7 @@ function PickupDecision({
   const pick = (id: string, run: () => void): void => {
     setChoice(id)
     run()
+    onDecide()
   }
 
   const options = dig
