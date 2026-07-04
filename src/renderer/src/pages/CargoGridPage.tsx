@@ -15,7 +15,8 @@ import type { BayDir } from '@shared/types'
 import { packCargo, packInto, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
-import { planHold, fixtureMap } from '@shared/hold'
+import { fixtureMap } from '@shared/hold'
+import { walkPack } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView, LoadedPin, StorAllCrate } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -775,15 +776,10 @@ export default function CargoGridPage(): React.ReactElement {
   const removeStorAll = useStore((s) => s.removeStorAll)
   const crates = useMemo(() => storAlls[activeShip] ?? [], [storAlls, activeShip])
   const fixtures = useMemo(() => (crates.length ? fixtureMap(crates) : undefined), [crates])
-  // every plan feeds the next one: during the walk, boxes that still fit the
-  // spot the user saw keep it (planHold prev), so ticks, defers and hand
-  // pins re-seat only what they actually displace
-  const prevRef = useRef<Map<string, Placement> | null>(null)
   const packEnvRef = useRef<{
     events: ReturnType<typeof buildLoadEvents>
     looseIds: Set<string>
     pins: Map<string, Placement>
-    prev: Map<string, Placement>
     source: PackBox[]
   } | null>(null)
   const loadingPack = useMemo(() => {
@@ -807,32 +803,19 @@ export default function CargoGridPage(): React.ReactElement {
             : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: ext[0], l: ext[2], h: ext[1], rotated: lp.rotated })
     }
-    // apply prev only while a walk is frozen; planning stays a fresh solve.
-    // Captured from every plan, so the walk starts from the exact layout the
-    // user saw when they pressed start
-    const prev = new Map<string, Placement>()
-    if (frozenBoxes && prevRef.current)
-      for (const b of source) {
-        const pl = prevRef.current.get(boxKey(b))
-        if (pl) prev.set(b.id, pl)
-      }
-    const whole = planHold(grids, events, {
+    const whole = walkPack(grids, events, {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
-      prev: prev.size ? prev : undefined,
       fixtures,
       gap: spaceDeliveryPiles ? 1 : 0
     })
     const raw = whole.snaps
-    const m = new Map<string, Placement>()
-    for (const s of raw) for (const p of s.placements) if (!m.has(boxKey(p.box))) m.set(boxKey(p.box), p)
-    prevRef.current = m
     // commitDrag probes hypothetical pins against this exact environment
-    packEnvRef.current = { events, looseIds, pins, prev, source }
+    packEnvRef.current = { events, looseIds, pins, source }
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
-      loose: ('loose' in s ? s.loose : []) as PackBox[],
+      loose: s.loose,
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
@@ -1243,10 +1226,9 @@ export default function CargoGridPage(): React.ReactElement {
       (id) => tickedObj.has(id),
       new Set([...grabbedObjectives, ...grabOffer.ids])
     )
-    const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
+    const probe = walkPack(grids, buildLoadEvents(steps2, env.source), {
       loose: env.looseIds.size ? env.looseIds : undefined,
       pins: env.pins.size ? env.pins : undefined,
-      prev: env.prev.size ? env.prev : undefined,
       fixtures,
       gap: spaceDeliveryPiles ? 1 : 0
     })
@@ -1700,14 +1682,6 @@ export default function CargoGridPage(): React.ReactElement {
           return nn == null ? b : { ...b, stopIdx: nn }
         })
       )
-    // inertia from the dead route strangles the new one, but zero inertia
-    // re-deals the boxes the user is LOOKING at and reshuffles which cargo
-    // goes homeless on an over-full run. Keep what's on screen right now;
-    // only the unseen future re-packs fresh
-    const snap = loadingPack?.snaps[loadIdx]
-    const keep = new Map<string, Placement>()
-    if (snap) for (const p of snap.placements) keep.set(boxKey(p.box), p)
-    prevRef.current = keep.size ? keep : null
   }
 
   // does the open step's own cargo have a box with no seat?
