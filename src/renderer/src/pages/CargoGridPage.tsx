@@ -615,6 +615,7 @@ export default function CargoGridPage(): React.ReactElement {
   const startLocation = useStore((s) => s.startLocation)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
+  const spaceDeliveryPiles = useStore((s) => s.settings.spaceDeliveryPiles)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const clearAllPickedUp = useStore((s) => s.clearAllPickedUp)
@@ -818,7 +819,8 @@ export default function CargoGridPage(): React.ReactElement {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
       prev: prev.size ? prev : undefined,
-      fixtures
+      fixtures,
+      gap: spaceDeliveryPiles ? 1 : 0
     })
     const raw = whole.snaps
     const m = new Map<string, Placement>()
@@ -833,7 +835,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures, spaceDeliveryPiles])
 
   // which pickup each aboard box arrived on, so freezing the layout can pin a
   // box under the same key it would carry if you'd hand-placed it there
@@ -1237,7 +1239,8 @@ export default function CargoGridPage(): React.ReactElement {
       loose: env.looseIds.size ? env.looseIds : undefined,
       pins: env.pins.size ? env.pins : undefined,
       prev: env.prev.size ? env.prev : undefined,
-      fixtures
+      fixtures,
+      gap: spaceDeliveryPiles ? 1 : 0
     })
     const base = new Set<string>()
     for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)

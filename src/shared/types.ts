@@ -85,6 +85,8 @@ export interface AppSettings {
   activeShip: string
   /** absent = all modules fitted */
   installedModules: Record<string, string[]>
+  /** leave a cell of space between different stops' cargo when it fits */
+  spaceDeliveryPiles: boolean
 
   ocrCaptureDelay: number
   ocrAutoCapture: boolean

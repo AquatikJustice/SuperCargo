@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gameChannel: 'LIVE',
   activeShip: DEFAULT_SHIP,
   installedModules: {},
+  spaceDeliveryPiles: false,
   ocrCaptureDelay: 3,
   ocrAutoCapture: false,
   ocrCaptureTarget: 'window',
