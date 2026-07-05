@@ -237,6 +237,14 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
         )
           return false
       }
+  // a stop never buries a different one that unloads before it: even a dig
+  // concession can't stand a box in front of an earlier delivery in its lane,
+  // or you'd have to unload the later stop to reach the earlier one
+  for (const r of rivals) {
+    if (r.fixture || r.stop === t.stop || r.drop === t.drop || !laneClash(t, r)) continue
+    if (r.drop < t.drop && r.d + r.dl > t.d) return false
+    if (r.drop > t.drop && t.d + t.dl > r.d) return false
+  }
   if (!relax.peel)
     for (const r of rivals) {
       if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
@@ -458,7 +466,14 @@ function findSpot(
           if (!held) continue
         }
         let ok = true
-        if (!relax.peel)
+        // never bury a different stop that unloads before this one, even on a
+        // dig: standing in front of an earlier delivery in its lane walls it in
+        for (const r of rivals) {
+          if (r.fixture || r.stop === t.stop || r.drop === t.drop || !laneClash(t, r)) continue
+          if (r.drop < t.drop && r.d + r.dl > t.d) { ok = false; break }
+          if (r.drop > t.drop && t.d + t.dl > r.d) { ok = false; break }
+        }
+        if (ok && !relax.peel)
           for (const r of rivals) {
             // a depth row belongs to one stop wall-to-wall; no crossing another bucket's rows
             if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) {
