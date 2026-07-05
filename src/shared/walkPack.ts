@@ -78,11 +78,24 @@ function fill(s: Bay, p: Placement, owner: number): void {
   s.used += p.w * p.l * p.h
 }
 
-// First fit, scanned z (front) then x (from the wall toward the aisle) then y, so
-// each column stacks all the way UP before the next starts across. At each spot a
-// long box lies INWARD first (its length across the bay, shallow side to front)
-// so a stop's footprint stays thin front-to-back; the deep orientation is the
-// fallback, which keeps filling the leftover wall strips.
+type Spot = { x: number; y: number; z: number; fw: number; fl: number }
+
+// First fit for one orientation, scanned z (front) then x (from the wall toward
+// the aisle) then y, so each column stacks all the way UP before the next starts
+// across.
+function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number): Spot | null {
+  const g = s.grid
+  for (let z = Math.max(0, minZ); z + fl <= g.l; z++)
+    for (let xi = 0; xi < g.w; xi++) {
+      const x = s.wallHigh ? g.w - 1 - xi : xi
+      for (let y = 0; y + h <= g.h; y++) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
+    }
+  return null
+}
+
+// The biggest box lands narrow-and-deep and sets the block's depth. A later box
+// that would push the block deeper gets laid flat instead, as long as flat keeps
+// it within the depth already claimed. Square boxes never turn; they just stack.
 function findSpot(
   s: Bay,
   w: number,
@@ -92,16 +105,25 @@ function findSpot(
   stop: number
 ): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
-  const orients: Array<[number, number, boolean]> =
-    w === l ? [[w, l, false]] : w < l ? [[l, w, true], [w, l, false]] : [[w, l, false], [l, w, true]]
-  for (let z = Math.max(0, minZ); z < g.l; z++)
-    for (let xi = 0; xi < g.w; xi++) {
-      const x = s.wallHigh ? g.w - 1 - xi : xi
-      for (let y = 0; y + h <= g.h; y++)
-        for (const [fw, fl, rotated] of orients)
-          if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl, rotated }
-    }
-  return null
+  let blockZ = 0
+  for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
+
+  const narrow = firstFit(s, w, l, h, minZ, stop)
+  if (w === l) return narrow ? { ...narrow, rotated: false } : null
+
+  // narrow stays narrow while it doesn't reach past the block we've built
+  if (narrow && (blockZ === 0 || narrow.z + narrow.fl <= blockZ)) return { ...narrow, rotated: false }
+
+  // it would deepen the block; lay it flat if flat tucks inside the current depth
+  if (blockZ > 0) {
+    const flat = firstFit(s, l, w, h, minZ, stop)
+    if (flat && flat.z + flat.fl <= blockZ) return { ...flat, rotated: true }
+  }
+
+  // nothing shallow fits, so take whatever seats it and never strand the box
+  if (narrow) return { ...narrow, rotated: false }
+  const flat = firstFit(s, l, w, h, minZ, stop)
+  return flat ? { ...flat, rotated: true } : null
 }
 
 export interface RunOpts {
