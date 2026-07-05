@@ -10,7 +10,7 @@ import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
-import { gridsFor, shipFrame, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
+import { gridsFor, shipFrame, shipAnchored, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
@@ -635,6 +635,9 @@ export default function CargoGridPage(): React.ReactElement {
     [activeShip, installed, gridFacesSyncedAt]
   )
   const frame = useMemo(() => shipFrame(activeShip), [activeShip, gridFacesSyncedAt])
+  // ships positioned around world 0 in the markup tool render at their real coords;
+  // the rest still auto-center on the bounding box
+  const anchored = useMemo(() => shipAnchored(activeShip), [activeShip, gridFacesSyncedAt])
   // off-grid stash pad size, or null when the ship has it turned off
   const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesSyncedAt])
   // secure vaults can't haul
@@ -946,8 +949,8 @@ export default function CargoGridPage(): React.ReactElement {
 
   // bounds over visible grids, plus the off-grid pane so it stays in frame.
   // shipHalf/shipCenter stay ship-only so the floor labels sit on the ship, not out by the pane
-  const { origin, span, half, shipHalf, shipCenter, offGrid: offGridBay } = useMemo(() => {
-    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
+  const { origin, span, half, floorY, shipHalf, shipCenter, offGrid: offGridBay } = useMemo(() => {
+    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], floorY: -5, shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
     for (const g of shownGrids) {
       minX = Math.min(minX, g.x || 0); maxX = Math.max(maxX, (g.x || 0) + g.w)
@@ -966,16 +969,21 @@ export default function CargoGridPage(): React.ReactElement {
       maxY = Math.max(maxY, off.y + off.h)
       minZ = Math.min(minZ, off.z); maxZ = Math.max(maxZ, off.z + off.l)
     }
-    const o: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
+    // anchored ships keep world 0 as the fixed center; the rest ride the bounding-box centroid
+    const o: [number, number, number] = anchored
+      ? [0, 0, 0]
+      : [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
     return {
       origin: o,
       span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6),
       half: [(maxX - minX) / 2, (maxY - minY) / 2, (maxZ - minZ) / 2] as [number, number, number],
+      // deck level in view space: -half[1] when centered, the real min-y once anchored
+      floorY: minY - o[1],
       shipHalf: [(shipMaxX - shipMinX) / 2, (shipMaxY - shipMinY) / 2, (shipMaxZ - shipMinZ) / 2] as [number, number, number],
       shipCenter: [(shipMinX + shipMaxX) / 2 - o[0], (shipMinY + shipMaxY) / 2 - o[1], (shipMinZ + shipMaxZ) / 2 - o[2]] as [number, number, number],
       offGrid: off
     }
-  }, [shownGrids, offPad])
+  }, [shownGrids, offPad, anchored])
 
   // lay the loose boxes out in the pane: parked ones keep their spot, the rest
   // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere.
@@ -2252,7 +2260,7 @@ export default function CargoGridPage(): React.ReactElement {
         {loading && (
           <Btn
             onClick={() => void updateSettings({ spaceDeliveryPiles: !spaceDeliveryPiles })}
-            title="Leave a gap between cargo for different stops, when there's room"
+            title="Experimental: leave a gap between cargo for different stops, when there's room"
             style={{
               position: 'absolute',
               bottom: 10,
@@ -2270,7 +2278,10 @@ export default function CargoGridPage(): React.ReactElement {
             }}
             hoverStyle={{ color: C.acc, border: `1px solid ${C.acc}` }}
           >
-            SPACE PILES · {spaceDeliveryPiles ? 'ON' : 'OFF'}
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, lineHeight: 1.15 }}>
+              <span style={{ fontSize: 8, letterSpacing: '0.18em', color: C.amber, opacity: 0.85 }}>EXPERIMENTAL</span>
+              <span>INCLUDE GAPS · {spaceDeliveryPiles ? 'ON' : 'OFF'}</span>
+            </span>
           </Btn>
         )}
         {!loading && (
@@ -2321,7 +2332,7 @@ export default function CargoGridPage(): React.ReactElement {
             shadow-camera-bottom={-shadowExtent}
           />
           <directionalLight position={[-half[0] - span * 0.4, span * 0.8, -half[2] - span * 0.4]} intensity={0.4} />
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -half[1] - 0.02, 0]} receiveShadow>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, floorY - 0.02, 0]} receiveShadow>
             <planeGeometry args={[span * 5, span * 5]} />
             <shadowMaterial transparent opacity={0.32} />
           </mesh>
@@ -2532,7 +2543,7 @@ export default function CargoGridPage(): React.ReactElement {
                 const cy =
                   spot && gg
                     ? center((gg.y || 0) + spot.y, m.h, origin[1]) + 0.35
-                    : -half[1] + 1.2 + m.h / 2
+                    : floorY + 1.2 + m.h / 2
                 return (
                   <mesh
                     key={m.key}

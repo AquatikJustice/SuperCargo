@@ -1,6 +1,6 @@
 {
   "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
-  "syncedAt": "2026-07-03",
+  "syncedAt": "2026-07-04",
   "gridFaces": [
     {
       "ship": "Drake Ironclad",
@@ -16,8 +16,8 @@
             "x+": "aisle",
             "y+": "exit",
             "x-": "wall",
-            "y-": "wall",
-            "z+": "aisle"
+            "z+": "aisle",
+            "y-": "floor"
           },
           "x": -1
         },
@@ -28,7 +28,7 @@
             "x-": "aisle",
             "y+": "exit",
             "x+": "wall",
-            "y-": "wall",
+            "y-": "floor",
             "z+": "aisle"
           },
           "x": 9
@@ -41,7 +41,7 @@
             "x+": "aisle",
             "x-": "wall",
             "z+": "wall",
-            "y-": "wall"
+            "y-": "floor"
           },
           "x": -1
         },
@@ -53,7 +53,7 @@
             "x-": "aisle",
             "x+": "wall",
             "z+": "wall",
-            "y-": "wall"
+            "y-": "floor"
           },
           "x": 9
         },
@@ -63,7 +63,7 @@
           "faces": {
             "z-": "wall",
             "x+": "wall",
-            "y-": "wall",
+            "y-": "floor",
             "x-": "wall",
             "z+": "exit",
             "y+": "exit"
@@ -75,7 +75,7 @@
           "id": "lift-2",
           "z": -3,
           "faces": {
-            "y-": "wall",
+            "y-": "floor",
             "x+": "wall",
             "z-": "wall",
             "x-": "wall",
@@ -88,33 +88,81 @@
           "id": "secure-hold-1",
           "z": -4,
           "y": 4,
-          "x": 3
+          "x": 3,
+          "faces": {
+            "z-": "exit",
+            "y+": "wall",
+            "z+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "y-": "floor"
+          }
         },
         {
           "id": "secure-hold-3",
           "y": 4,
           "z": -8,
-          "x": 3
+          "x": 3,
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "floor"
+          }
         },
         {
           "id": "secure-hold-2",
           "y": 4,
           "z": -4,
-          "x": 9
+          "x": 9,
+          "faces": {
+            "z-": "exit",
+            "y+": "wall",
+            "z+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "y-": "floor"
+          }
         },
         {
           "id": "secure-hold-center",
           "y": 4,
           "x": 6,
-          "z": -8
+          "z": -8,
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "floor"
+          }
         },
         {
           "id": "secure-hold-4",
           "y": 4,
           "x": 9,
-          "z": -8
+          "z": -8,
+          "faces": {
+            "z+": "exit",
+            "y+": "wall",
+            "x-": "wall",
+            "x+": "wall",
+            "z-": "wall",
+            "y-": "floor"
+          }
         }
-      ]
+      ],
+      "offGrid": {
+        "on": true,
+        "l": 31,
+        "w": 4,
+        "h": 6,
+        "z": 0,
+        "x": 21
+      }
     },
     {
       "ship": "Drake Ironclad Assault",

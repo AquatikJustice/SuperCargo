@@ -160,6 +160,7 @@ type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w'
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
 let OFF_GRIDS: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
+let ANCHORED: Record<string, boolean> = {}
 
 /** built-in off-grid stash pad, cells. used when a ship has no authored override. */
 export const OFF_GRID_DEFAULT = { w: 16, l: 10, h: 6 }
@@ -168,16 +169,19 @@ export function setGridFaces(ships: ShipMarkup[]): void {
   const map: Record<string, Record<string, BayInfo>> = {}
   const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
   const offGrids: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
+  const anchored: Record<string, boolean> = {}
   for (const s of ships) {
     const bays: Record<string, BayInfo> = {}
     for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
     if (s.offGrid) offGrids[s.ship] = s.offGrid
+    if (s.anchored) anchored[s.ship] = true
   }
   MARKUP = map
   FRAMES = frames
   OFF_GRIDS = offGrids
+  ANCHORED = anchored
 }
 
 /** authored bow/starboard, or undefined (the view defaults bow to z-). */
@@ -185,15 +189,22 @@ export function shipFrame(ship: string): NonNullable<ShipMarkup['frame']> | unde
   return FRAMES[ship]
 }
 
+/** true when the bays are authored around world 0: the grid view renders them
+ * at their real coords instead of centering the bounding box. */
+export function shipAnchored(ship: string): boolean {
+  return !!ANCHORED[ship]
+}
+
 /** the off-grid stash pad size for a ship, or null when it's turned off.
  *  no override = the built-in pad; sizes fall back to the defaults per-axis. */
-export function offGridFor(ship: string): { w: number; l: number; h: number } | null {
+export function offGridFor(ship: string): { w: number; l: number; h: number; x?: number; y?: number; z?: number } | null {
   const o = OFF_GRIDS[ship]
   if (o && !o.on) return null
   return {
     w: o?.w ?? OFF_GRID_DEFAULT.w,
     l: o?.l ?? OFF_GRID_DEFAULT.l,
-    h: o?.h ?? OFF_GRID_DEFAULT.h
+    h: o?.h ?? OFF_GRID_DEFAULT.h,
+    x: o?.x, y: o?.y, z: o?.z
   }
 }
 

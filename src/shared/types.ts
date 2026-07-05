@@ -408,8 +408,12 @@ export interface ShipMarkup {
   /** which signed axis points to the bow / to starboard (up is y+). */
   frame?: { fore: BayDir; starboard: BayDir }
   /** off-grid stash pad beside the ship. absent = on at the built-in size; on:false = no pad
-   *  (ships you can't drop cargo next to). w/l/h in cells; absent = built-in defaults. */
-  offGrid?: { on: boolean; w?: number; l?: number; h?: number }
+   *  (ships you can't drop cargo next to). w/l/h in cells; absent = built-in defaults.
+   *  x/y/z authored in the markup tool override the auto-parked spot; absent = auto. */
+  offGrid?: { on: boolean; w?: number; l?: number; h?: number; x?: number; y?: number; z?: number }
+  /** the bays are positioned around world 0, so render them at their authored
+   *  coords instead of auto-centering the bounding box. set by the markup tool. */
+  anchored?: boolean
   bays: BayMarkup[]
 }
 
