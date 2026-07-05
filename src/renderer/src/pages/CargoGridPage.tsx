@@ -780,12 +780,8 @@ export default function CargoGridPage(): React.ReactElement {
     events: ReturnType<typeof buildLoadEvents>
     looseIds: Set<string>
     pins: Map<string, Placement>
-    prev: Map<string, Placement>
     source: PackBox[]
   } | null>(null)
-  // last plan's placements: a box that still fits its old spot keeps it, so a
-  // re-plan never re-deals cargo the user already saw settled (soft inertia)
-  const prevRef = useRef<Map<string, Placement> | null>(null)
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
@@ -807,23 +803,15 @@ export default function CargoGridPage(): React.ReactElement {
             : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: ext[0], l: ext[2], h: ext[1], rotated: lp.rotated })
     }
-    // carry each box's last-seen spot in so the packer keeps it there when it
-    // still fits, instead of re-dealing the whole hold on every re-plan
-    const prev = new Map<string, Placement>()
-    if (prevRef.current) for (const b of source) { const pl = prevRef.current.get(b.id); if (pl) prev.set(b.id, pl) }
     const whole = planHold(grids, events, {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
-      prev: prev.size ? prev : undefined,
       fixtures,
       gap: spaceDeliveryPiles ? 1 : 0
     })
     const raw = whole.snaps
-    const m = new Map<string, Placement>()
-    for (const s of raw) for (const p of s.placements) if (!m.has(p.box.id)) m.set(p.box.id, p)
-    prevRef.current = m
     // commitDrag probes hypothetical pins against this exact environment
-    packEnvRef.current = { events, looseIds, pins, prev, source }
+    packEnvRef.current = { events, looseIds, pins, source }
     const snaps = raw.map((s) => ({
       placements: s.placements,
       unplaced: s.unplaced,
@@ -1240,7 +1228,6 @@ export default function CargoGridPage(): React.ReactElement {
     const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
       loose: env.looseIds.size ? env.looseIds : undefined,
       pins: env.pins.size ? env.pins : undefined,
-      prev: env.prev.size ? env.prev : undefined,
       fixtures,
       gap: spaceDeliveryPiles ? 1 : 0
     })
@@ -1937,9 +1924,11 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, frozenSteps, stepPos, loadedPins])
 
-  // a delivery can pull the floor out from under locked cargo; the snap shows
-  // it settled, and moving the pin down with it makes that real, so later
-  // stops plan around where the box actually sits instead of the hole it left
+  // every box that lands on the grid gets pinned the moment it shows, so the
+  // re-solver can never shuffle it: only a drag or gravity moves it after. A
+  // delivery can still pull the floor from under locked cargo; the snap shows
+  // it settled, and moving the pin down with it makes that real, so later stops
+  // plan around where the box actually sits instead of the hole it left.
   useEffect(() => {
     if (!loading || !loadingPack || drag) return
     const snap = loadingPack.snaps[loadIdx]
@@ -1957,13 +1946,19 @@ export default function CargoGridPage(): React.ReactElement {
     for (const p of snap.placements) {
       const key = boxKey(p.box)
       const lp = loadedPins[key]
-      if (!lp) continue
+      if (!lp) {
+        // fresh on the grid: pin it where the packer just put it
+        if (looseBoxes.includes(key)) continue
+        const pk = pickupKeyById.get(p.box.id)
+        if (pk) moved[key] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated, pickupKey: pk }
+        continue
+      }
       if (p.gridId !== lp.gridId || p.x !== lp.x || p.y !== lp.y || p.z !== lp.z)
         moved[key] = { ...lp, gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated }
     }
     if (Object.keys(moved).length) addLoadedPins(moved)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, loadingPack, loadIdx, drag, loadedPins])
+  }, [loading, loadingPack, loadIdx, drag, loadedPins, looseBoxes, pickupKeyById])
 
   // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
   // at a step now ahead of the cursor reset; deferrals resolve in frozen space
