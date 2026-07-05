@@ -250,40 +250,100 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
   return true
 }
 
-// the v0.5.2 wall builder: first fit scanning depth-ascending, bottom-up,
-// then across from the bay's own wall. Long boxes run INTO the bay; the
-// whole section is scanned for a depth-stretched fit before the box may
-// turn across, which is what draws the long clean lines; turned boxes only
-// cap the ends. The final delivery scans from the far wall backward so it
-// anchors against the bulkhead
+// long boxes turn ACROSS the bay and stack tall against the wall; the wall
+// side packs solid to a box's depth before a box drops into the leftover
+// aisle strip. A box rides a strictly bigger one before taking floor, and
+// smalls fill the lowest gaps flat so tops stay clean for a later pickup.
+// fits() still gates every spot, so delivery zones, peel order and the
+// flank-bug guard are untouched. The final delivery scans from the far wall
+// backward so it anchors against the bulkhead.
 function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: number, deep: boolean): Slot | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
-  // no footprint swap when the cross axis points at the sky (wall-floored bay)
-  const faces: Array<[number, number]> =
-    dims.w === dims.l || bay.cross === 'y' ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
-  // a box that outgrows its stop's section turns across at the cap before
-  // poking a lone column deeper; a poke drags full-width row ownership
-  // with it and the rows it steals are exactly what the next stop needed
-  let ownDeep = d0
-  for (const r of rivals) if (!r.anchor && r.stop === probe.stop) ownDeep = Math.max(ownDeep, r.d + r.dl)
-  const caps = !deep && ownDeep > d0 && ownDeep < bay.dl ? [ownDeep, bay.dl] : [bay.dl]
-  for (const cap of caps)
-    for (const [cwf, dlf] of faces)
-      for (let i = d0; i < bay.dl; i++) {
-        const d = deep ? bay.dl - 1 - (i - d0) : i
-        if (d < d0 || d + dlf > cap) continue
-        for (let y = 0; y + dims.h <= bay.h; y++)
-          for (let cRaw = 0; cRaw < bay.cw; cRaw++) {
-            const c = bay.wallHigh ? bay.cw - cRaw - cwf : cRaw
-            if (c < 0 || c + cwf > bay.cw) continue
-            const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
-            if (fits(rivals, t, gap, aboardAtLoad)) return t
-          }
+  const size = probe.box.size
+  // a wall-floored bay's cross axis points at the sky: turning would stand the
+  // box on end, so it never swaps its footprint there
+  const canTurn = !(dims.w === dims.l || bay.cross === 'y')
+
+  // how deep this stop's section already reaches
+  let blockEnd = d0
+  for (const r of rivals) if (!r.anchor && r.stop === probe.stop) blockEnd = Math.max(blockEnd, r.d + r.dl)
+  const capped = blockEnd > d0 ? blockEnd : bay.dl
+
+  const wallC = (cwf: number, i: number): number => (bay.wallHigh ? bay.cw - cwf - i : i)
+  const test = (c: number, d: number, y: number, cwf: number, dlf: number): Slot | null => {
+    if (c < 0 || c + cwf > bay.cw || d < d0 || d + dlf > bay.dl || y + dims.h > bay.h) return null
+    const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
+    return fits(rivals, t, gap, aboardAtLoad) ? t : null
+  }
+
+  // every cell under the footprint is a strictly bigger box
+  const onBigger = (c: number, d: number, y: number, cwf: number, dlf: number): boolean => {
+    for (let dd = 0; dd < dlf; dd++)
+      for (let dc = 0; dc < cwf; dc++) {
+        const u = rivals.find(
+          (r) => r.y + r.h === y && c + dc >= r.c && c + dc < r.c + r.cw && d + dd >= r.d && d + dd < r.d + r.dl
+        )
+        if (!u || u.fixture || u.box.size <= size) return false
       }
-  return null
+    return true
+  }
+
+  // wall side beside a deep box packed solid to its depth, floor to ceiling
+  const aisleFlush = (t: Slot): boolean => {
+    const from = bay.wallHigh ? t.c + t.cw : 0
+    const to = bay.wallHigh ? bay.cw : t.c
+    if (from >= to) return false
+    for (let cc = from; cc < to; cc++)
+      for (let dd = t.d; dd < t.d + t.dl; dd++)
+        for (let yy = 0; yy < bay.h; yy++)
+          if (!rivals.some((r) => r.stop === t.stop && cc >= r.c && cc < r.c + r.cw && dd >= r.d && dd < r.d + r.dl && yy >= r.y && yy < r.y + r.h))
+            return false
+    return true
+  }
+
+  // ride a strictly bigger box, lowest flat gaps across the block first
+  const onTop = (cwf: number, dlf: number): Slot | null => {
+    for (let y = 1; y + dims.h <= bay.h; y++)
+      for (let d = d0; d + dlf <= capped; d++)
+        for (let i = 0; i + cwf <= bay.cw; i++) {
+          const c = wallC(cwf, i)
+          if (onBigger(c, d, y, cwf, dlf)) { const t = test(c, d, y, cwf, dlf); if (t) return t }
+        }
+    return null
+  }
+
+  // wall column stacks up, then across toward the aisle, then a row deeper
+  const firstFit = (cwf: number, dlf: number, dHi: number): Slot | null => {
+    const span: number[] = []
+    for (let d = d0; d + dlf <= dHi; d++) span.push(d)
+    if (deep) span.reverse()
+    for (const d of span)
+      for (let i = 0; i + cwf <= bay.cw; i++) {
+        const c = wallC(cwf, i)
+        for (let y = 0; y + dims.h <= bay.h; y++) { const t = test(c, d, y, cwf, dlf); if (t) return t }
+      }
+    return null
+  }
+
+  // ride a bigger box first, keeping its own long side deep before turning
+  { const s = onTop(dims.w, dims.l); if (s) return s }
+  if (canTurn) { const s = onTop(dims.l, dims.w); if (s) return s }
+
+  // a small filler stays inside the block instead of opening fresh depth
+  if (dims.w * dims.l <= 4 && blockEnd > d0) { const s = firstFit(dims.w, dims.l, capped); if (s) return s }
+
+  if (!canTurn) return firstFit(dims.w, dims.l, bay.dl)
+
+  // turn across against the wall; a deep box only drops into the aisle strip
+  // once the wall beside it is solid to its depth
+  const across = firstFit(dims.l, dims.w, bay.dl)
+  const narrow = firstFit(dims.w, dims.l, bay.dl)
+  if (narrow && aisleFlush(narrow)) return narrow
+  if (across) return across
+  return narrow
 }
 
 // slide in at its level, or lower it down an open-topped column: a pit

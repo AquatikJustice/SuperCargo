@@ -15,8 +15,8 @@ import type { BayDir } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown } from '@shared/box'
-import { fixtureMap } from '@shared/hold'
-import { walkPack, packRun } from '@shared/walkPack'
+import { fixtureMap, planHold } from '@shared/hold'
+import { packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView, LoadedPin, StorAllCrate } from '@shared/types'
 import { Btn } from '../components/ui'
@@ -803,7 +803,7 @@ export default function CargoGridPage(): React.ReactElement {
             : ([lp.rotated ? dims.l : dims.w, dims.h, lp.rotated ? dims.w : dims.l] as [number, number, number])
       pins.set(b.id, { box: b, gridId: lp.gridId, x: lp.x, y: lp.y, z: lp.z, w: ext[0], l: ext[2], h: ext[1], rotated: lp.rotated })
     }
-    const whole = walkPack(grids, events, {
+    const whole = planHold(grids, events, {
       loose: looseIds,
       pins: pins.size ? pins : undefined,
       fixtures,
@@ -1225,7 +1225,7 @@ export default function CargoGridPage(): React.ReactElement {
       (id) => tickedObj.has(id),
       new Set([...grabbedObjectives, ...grabOffer.ids])
     )
-    const probe = walkPack(grids, buildLoadEvents(steps2, env.source), {
+    const probe = planHold(grids, buildLoadEvents(steps2, env.source), {
       loose: env.looseIds.size ? env.looseIds : undefined,
       pins: env.pins.size ? env.pins : undefined,
       fixtures,
