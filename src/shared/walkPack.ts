@@ -93,15 +93,17 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
-// Same scan, but skips the floor (y from 1) so a box rides on cargo, not fresh deck.
+// Fill the lowest layer of gaps across the whole block before stacking any higher,
+// so tops stay flat for a later merge to slide onto. Skips the floor (y from 1).
 function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
   const g = s.grid
   const lim = Math.min(g.l, maxZ)
-  for (let z = Math.max(0, minZ); z + fl <= lim; z++)
-    for (let xi = 0; xi < g.w; xi++) {
-      const x = s.wallHigh ? g.w - 1 - xi : xi
-      for (let y = 1; y + h <= g.h; y++) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
-    }
+  for (let y = 1; y + h <= g.h; y++)
+    for (let z = Math.max(0, minZ); z + fl <= lim; z++)
+      for (let xi = 0; xi < g.w; xi++) {
+        const x = s.wallHigh ? g.w - 1 - xi : xi
+        if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
+      }
   return null
 }
 
