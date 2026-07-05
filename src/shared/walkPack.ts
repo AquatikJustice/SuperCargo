@@ -24,6 +24,8 @@ interface Bay {
   owner: Int16Array
   /** which stop owns each depth slice; a slice holds one destination only. */
   slice: Int16Array
+  /** scu of the box occupying each cell, so a box can seek a strictly bigger one to sit on. */
+  size: Int16Array
   /** stacks hug the high-x wall and build toward the low-x aisle. */
   wallHigh: boolean
   used: number
@@ -41,7 +43,7 @@ function wallHigh(grid: CargoGrid): boolean {
 
 function makeBay(grid: CargoGrid): Bay {
   const n = grid.w * grid.l * grid.h
-  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), slice: new Int16Array(grid.l).fill(-1), wallHigh: wallHigh(grid), used: 0 }
+  return { grid, occ: new Uint8Array(n), owner: new Int16Array(n).fill(-1), slice: new Int16Array(grid.l).fill(-1), size: new Int16Array(n), wallHigh: wallHigh(grid), used: 0 }
 }
 
 function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: number, fh: number, stop: number): boolean {
@@ -72,6 +74,7 @@ function fill(s: Bay, p: Placement, owner: number): void {
         if (i < 0 || i >= s.occ.length) continue
         s.occ[i] = 1
         s.owner[i] = owner
+        s.size[i] = p.box.size
       }
   // crates (fixtures) sit in a slice without owning it, so cargo can pack beside them
   if (owner >= 0) for (let dz = 0; dz < p.l; dz++) if (p.z + dz < g.l) s.slice[p.z + dz] = owner
@@ -93,16 +96,25 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
-// Fill the lowest layer of gaps across the whole block before stacking any higher,
-// so tops stay flat for a later merge to slide onto. Skips the floor (y from 1).
-function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
+// Every cell directly under this footprint is a box strictly bigger than mine, so
+// a box only rides on top of a genuinely larger one, never towers on its own size.
+function supportBigger(s: Bay, x: number, y: number, z: number, fw: number, fl: number, mySize: number): boolean {
+  const g = s.grid
+  for (let dz = 0; dz < fl; dz++)
+    for (let dx = 0; dx < fw; dx++) if (s.size[idx(g, x + dx, y - 1, z + dz)] <= mySize) return false
+  return true
+}
+
+// Fill the lowest layer of gaps across the block, on top of bigger boxes, before
+// stacking any higher, so tops stay flat for a later merge to slide onto.
+function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number, mySize: number): Spot | null {
   const g = s.grid
   const lim = Math.min(g.l, maxZ)
   for (let y = 1; y + h <= g.h; y++)
     for (let z = Math.max(0, minZ); z + fl <= lim; z++)
       for (let xi = 0; xi < g.w; xi++) {
         const x = s.wallHigh ? g.w - 1 - xi : xi
-        if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
+        if (canPlace(s, x, y, z, fw, fl, h, stop) && supportBigger(s, x, y, z, fw, fl, mySize)) return { x, y, z, fw, fl }
       }
   return null
 }
@@ -145,20 +157,20 @@ function findSpot(
   l: number,
   h: number,
   minZ: number,
-  stop: number
+  stop: number,
+  size: number
 ): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
 
-  // smaller boxes ride on top of the bigger ones (or fill a gap); floor is a last resort
-  if (w * l <= 4) {
-    const onTop = firstFitOnTop(s, w, l, h, minZ, stop, blockZ > 0 ? blockZ : g.l)
-    if (onTop) return { ...onTop, rotated: false }
-    if (blockZ > 0) {
-      const inside = firstFitBounded(s, w, l, h, minZ, stop, blockZ)
-      if (inside) return { ...inside, rotated: false }
-    }
+  // a box sits on top of a strictly bigger one, filling its surface flat, before floor
+  const onTop = firstFitOnTop(s, w, l, h, minZ, stop, blockZ > 0 ? blockZ : g.l, size)
+  if (onTop) return { ...onTop, rotated: false }
+  // a small filler stays inside the block rather than opening fresh floor
+  if (w * l <= 4 && blockZ > 0) {
+    const inside = firstFitBounded(s, w, l, h, minZ, stop, blockZ)
+    if (inside) return { ...inside, rotated: false }
   }
 
   if (w === l) { const sq = firstFit(s, w, l, h, minZ, stop); return sq ? { ...sq, rotated: false } : null }
@@ -230,7 +242,7 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
         const s = bays[gi]
         if (s.grid.maxSize && box.size > s.grid.maxSize) continue
         const minZ = gi === frontGi ? frontZ : 0
-        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop)
+        const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop, box.size)
         if (!spot) continue
         const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
         fill(s, p, stop)
