@@ -577,7 +577,7 @@ export default function SettingsPage(): React.ReactElement {
       )}
 
       <Section title="USAGE STATS" />
-      <div style={rowStyle}>
+      <div style={{ ...rowStyle, alignItems: 'flex-start' }}>
         <span style={keyStyle}>Share anonymous stats</span>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
           <Toggle
