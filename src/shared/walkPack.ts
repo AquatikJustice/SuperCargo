@@ -93,11 +93,24 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
+// Same scan, but no deeper than maxZ, so a filler stays inside the block already built.
+function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
+  const g = s.grid
+  const lim = Math.min(g.l, maxZ)
+  for (let z = Math.max(0, minZ); z + fl <= lim; z++)
+    for (let xi = 0; xi < g.w; xi++) {
+      const x = s.wallHigh ? g.w - 1 - xi : xi
+      for (let y = 0; y + h <= g.h; y++) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
+    }
+  return null
+}
+
 // A stop turns its long boxes across the bay (wide and shallow) and stacks them
 // tall against the wall, so the block stays thin front-to-back. Once the wall
 // column is full to the ceiling, the leftover strip by the aisle takes a box laid
 // long-into-the-bay, with the shorter boxes stacking on top of it. Square boxes
-// never turn.
+// never turn. `fallback` flags a deep spot taken only because the box couldn't
+// turn here at all, so the caller can hunt for a bay where it can.
 function findSpot(
   s: Bay,
   w: number,
@@ -105,10 +118,16 @@ function findSpot(
   h: number,
   minZ: number,
   stop: number
-): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
+): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean; fallback?: boolean } | null {
   const g = s.grid
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
+
+  // a small filler nestles inside the block already built, never a fresh floor row
+  if (h === 1 && w * l <= 4 && blockZ > 0) {
+    const inside = firstFitBounded(s, w, l, h, minZ, stop, blockZ)
+    if (inside) return { ...inside, rotated: false }
+  }
 
   if (w === l) { const sq = firstFit(s, w, l, h, minZ, stop); return sq ? { ...sq, rotated: false } : null }
 
@@ -120,7 +139,7 @@ function findSpot(
   if (narrow && narrow.z < blockZ) return { ...narrow, rotated: false }
 
   if (flat) return { ...flat, rotated: true }
-  return narrow ? { ...narrow, rotated: false } : null
+  return narrow ? { ...narrow, rotated: false, fallback: blockZ === 0 } : null
 }
 
 export interface RunOpts {
@@ -178,21 +197,28 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
       }
       const dims = BOX_DIMS[box.size]
       if (!dims) { unplaced.push(box); continue }
-      let done = false
+      type Pick = { gi: number; spot: NonNullable<ReturnType<typeof findSpot>> }
+      let chosen: Pick | null = null
+      let backup: Pick | null = null
       for (let gi = frontGi; gi < bays.length; gi++) {
         const s = bays[gi]
         if (s.grid.maxSize && box.size > s.grid.maxSize) continue
         const minZ = gi === frontGi ? frontZ : 0
         const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop)
         if (!spot) continue
-        const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
-        fill(s, p, stop)
-        homes.set(box.id, p)
-        reach(gi, spot.z + spot.fl)
-        done = true
+        // a box that can't turn here waits for a bay where it can; keep this as backup
+        if (spot.fallback) { backup ??= { gi, spot }; continue }
+        chosen = { gi, spot }
         break
       }
-      if (!done) unplaced.push(box)
+      const pick = chosen ?? backup
+      if (!pick) { unplaced.push(box); continue }
+      const s = bays[pick.gi]
+      const spot = pick.spot
+      const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
+      fill(s, p, stop)
+      homes.set(box.id, p)
+      reach(pick.gi, spot.z + spot.fl)
     }
 
     if (endZ + gap < (bays[endGi]?.grid.l ?? 0)) { frontGi = endGi; frontZ = endZ + gap }
