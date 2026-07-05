@@ -109,8 +109,7 @@ function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number
 // tall against the wall, so the block stays thin front-to-back. Once the wall
 // column is full to the ceiling, the leftover strip by the aisle takes a box laid
 // long-into-the-bay, with the shorter boxes stacking on top of it. Square boxes
-// never turn. `fallback` flags a deep spot taken only because the box couldn't
-// turn here at all, so the caller can hunt for a bay where it can.
+// never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -118,7 +117,7 @@ function findSpot(
   h: number,
   minZ: number,
   stop: number
-): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean; fallback?: boolean } | null {
+): { x: number; y: number; z: number; fw: number; fl: number; rotated: boolean } | null {
   const g = s.grid
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
@@ -139,7 +138,7 @@ function findSpot(
   if (narrow && narrow.z < blockZ) return { ...narrow, rotated: false }
 
   if (flat) return { ...flat, rotated: true }
-  return narrow ? { ...narrow, rotated: false, fallback: blockZ === 0 } : null
+  return narrow ? { ...narrow, rotated: false } : null
 }
 
 export interface RunOpts {
@@ -197,28 +196,21 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
       }
       const dims = BOX_DIMS[box.size]
       if (!dims) { unplaced.push(box); continue }
-      type Pick = { gi: number; spot: NonNullable<ReturnType<typeof findSpot>> }
-      let chosen: Pick | null = null
-      let backup: Pick | null = null
+      let done = false
       for (let gi = frontGi; gi < bays.length; gi++) {
         const s = bays[gi]
         if (s.grid.maxSize && box.size > s.grid.maxSize) continue
         const minZ = gi === frontGi ? frontZ : 0
         const spot = findSpot(s, dims.w, dims.l, dims.h, minZ, stop)
         if (!spot) continue
-        // a box that can't turn here waits for a bay where it can; keep this as backup
-        if (spot.fallback) { backup ??= { gi, spot }; continue }
-        chosen = { gi, spot }
+        const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
+        fill(s, p, stop)
+        homes.set(box.id, p)
+        reach(gi, spot.z + spot.fl)
+        done = true
         break
       }
-      const pick = chosen ?? backup
-      if (!pick) { unplaced.push(box); continue }
-      const s = bays[pick.gi]
-      const spot = pick.spot
-      const p: Placement = { box, gridId: s.grid.id, x: spot.x, y: spot.y, z: spot.z, w: spot.fw, l: spot.fl, h: dims.h, rotated: spot.rotated }
-      fill(s, p, stop)
-      homes.set(box.id, p)
-      reach(pick.gi, spot.z + spot.fl)
+      if (!done) unplaced.push(box)
     }
 
     if (endZ + gap < (bays[endGi]?.grid.l ?? 0)) { frontGi = endGi; frontZ = endZ + gap }
