@@ -93,10 +93,11 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
-// Boxes hug the wall long-and-deep while they fit inside the depth this stop has
-// already claimed. Once a box would open a new row past that, it turns 90° away
-// from the wall so the last row lies shallow, keeping the stop's footprint thin
-// and leaving the shorter boxes to stack on top of it. Square boxes never turn.
+// A stop turns its long boxes across the bay (wide and shallow) and stacks them
+// tall against the wall, so the block stays thin front-to-back. Once the wall
+// column is full to the ceiling, the leftover strip by the aisle takes a box laid
+// long-into-the-bay, with the shorter boxes stacking on top of it. Square boxes
+// never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -109,11 +110,15 @@ function findSpot(
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
 
-  const narrow = firstFit(s, w, l, h, minZ, stop)
-  if (w === l) return narrow ? { ...narrow, rotated: false } : null
-  if (narrow && (blockZ === 0 || narrow.z + narrow.fl <= blockZ)) return { ...narrow, rotated: false }
+  if (w === l) { const sq = firstFit(s, w, l, h, minZ, stop); return sq ? { ...sq, rotated: false } : null }
 
-  const flat = firstFit(s, l, w, h, minZ, stop)
+  const flat = firstFit(s, l, w, h, minZ, stop) // turned across the bay: wide, shallow
+  if (flat && (blockZ === 0 || flat.z + flat.fl <= blockZ)) return { ...flat, rotated: true }
+
+  // wall column is full; drop a deep box into the leftover strip at the front
+  const narrow = firstFit(s, w, l, h, minZ, stop)
+  if (narrow && narrow.z < blockZ) return { ...narrow, rotated: false }
+
   if (flat) return { ...flat, rotated: true }
   return narrow ? { ...narrow, rotated: false } : null
 }
