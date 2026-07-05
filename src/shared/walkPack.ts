@@ -93,6 +93,18 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
+// Same scan, but skips the floor (y from 1) so a box rides on cargo, not fresh deck.
+function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
+  const g = s.grid
+  const lim = Math.min(g.l, maxZ)
+  for (let z = Math.max(0, minZ); z + fl <= lim; z++)
+    for (let xi = 0; xi < g.w; xi++) {
+      const x = s.wallHigh ? g.w - 1 - xi : xi
+      for (let y = 1; y + h <= g.h; y++) if (canPlace(s, x, y, z, fw, fl, h, stop)) return { x, y, z, fw, fl }
+    }
+  return null
+}
+
 // Same scan, but no deeper than maxZ, so a filler stays inside the block already built.
 function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
   const g = s.grid
@@ -137,10 +149,14 @@ function findSpot(
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
 
-  // a small filler nestles inside the block already built, never a fresh floor row
-  if (h === 1 && w * l <= 4 && blockZ > 0) {
-    const inside = firstFitBounded(s, w, l, h, minZ, stop, blockZ)
-    if (inside) return { ...inside, rotated: false }
+  // smaller boxes ride on top of the bigger ones (or fill a gap); floor is a last resort
+  if (w * l <= 4) {
+    const onTop = firstFitOnTop(s, w, l, h, minZ, stop, blockZ > 0 ? blockZ : g.l)
+    if (onTop) return { ...onTop, rotated: false }
+    if (blockZ > 0) {
+      const inside = firstFitBounded(s, w, l, h, minZ, stop, blockZ)
+      if (inside) return { ...inside, rotated: false }
+    }
   }
 
   if (w === l) { const sq = firstFit(s, w, l, h, minZ, stop); return sq ? { ...sq, rotated: false } : null }
