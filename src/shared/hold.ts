@@ -288,10 +288,18 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
       }
     return true
   }
+  // a superbucket owns the full X-width of every depth slice it sits in, so no
+  // other stop may share that depth, pinned or not. fits() relaxes this for a
+  // hand-pinned rival (its own drag), but the packer never gets to.
+  const sliceOwn = (t: Slot): boolean => {
+    for (const r of rivals)
+      if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
+    return true
+  }
   const test = (c: number, d: number, y: number, cwf: number, dlf: number): Slot | null => {
     if (c < 0 || c + cwf > bay.cw || d < d0 || d + dlf > bay.dl || y + dims.h > bay.h) return null
     const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
-    return fits(rivals, t, gap, aboardAtLoad) && ownSupport(t) ? t : null
+    return fits(rivals, t, gap, aboardAtLoad) && ownSupport(t) && sliceOwn(t) ? t : null
   }
 
   // every cell under the footprint is a strictly bigger box of this stop
@@ -458,13 +466,13 @@ function findSpot(
           if (!held) continue
         }
         let ok = true
-        if (!relax.peel)
+        // a superbucket owns the full width of every depth slice it sits in:
+        // no other stop shares that depth, pinned or not, ever (this is the one
+        // rule that outranks a dig concession)
+        for (const r of rivals)
+          if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) { ok = false; break }
+        if (ok && !relax.peel)
           for (const r of rivals) {
-            // a depth row belongs to one stop wall-to-wall; no crossing another bucket's rows
-            if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) {
-              ok = false
-              break
-            }
             if (!laneClash(t, r)) continue
             const pad = r.stop !== t.stop ? gap : 0
             // earlier drop peels first, so it sits nearer the exit
