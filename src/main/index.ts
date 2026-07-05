@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -16,6 +16,7 @@ import { engineInfo, capturePreview, runOcr, saveSample } from './ocr'
 import { prunePending } from './ocr/samples'
 import * as contractData from './contractData'
 import * as telemetry from './telemetry'
+import * as usageStats from './usageStats'
 import appIcon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | null = null
@@ -579,6 +580,24 @@ function registerIpc(): void {
       saveSample(settings, payload.sampleId, { text: payload.text, fields: payload.fields })
   )
 
+  ipcMain.on(
+    IPC.ocrReportAccuracy,
+    (_e, p: { attempted: number; edited: number; byField: OcrEditTally }) => {
+      if (!p.attempted) return
+      const edits = { ...settings.ocrEdits }
+      for (const [k, v] of Object.entries(p.byField)) {
+        edits[k as keyof OcrEditTally] = (edits[k as keyof OcrEditTally] ?? 0) + v
+      }
+      settings = {
+        ...settings,
+        ocrFieldsTotal: (settings.ocrFieldsTotal ?? 0) + p.attempted,
+        ocrFieldsEdited: (settings.ocrFieldsEdited ?? 0) + p.edited,
+        ocrEdits: edits
+      }
+      saveSettings(settings)
+    }
+  )
+
   ipcMain.handle(IPC.appVersion, () => app.getVersion())
   ipcMain.handle(IPC.updaterCheck, async () => {
     await checkForUpdates()
@@ -615,6 +634,13 @@ if (!gotLock) {
       saveSettings(settings)
     }
     telemetry.init()
+    const ships = usageStats.completedShips(loadHistory().entries)
+    void usageStats.maybePing(settings, app.getVersion(), ships).then((sentAt) => {
+      if (sentAt) {
+        settings = { ...settings, lastUsagePingAt: sentAt }
+        saveSettings(settings)
+      }
+    })
     try {
       const data = contractData.rebuild(settings)
       if (data.active) console.log(`[contractData] ${data.titles} contracts, ${data.blueprintContracts} with blueprints`)

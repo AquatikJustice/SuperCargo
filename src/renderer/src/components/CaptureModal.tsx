@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
-import type { DeliveryObjective, MatchResult, OcrObjective } from '@shared/types'
+import type { DeliveryObjective, MatchResult, OcrObjective, OcrEditTally } from '@shared/types'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
 import OcrCalibrator from './OcrCalibrator'
@@ -14,6 +14,8 @@ interface ObjRow extends ManualObjectiveInput {
   /** set when ocr-filled */
   ocrCommodity?: OcrHintInfo
   ocrDestination?: OcrHintInfo
+  /** ocr read a pickup for this row */
+  ocrPickup?: boolean
 }
 
 let rowKey = 0
@@ -36,7 +38,8 @@ function rowFromOcr(o: OcrObjective): ObjRow {
     destination: destination.value,
     pickups: pickups && pickups.length ? pickups : undefined,
     ocrCommodity: commodity.hint,
-    ocrDestination: destination.hint
+    ocrDestination: destination.hint,
+    ocrPickup: !!(pickups && pickups.length)
   }
 }
 
@@ -149,6 +152,7 @@ export default function CaptureModal(): React.ReactElement | null {
     setRawEdit('')
     setContributed(false)
     setCalibrating(false)
+    touched.current.clear()
     clearOcr()
   }
 
@@ -157,10 +161,19 @@ export default function CaptureModal(): React.ReactElement | null {
     close()
   }
 
-  const update = (key: number, patch: Partial<ObjRow>): void =>
+  // which ocr-filled fields the user had to correct, for the accuracy stat
+  const touched = useRef(new Set<string>())
+
+  const update = (key: number, patch: Partial<ObjRow>): void => {
+    if ('commodity' in patch) touched.current.add(`commodity:${key}`)
+    if ('scuAmount' in patch) touched.current.add(`scu:${key}`)
+    if ('destination' in patch) touched.current.add(`destination:${key}`)
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
-  const mutPickups = (key: number, fn: (ps: string[]) => string[]): void =>
+  }
+  const mutPickups = (key: number, fn: (ps: string[]) => string[]): void => {
+    touched.current.add(`pickup:${key}`)
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, pickups: fn(r.pickups ?? []) } : r)))
+  }
   const addRowPickup = (key: number): void => mutPickups(key, (ps) => [...ps, ''])
   const setRowPickup = (key: number, i: number, val: string): void =>
     mutPickups(key, (ps) => ps.map((p, j) => (j === i ? val : p)))
@@ -169,6 +182,42 @@ export default function CaptureModal(): React.ReactElement | null {
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
   const canSubmit = validRows.length > 0
+
+  // score OCR against what the user had to fix. every field OCR attempted counts;
+  // a touched field is a miss. nothing touched = 100%.
+  const reportOcrAccuracy = (): void => {
+    let attempted = 0
+    let edited = 0
+    const byField: OcrEditTally = {}
+    const miss = (f: keyof OcrEditTally): void => {
+      byField[f] = (byField[f] ?? 0) + 1
+      edited++
+    }
+    for (const r of rows) {
+      if (!r.ocrCommodity) continue // ocr-derived rows only
+      attempted++
+      if (touched.current.has(`commodity:${r.key}`)) miss('commodity')
+      attempted++
+      if (touched.current.has(`scu:${r.key}`)) miss('scu')
+      if (r.ocrDestination) {
+        attempted++
+        if (touched.current.has(`destination:${r.key}`)) miss('destination')
+      }
+      if (r.ocrPickup) {
+        attempted++
+        if (touched.current.has(`pickup:${r.key}`)) miss('pickup')
+      }
+    }
+    if (ocrResult?.reward) {
+      attempted++
+      if (touched.current.has('reward')) miss('reward')
+    }
+    if (ocrResult?.maxBoxSize) {
+      attempted++
+      if (touched.current.has('boxSize')) miss('boxSize')
+    }
+    if (attempted) window.supercargo.ocrReportAccuracy({ attempted, edited, byField })
+  }
 
   const submit = (): void => {
     if (!canSubmit) return
@@ -189,6 +238,8 @@ export default function CaptureModal(): React.ReactElement | null {
         fields: { objectives, maxBoxSize: maxBox, reward }
       })
     }
+
+    if (ocrResult?.ok) reportOcrAccuracy()
 
     if (targetId) {
       addObjectivesToContract(targetId, objectives, maxBox)
@@ -338,7 +389,10 @@ export default function CaptureModal(): React.ReactElement | null {
                 <div style={labelStyle}>MAX BOX SIZE</div>
                 <select
                   value={maxBox}
-                  onChange={(e) => setMaxBox(Number(e.target.value))}
+                  onChange={(e) => {
+                    touched.current.add('boxSize')
+                    setMaxBox(Number(e.target.value))
+                  }}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
                 >
                   {MAX_BOX_OPTIONS.map((s) => (
@@ -364,9 +418,10 @@ export default function CaptureModal(): React.ReactElement | null {
                   inputMode="numeric"
                   placeholder="e.g. 50000"
                   value={reward || ''}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    touched.current.add('reward')
                     setReward(Math.max(0, parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) || 0))
-                  }
+                  }}
                 />
                 {ocrResult?.ok && ocrResult.reward ? (
                   <div style={{ fontFamily: F.mono, fontSize: 10, color: C.green, marginTop: 3 }}>

@@ -105,6 +105,16 @@ Click any shot to view it full size.
 - Windows or Linux
 - Star Citizen installed
 
+## Privacy
+
+SuperCargo runs on your PC. It sends a small **anonymous** usage snapshot on launch so we can
+see roughly how many people use it and which features are worth developing - a random device ID,
+app version, which OCR engine you use and how accurately it reads your contracts, the ships you
+haul with, and a few toggle settings. It never
+includes your contracts, screenshots, or any personal information, and you can turn it off under
+**Settings -> Usage Stats**. Everything else that leaves your machine (OCR training uploads) is
+strictly opt-in.
+
 ## Credits
 
 Community data sources: [UEXcorp](https://uexcorp.space) (ships, commodities, locations,

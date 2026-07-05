@@ -76,6 +76,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   contractsDataPath: '',
   contributeTrainingData: false,
   telemetryClientId: '',
+  shareUsageStats: true,
   alwaysOnTop: false,
   theme: 'dark',
   uiZoom: 1.1,

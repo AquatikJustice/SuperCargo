@@ -5,8 +5,8 @@ import * as path from 'node:path'
 import { app } from 'electron'
 
 // publishable key, safe to embed
-const SUPABASE_URL = 'https://rjljbmbuegqerhxyaypq.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_wb_4KDrnvRc39ZaUfsUFxw_3Cvy1cxC'
+export const SUPABASE_URL = 'https://rjljbmbuegqerhxyaypq.supabase.co'
+export const SUPABASE_KEY = 'sb_publishable_wb_4KDrnvRc39ZaUfsUFxw_3Cvy1cxC'
 const BUCKET = 'ocr-samples'
 const RETRY_MS = 5 * 60 * 1000
 

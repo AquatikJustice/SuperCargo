@@ -36,6 +36,7 @@ export const IPC = {
   ocrPreview: 'ocr:preview',
   ocrRun: 'ocr:run',
   ocrSaveSample: 'ocr:saveSample',
+  ocrReportAccuracy: 'ocr:reportAccuracy',
   ocrRequestCapture: 'ocr:requestCapture',
 
   contractDataStatus: 'contractData:status',

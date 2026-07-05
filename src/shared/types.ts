@@ -78,6 +78,15 @@ export interface GridView {
   target: [number, number, number]
 }
 
+export interface OcrEditTally {
+  commodity?: number
+  scu?: number
+  destination?: number
+  pickup?: number
+  reward?: number
+  boxSize?: number
+}
+
 export interface AppSettings {
   gameLogPath: string
   gameChannel: GameChannel
@@ -105,6 +114,15 @@ export interface AppSettings {
   /** keep + upload each confirmed capture to train the shared OCR model */
   contributeTrainingData: boolean
   telemetryClientId: string
+
+  /** anonymous usage snapshot on launch (unique-user count, engine, ships hauled, OCR accuracy, toggles); on by default */
+  shareUsageStats: boolean
+  /** OCR read accuracy, tallied at review: fields OCR attempted vs fields the user had to correct */
+  ocrFieldsTotal?: number
+  ocrFieldsEdited?: number
+  ocrEdits?: OcrEditTally
+  /** last usage ping, ISO; throttles pings to ~once a day */
+  lastUsagePingAt?: string
 
   alwaysOnTop: boolean
   theme: 'dark' | 'light'

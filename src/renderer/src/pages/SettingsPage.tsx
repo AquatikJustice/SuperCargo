@@ -576,6 +576,23 @@ export default function SettingsPage(): React.ReactElement {
         </div>
       )}
 
+      <Section title="USAGE STATS" />
+      <div style={rowStyle}>
+        <span style={keyStyle}>Share anonymous stats</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <Toggle
+            on={settings.shareUsageStats}
+            onClick={() => void updateSettings({ shareUsageStats: !settings.shareUsageStats })}
+          />
+          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, lineHeight: 1.6, maxWidth: 540 }}>
+            Send a small anonymous snapshot on launch so we can see how many people use SuperCargo and which
+            features matter: which OCR engine you use and how accurately it reads your contracts, the ships you
+            haul with, and a handful of toggle settings. No accounts, no personal info, never your contracts or
+            screenshots. On by default.
+          </span>
+        </div>
+      </div>
+
       <Section title="ABOUT" />
       <AboutBlock />
     </div>

@@ -2,7 +2,7 @@ import React from 'react'
 import { C, F } from '../theme'
 
 // shown in onboarding and settings
-export const PRIVACY_UPDATED = '2026-06-21'
+export const PRIVACY_UPDATED = '2026-07-05'
 
 interface Section {
   heading: string
@@ -14,7 +14,7 @@ const SECTIONS: Section[] = [
     heading: 'The short version',
     body: [
       'SuperCargo runs entirely on your PC. It reads your Star Citizen game log and (if you turn it on) takes screenshots of your screen to read your hauling contracts and build your manifest.',
-      'Nothing is uploaded anywhere unless you explicitly opt in to help improve the text recognition, and even then it is anonymous. There are no accounts, no ads, and no tracking.'
+      'The only thing sent by default is a small anonymous usage snapshot (how many people use the app and which features get used); you can turn it off in Settings. Everything else - the OCR training uploads - is strictly opt-in. There are no accounts and no ads.'
     ]
   },
   {
@@ -41,6 +41,14 @@ const SECTIONS: Section[] = [
     ]
   },
   {
+    heading: 'Anonymous usage stats (on by default)',
+    body: [
+      'On launch SuperCargo sends a small anonymous snapshot so we can see roughly how many people use it and which features are worth our time: a random device ID, the app version and platform, which OCR engine you use and how accurately it reads your contracts (how many of the fields it reads you have to correct), the ships you have hauled with, and a few toggle settings (like the cargo-spacing option).',
+      'It is tied only to the random ID, not to your name, account, or computer. It never includes your contracts, screenshots, game log, or any personal information. It is sent at most about once a day.',
+      'You can turn it off any time under Settings > Usage Stats; turning it off stops all future snapshots.'
+    ]
+  },
+  {
     heading: 'Where your data lives',
     body: [
       "Your settings, manifest, history, and any saved OCR samples are stored in SuperCargo's folder in your operating system's local application-data directory. Removing the app and that folder removes them."
@@ -49,7 +57,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'What it does NOT do',
     body: [
-      'No user accounts or sign-in. No advertising or third-party analytics. Your data is never sold. The only network traffic is: UEXcorp syncing (if you add a key), update checks, and opt-in training uploads.'
+      'No user accounts or sign-in. No advertising, no third-party analytics or ad trackers. Your data is never sold. The only network traffic is: the anonymous usage snapshot (off if you disable it), UEXcorp syncing (if you add a key), update checks, and opt-in training uploads.'
     ]
   },
   {

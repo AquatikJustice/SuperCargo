@@ -19,6 +19,7 @@ import type {
   DisplayInfo,
   OcrEngineInfo,
   OcrResult,
+  OcrEditTally,
   ContractDataStatus,
   DataSyncResult
 } from '@shared/types'
@@ -91,6 +92,11 @@ const api = {
     text: string
     fields?: Record<string, unknown>
   }): Promise<boolean> => ipcRenderer.invoke(IPC.ocrSaveSample, payload),
+  ocrReportAccuracy: (payload: {
+    attempted: number
+    edited: number
+    byField: OcrEditTally
+  }): void => ipcRenderer.send(IPC.ocrReportAccuracy, payload),
   onOcrResult: (cb: (r: OcrResult) => void): Unsubscribe => on(IPC.evtOcrResult, cb),
   onOcrStatus: (cb: (s: string) => void): Unsubscribe => on(IPC.evtOcrStatus, cb),
   requestOcrCapture: (missionId: string): void =>
