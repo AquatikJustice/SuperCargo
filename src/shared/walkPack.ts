@@ -93,9 +93,10 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
-// The biggest box lands narrow-and-deep and sets the block's depth. A later box
-// that would push the block deeper gets laid flat instead, as long as flat keeps
-// it within the depth already claimed. Square boxes never turn; they just stack.
+// Boxes hug the wall long-and-deep while they fit inside the depth this stop has
+// already claimed. Once a box would open a new row past that, it turns 90° away
+// from the wall so the last row lies shallow, keeping the stop's footprint thin
+// and leaving the shorter boxes to stack on top of it. Square boxes never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -110,20 +111,11 @@ function findSpot(
 
   const narrow = firstFit(s, w, l, h, minZ, stop)
   if (w === l) return narrow ? { ...narrow, rotated: false } : null
-
-  // narrow stays narrow while it doesn't reach past the block we've built
   if (narrow && (blockZ === 0 || narrow.z + narrow.fl <= blockZ)) return { ...narrow, rotated: false }
 
-  // it would deepen the block; lay it flat if flat tucks inside the current depth
-  if (blockZ > 0) {
-    const flat = firstFit(s, l, w, h, minZ, stop)
-    if (flat && flat.z + flat.fl <= blockZ) return { ...flat, rotated: true }
-  }
-
-  // nothing shallow fits, so take whatever seats it and never strand the box
-  if (narrow) return { ...narrow, rotated: false }
   const flat = firstFit(s, l, w, h, minZ, stop)
-  return flat ? { ...flat, rotated: true } : null
+  if (flat) return { ...flat, rotated: true }
+  return narrow ? { ...narrow, rotated: false } : null
 }
 
 export interface RunOpts {
