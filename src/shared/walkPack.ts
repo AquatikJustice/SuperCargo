@@ -105,11 +105,26 @@ function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number
   return null
 }
 
-// A stop keeps its block thin front-to-back: each box takes the spot nearest the
-// front, and a tie turns it across the bay so the wall column stacks tall before
-// the aisle strip fills. Only once that whole slice is packed does the next one
-// open, so a stop never scatters a lone box into a fresh row behind a full column.
-// Square boxes never turn.
+// Is the wall side between this deep box and the wall packed solid to the box's
+// full depth, floor to ceiling? False when the box sits right against the wall.
+function aisleFlush(s: Bay, spot: { x: number; z: number; fw: number; fl: number }, stop: number): boolean {
+  const g = s.grid
+  const from = s.wallHigh ? spot.x + spot.fw : 0
+  const to = s.wallHigh ? g.w : spot.x
+  if (from >= to) return false
+  for (let x = from; x < to; x++)
+    for (let z = spot.z; z < spot.z + spot.fl; z++)
+      for (let y = 0; y < g.h; y++) {
+        const i = idx(g, x, y, z)
+        if (!s.occ[i] || s.owner[i] !== stop) return false
+      }
+  return true
+}
+
+// A stop packs its wall side solid — turning boxes across the bay and stacking
+// them tall — to a box's full depth before it ever drops one into the leftover
+// aisle strip, so the block builds front-to-back on the wall first and the aisle
+// only fills once it sits flush against it. Square boxes never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -132,7 +147,8 @@ function findSpot(
 
   const flat = firstFit(s, l, w, h, minZ, stop)   // turned across the bay: wide, shallow
   const narrow = firstFit(s, w, l, h, minZ, stop) // long into the bay: deep
-  if (flat && (!narrow || flat.z <= narrow.z)) return { ...flat, rotated: true }
+  if (narrow && aisleFlush(s, narrow, stop)) return { ...narrow, rotated: false }
+  if (flat) return { ...flat, rotated: true }
   return narrow ? { ...narrow, rotated: false } : null
 }
 
