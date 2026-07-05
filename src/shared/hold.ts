@@ -273,20 +273,33 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   const capped = blockEnd > d0 ? blockEnd : bay.dl
 
   const wallC = (cwf: number, i: number): number => (bay.wallHigh ? bay.cw - cwf - i : i)
+  const underAt = (c: number, d: number, y: number): Slot | undefined =>
+    rivals.find((r) => r.y + r.h === y && c >= r.c && c < r.c + r.cw && d >= r.d && d < r.d + r.dl)
+
+  // never auto-rest a box on another stop's cargo: fits() would allow it on a
+  // pinned box, but a pin's cross-stop relaxation is for hand-moves, not the
+  // packer. Stops share a footprint only when the user drags one there.
+  const ownSupport = (t: Slot): boolean => {
+    if (t.y === 0) return true
+    for (let dd = 0; dd < t.dl; dd++)
+      for (let dc = 0; dc < t.cw; dc++) {
+        const u = underAt(t.c + dc, t.d + dd, t.y)
+        if (u && !u.anchor && u.stop !== t.stop) return false
+      }
+    return true
+  }
   const test = (c: number, d: number, y: number, cwf: number, dlf: number): Slot | null => {
     if (c < 0 || c + cwf > bay.cw || d < d0 || d + dlf > bay.dl || y + dims.h > bay.h) return null
     const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
-    return fits(rivals, t, gap, aboardAtLoad) ? t : null
+    return fits(rivals, t, gap, aboardAtLoad) && ownSupport(t) ? t : null
   }
 
-  // every cell under the footprint is a strictly bigger box
+  // every cell under the footprint is a strictly bigger box of this stop
   const onBigger = (c: number, d: number, y: number, cwf: number, dlf: number): boolean => {
     for (let dd = 0; dd < dlf; dd++)
       for (let dc = 0; dc < cwf; dc++) {
-        const u = rivals.find(
-          (r) => r.y + r.h === y && c + dc >= r.c && c + dc < r.c + r.cw && d + dd >= r.d && d + dd < r.d + r.dl
-        )
-        if (!u || u.fixture || u.box.size <= size) return false
+        const u = underAt(c + dc, d + dd, y)
+        if (!u || u.fixture || u.stop !== probe.stop || u.box.size <= size) return false
       }
     return true
   }
@@ -437,7 +450,7 @@ function findSpot(
                 !under ||
                 !(
                   (under.anchor && !under.fixture) ||
-                  ((under.stop === t.stop || under.pinned) && containsWindow(under, t) && under.box.size >= t.box.size)
+                  (under.stop === t.stop && containsWindow(under, t) && under.box.size >= t.box.size)
                 )
               )
                 held = false
