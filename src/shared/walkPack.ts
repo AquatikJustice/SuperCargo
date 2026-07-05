@@ -105,11 +105,11 @@ function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number
   return null
 }
 
-// A stop turns its long boxes across the bay (wide and shallow) and stacks them
-// tall against the wall, so the block stays thin front-to-back. Once the wall
-// column is full to the ceiling, the leftover strip by the aisle takes a box laid
-// long-into-the-bay, with the shorter boxes stacking on top of it. Square boxes
-// never turn.
+// A stop keeps its block thin front-to-back: each box takes the spot nearest the
+// front, and a tie turns it across the bay so the wall column stacks tall before
+// the aisle strip fills. Only once that whole slice is packed does the next one
+// open, so a stop never scatters a lone box into a fresh row behind a full column.
+// Square boxes never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -130,14 +130,9 @@ function findSpot(
 
   if (w === l) { const sq = firstFit(s, w, l, h, minZ, stop); return sq ? { ...sq, rotated: false } : null }
 
-  const flat = firstFit(s, l, w, h, minZ, stop) // turned across the bay: wide, shallow
-  if (flat && (blockZ === 0 || flat.z + flat.fl <= blockZ)) return { ...flat, rotated: true }
-
-  // wall column is full; drop a deep box into the leftover strip at the front
-  const narrow = firstFit(s, w, l, h, minZ, stop)
-  if (narrow && narrow.z < blockZ) return { ...narrow, rotated: false }
-
-  if (flat) return { ...flat, rotated: true }
+  const flat = firstFit(s, l, w, h, minZ, stop)   // turned across the bay: wide, shallow
+  const narrow = firstFit(s, w, l, h, minZ, stop) // long into the bay: deep
+  if (flat && (!narrow || flat.z <= narrow.z)) return { ...flat, rotated: true }
   return narrow ? { ...narrow, rotated: false } : null
 }
 
