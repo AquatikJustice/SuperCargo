@@ -736,9 +736,6 @@ export const useStore = create<StoreState>((set, get) => {
           scheduleReroute()
           return
         }
-        // shared missions fire a bogus "Player left" abandon mid-haul during party churn; the real
-        // end still arrives, so ignore this one
-        if (e.completion === 'Abandon' && /left/i.test(e.reason ?? '')) return
         // coalesce against a disconnect wipe
         if (e.completion === 'Abandon' || e.completion === 'Fail') {
           queueEnd(e.missionId, e.completion === 'Fail' ? 'failed' : 'abandoned')
