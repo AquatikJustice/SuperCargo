@@ -408,9 +408,8 @@ function materialize(
   return { stops, totalDistance: total, peakLoad: peak }
 }
 
-// walk stop by stop asking the live hold; then the whole pass is checked by
-// the layout engine, and pickups it can't house yet are sent later in the
-// run until everything has a home
+// walk stop by stop against the live hold, then re-check the whole pass with
+// the layout engine; pickups it can't house yet get pushed later in the run
 function planMultiTrip(input: RouteInput): RouteResult {
   const { dist } = input
   const cap = input.capacity
@@ -458,8 +457,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       aboard.some((j) => j.dest === c) ||
       [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
 
-    // deferred cargo (the user's, or what the layout couldn't house) waits
-    // until everything else is delivered
+    // deferred cargo (user's, or what the layout couldn't house) waits until everything else is delivered
     const deferred = new Set([...userDeferred, ...lateSet])
     const nonDeferredLeft = (): boolean =>
       [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
@@ -774,8 +772,7 @@ function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadE
     }
     return { load, drop }
   })
-  // cargo aboard before the walk begins loads in one pre-walk event, so the
-  // layout judge sees the ship as full as it really is
+  // cargo aboard before the walk begins loads as one pre-walk event, so the layout judge sees the ship as full as it really is
   if (preload?.length) {
     const load: PackBox[] = []
     for (const j of preload)
@@ -787,8 +784,8 @@ function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadE
   return events
 }
 
-// can the layout engine house every box across the whole pass? An optimal
-// order survives a few declared digs; only a homeless box rejects it
+// can the layout engine house every box across the whole pass? a few declared
+// digs are fine; only a box with no home rejects the order
 function singlePassPacks(
   stops: PlannedStop[],
   jobs: IJob[],
@@ -798,17 +795,14 @@ function singlePassPacks(
   return planHold(bays, passEvents(stops, jobs), { fixtures }).snaps.every((s) => s.unplaced.length === 0)
 }
 
-// a later visit that exists only to fetch cargo collapses into an earlier
-// visit of the same node when the hold takes those boxes cleanly there:
-// fewer stops beats distance, so if the space exists this was simply the
-// better route all along
+// a later fetch-only visit folds into an earlier visit of the same node when
+// the hold can take those boxes there. fewer stops beats distance.
 function pullForward(res: RouteResult, input: RouteInput): RouteResult {
   if (!res.feasible || !input.bays || res.stops.length < 2) return res
   const jobs = indexedJobs(input.jobs)
   const scuOf = new Map(jobs.map((j) => [j.idx, j.scu]))
-  // each probe is a full layout judge; keep a hard budget so a wave-heavy
-  // multitrip route can't turn a reroute into seconds. An accepted merge
-  // deletes a real visit, so it buys more probing
+  // each probe is a full layout judge; cap it so a wave-heavy multitrip route
+  // can't turn a reroute into seconds. an accepted merge buys more probing.
   let judges = 0
   let budget = 7
   const judge = (stops: PlannedStop[]): { lost: number; conc: number } => {
@@ -826,7 +820,7 @@ function pullForward(res: RouteResult, input: RouteInput): RouteResult {
   while (changed && judges < budget) {
     changed = false
     // fetch-only revisits, cheapest cargo first; a merge that busts raw
-    // capacity on the legs between is dead on arithmetic alone, no judge
+    // capacity on the legs between fails on arithmetic, no judge needed
     const cands: Array<{ j: number; i: number; scu: number }> = []
     for (let j = stops.length - 1; j > 0; j--) {
       const s2 = stops[j]
@@ -889,8 +883,8 @@ export function planRoute(input: RouteInput): RouteResult {
     input = { ...input, capacity: Math.max(1, input.capacity - scu) }
   }
   const res = solveRoute(input)
-  // a hand-ordered route is the user's word; a seeded mid-run solve skips the
-  // merge pass: pullForward's judge and its load math can't see cargo aboard
+  // hand-ordered routes are the user's word; a seeded mid-run solve skips the
+  // merge pass since pullForward's judge and load math can't see cargo aboard
   return res.method === 'manual' || input.aboard?.size ? res : pullForward(res, input)
 }
 
@@ -906,8 +900,8 @@ function solveRoute(input: RouteInput): RouteResult {
 
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
 
-  // user-deferred cargo forces a later trip, and cargo already aboard needs
-  // the live walker; the single-pass optimizer can't express either
+  // deferred cargo forces a later trip and aboard cargo needs the live walker;
+  // the single-pass optimizer can't express either
   if ((input.deferred && input.deferred.size) || (input.aboard && input.aboard.size)) return planMultiTrip(input)
 
   // a single pass that fits is optimal

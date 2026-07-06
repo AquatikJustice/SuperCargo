@@ -9,7 +9,7 @@ export default function Onboarding(): React.ReactElement {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
 
-  // upload defaults off, more sensitive
+  // uploads default off, capture on
   const [capture, setCapture] = useState(true)
   const [contribute, setContribute] = useState(settings.contributeTrainingData)
   const [showPolicy, setShowPolicy] = useState(false)
@@ -64,8 +64,8 @@ export default function Onboarding(): React.ReactElement {
           onToggle={() => setCapture((v) => !v)}
           recommended
         >
-          Your game log doesn't include some info, so SuperCargo takes a screenshot of the contract so it can read it.
-          This stays only on your PC unless you enable sharing below.
+          The game log leaves out a few details, so SuperCargo screenshots the contract to read them.
+          It stays on your PC unless you turn on sharing below.
         </ConsentCard>
 
         <ConsentCard

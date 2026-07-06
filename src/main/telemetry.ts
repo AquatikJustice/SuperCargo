@@ -1,5 +1,4 @@
-// opt-in ocr upload, queued + retried
-// insert-only bucket, key can't read
+// opt-in OCR sample upload, queued + retried. insert-only bucket, the key can't read it back.
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
@@ -46,7 +45,6 @@ function saveQueue(): void {
 }
 
 async function putObject(objectPath: string, body: Buffer, contentType: string): Promise<boolean> {
-  // no x-upsert, no SELECT policy
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${objectPath}`, {
     method: 'POST',
     headers: {
@@ -71,17 +69,17 @@ async function processQueue(): Promise<void> {
       if (!fs.existsSync(png) || !fs.existsSync(json)) continue
       try {
         const okPng = await putObject(`${item.clientId}/${item.id}.png`, fs.readFileSync(png), 'image/png')
-        // skip label if image rejected
+        // skip the label if the image didn't land
         const okJson = okPng && await putObject(`${item.clientId}/${item.id}.json`, fs.readFileSync(json), 'application/json')
         if (okPng && okJson) {
           fs.unlinkSync(png)
           fs.unlinkSync(json)
           queue.uploaded++
         } else {
-          remaining.push(item) // retry later
+          remaining.push(item)
         }
       } catch {
-        remaining.push(item) // retry later
+        remaining.push(item)
       }
     }
     queue.items = remaining

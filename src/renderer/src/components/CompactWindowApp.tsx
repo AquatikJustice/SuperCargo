@@ -6,7 +6,7 @@ import { offGridByObjective, objectiveStops } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
 const GREEN = '#8fe9b0'
-// content design width; the window scales to BASE_W * overlayScale (see main/positionCompact)
+// window scales to BASE_W * overlayScale (see main/positionCompact)
 const BASE_W = 332
 
 export default function CompactWindowApp(): React.ReactElement {
@@ -86,7 +86,7 @@ export default function CompactWindowApp(): React.ReactElement {
   const dropLines = here.filter((s) => s.kind === 'drop').flatMap((s) => s.lines)
   const loadLines = here.filter((s) => s.kind === 'load').flatMap((s) => s.lines)
   const offGrid = useMemo(() => offGridByObjective(contracts, looseBoxes), [contracts, looseBoxes])
-  // same per-objective stop colors the grid paints, so the overlay reads as one design
+  // reuse the grid's per-objective stop colors
   const { color: objColor } = useMemo(() => objectiveStops(route), [route])
   const dropOffGrid = dropLines
     .map((l) => ({ commodity: l.commodity, color: objColor.get(l.objectiveId), tally: offGrid.get(l.objectiveId) }))

@@ -389,7 +389,7 @@ export default function SettingsPage(): React.ReactElement {
             )
           })}
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, flexBasis: '100%', lineHeight: 1.6 }}>
-            Window: keeps SuperCargo out of the shot, fine on one monitor. Display: for exclusive fullscreen.
+            Window keeps SuperCargo out of the shot and works on a single monitor. Display is for exclusive fullscreen.
           </span>
         </div>
       </div>
@@ -495,7 +495,7 @@ export default function SettingsPage(): React.ReactElement {
             }
           />
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, lineHeight: 1.6, maxWidth: 540 }}>
-            Send the contract screenshots and your reviewed text to improve OCR accuracy. It’s anonymous and disabled by default.
+            Send the contract screenshots and your reviewed text to improve OCR accuracy. Anonymous, and off by default.
           </span>
         </div>
       </div>
@@ -587,7 +587,7 @@ export default function SettingsPage(): React.ReactElement {
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim, lineHeight: 1.6, maxWidth: 540 }}>
             Send a small anonymous snapshot on launch so we can see how many people use SuperCargo and which
             features matter: which OCR engine you use and how accurately it reads your contracts, the ships you
-            haul with, and a handful of toggle settings. No accounts, no personal info, never your contracts or
+            haul with, and a few toggle settings. No accounts, no personal info, never your contracts or
             screenshots. On by default.
           </span>
         </div>

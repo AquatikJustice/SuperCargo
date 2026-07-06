@@ -1,12 +1,11 @@
 // anonymous launch snapshot: unique-user count + which features get used.
-// insert-only table, publishable key can't read it back.
+// insert-only table, the publishable key can't read it back.
 import type { AppSettings, HistoryEntry } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
 const TABLE = 'usage_pings'
-const MIN_GAP_MS = 20 * 60 * 60 * 1000 // ~once a day per user
+const MIN_GAP_MS = 20 * 60 * 60 * 1000 // roughly once a day per user
 
-// every ship the user has finished (or partly finished) a contract with
 export function completedShips(entries: HistoryEntry[]): string[] {
   const ships = new Set<string>()
   for (const e of entries) {
@@ -32,7 +31,7 @@ function snapshot(settings: AppSettings, appVersion: string, ships: string[]): R
   }
 }
 
-// returns the sent-at ISO on success so the caller can persist the throttle stamp, else null
+// returns the sent-at ISO on success (for the throttle stamp), else null
 export async function maybePing(
   settings: AppSettings,
   appVersion: string,

@@ -41,8 +41,7 @@ export default function TopBar(): React.ReactElement {
   const appVersion = useStore((s) => s.appVersion)
   const reviewCount = useStore((s) => s.scanQueue.length)
   const openScanReview = useStore((s) => s.openScanReview)
-  // stay compact up to the window's min width so the floor lands in the clean icon-only bar;
-  // above it the full bar returns and the ship name ellipsizes if the wide layout is tight
+  // below the window min width, collapse to the icon-only bar
   const narrow = useNarrow(960)
 
   return (
@@ -59,8 +58,7 @@ export default function TopBar(): React.ReactElement {
         gap: 12
       }}
     >
-      {/* left group yields and the ship name ellipsizes before anything can overlap the controls
-          (no overflow:hidden here - it would clip the ship/run dropdowns) */}
+      {/* no overflow:hidden here or it clips the ship/run dropdowns */}
       <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 'none' }}>
           <Logo />

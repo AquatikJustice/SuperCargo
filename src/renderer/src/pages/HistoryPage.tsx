@@ -15,7 +15,7 @@ const STATUS_COLOR: Record<HistoryStatus, string> = {
 
 type Filter = 'all' | 'completed' | 'abandoned'
 
-// the game's logged award beats the reward-derived estimate when we have it
+// prefer the game's logged award over the reward estimate
 const netPayout = (h: HistoryEntry): number => h.actualPayout ?? h.payout
 
 function fmtDate(iso: string): string {

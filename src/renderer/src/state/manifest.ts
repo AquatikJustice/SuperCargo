@@ -102,8 +102,8 @@ export interface DerivedContract {
 // hidden while capture modal open
 export const isHeld = (c: HaulingContract): boolean => !!c.pendingOcr
 
-// a terminal can be visited on more than one trip, so a pickup check-off is keyed by node + trip,
-// otherwise the same terminal's buttons toggle together across trips (#24)
+// key check-offs by node + trip: a terminal visited on two trips would otherwise
+// toggle both its buttons at once (#24)
 export const pickupVisitKey = (nodeKey: string, trip?: number): string => `${nodeKey}#${trip ?? 0}`
 
 export const activeContracts = (contracts: HaulingContract[]): HaulingContract[] =>
@@ -263,8 +263,8 @@ export function deriveStopsWithPickups(
   return out
 }
 
-// number the drop-offs in route order and hand each objective its stop color, so
-// the grid, the loading panel, and the compact overlay all key off the same map
+// drop-offs numbered in route order, each objective given its stop color, so grid,
+// loading panel and compact overlay all key off the same map
 export function objectiveStops(route: RoutePlan | null): {
   num: Map<string, number>
   color: Map<string, string>
@@ -418,8 +418,8 @@ export interface OffGridTally {
   breakdown: string
 }
 
-// which of an objective's boxes the user parked off-grid, from the loose key set
-// (keys are `objectiveId#slot`, slot indexing into boxList like the packer sees them)
+// which of an objective's boxes got parked off-grid; loose keys are `objectiveId#slot`,
+// slot indexing into boxList the way the packer sees them
 export function looseForObjective(
   objectiveId: string,
   boxes: HaulingContract['objectives'][number]['boxes'],

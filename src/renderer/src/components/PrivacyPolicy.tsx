@@ -14,7 +14,7 @@ const SECTIONS: Section[] = [
     heading: 'The short version',
     body: [
       'SuperCargo runs entirely on your PC. It reads your Star Citizen game log and (if you turn it on) takes screenshots of your screen to read your hauling contracts and build your manifest.',
-      'The only thing sent by default is a small anonymous usage snapshot (how many people use the app and which features get used); you can turn it off in Settings. Everything else - the OCR training uploads - is strictly opt-in. There are no accounts and no ads.'
+      'The only thing sent by default is a small anonymous usage snapshot (how many people use the app and which features get used); you can turn it off in Settings. Everything else, like the OCR training uploads, is strictly opt-in. There are no accounts and no ads.'
     ]
   },
   {

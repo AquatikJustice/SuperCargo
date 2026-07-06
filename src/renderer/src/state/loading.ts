@@ -216,8 +216,8 @@ function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
   return tells
 }
 
-// scu aboard after each loading step (loads add, drops subtract), plus the run's
-// high-water mark. Feeds the live load bar: fill = series[currentStep], tick = peak.
+// scu aboard after each step plus the run's high-water mark; feeds the live
+// load bar (fill = series[currentStep], tick = peak)
 export function loadProfile(steps: LoadingStep[]): { series: number[]; peak: number } {
   const series: number[] = []
   let aboard = 0
@@ -290,10 +290,9 @@ export function buildLoadingSteps(
 }
 
 // a mid-walk come-back pulls the whole pickup out of the frozen walk: its load
-// and drop steps vanish and the deferred cargo waits for the next trip's route.
-// Ticked objectives never filter; that cargo is physically aboard. A grabbed
-// pickup loads at its node's first visit instead of the planned return, and a
-// return visit that empties out drops from the walk.
+// and drop steps vanish and the cargo waits for the next trip. ticked cargo is
+// aboard, so it never filters. a grabbed pickup loads at its node's first visit
+// instead of the planned return.
 export function filterDeferredSteps(
   steps: LoadingStep[],
   deferred: ReadonlySet<string>,
@@ -305,8 +304,8 @@ export function filterDeferredSteps(
   const movedFrom = new Map<number, Set<string>>()
   const movedTo = new Map<number, LoadingStep['lines']>()
   if (grabbed?.size) {
-    // grabs land on the last load step of the node's FIRST visit, so they
-    // sit at or ahead of wherever the user stood when they grabbed
+    // grabs land on the last load step of the node's first visit, so they sit
+    // at or ahead of where the user stood when they grabbed
     const target = new Map<string, number>()
     let i = 0
     while (i < steps.length) {
@@ -316,8 +315,8 @@ export function filterDeferredSteps(
       while (e < steps.length && steps[e].nodeKey === steps[i].nodeKey) {
         if (steps[e].kind === 'load') {
           lastLoad = e
-          // a visit whose loads are all ticked is behind the walker; landing
-          // grabbed cargo there files it into the past, unreachable
+          // a visit with all loads ticked is behind the walker; grabbed cargo
+          // dropped there would be unreachable
           if (!steps[e].loadIds.length || steps[e].loadIds.some((id) => !ticked(id))) open = true
         }
         e++
@@ -340,7 +339,7 @@ export function filterDeferredSteps(
   steps.forEach((s, i) => {
     const away = movedFrom.get(i)
     const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId))
-    // grabbed pickups join the visit as their OWN steps, one per destination:
+    // grabbed pickups join the visit as their own steps, one per destination;
     // lumping them into another group's step loads two groups in one tick
     const emitGrabbed = (): void => {
       const incoming = movedTo.get(i)

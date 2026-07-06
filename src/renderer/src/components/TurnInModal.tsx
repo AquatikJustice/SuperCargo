@@ -140,7 +140,7 @@ export default function TurnInModal({
           {onSkip && (
             <Btn
               onClick={onSkip}
-              title="Move on without marking it"
+              title="Move on without marking anything"
               style={{ border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 12, letterSpacing: '0.1em', padding: '9px 14px', cursor: 'pointer' }}
               hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
             >

@@ -4,7 +4,7 @@
 
 A desktop app for Star Citizen haulers who stack a pile of contracts into one run.
 It pulls everything into a single manifest: box-size math, a route that orders your
-stops, a 3D loading guide, and per-run earnings, all in a holographic mobiGlas-style
+stops, a 3D loading guide, and per-run earnings, in a holographic mobiGlas-style
 interface.
 
 **New here? Read the [FAQ](FAQ.md). Questions, bugs, or feature ideas? Join the community on [Discord](https://discord.gg/p9V78wKqq).**
@@ -39,7 +39,7 @@ If you hit problems, please open an issue with your distro and what happened.
 - **Manifest.** Every active contract's cargo in one place, grouped by destination or by
   contract, with per-stop SCU and box totals and a color-coded hold-capacity bar.
 - **Auto-loading mode.** Follows your route and tells you what to load at each pickup, where to put it
-  on your ship, and what to drop along the way, so a multi-pickup run turns into a checklist.
+  on your ship, and what to drop along the way. A multi-pickup run becomes a checklist.
 - **Manual loading mode.** Would rather pack it your own way? Place every box in the 3D hold by hand.
 - **Route optimization.** Orders your stops to cut down on travel. Drag to override whenever you
   want.
@@ -108,12 +108,11 @@ Click any shot to view it full size.
 ## Privacy
 
 SuperCargo runs on your PC. It sends a small **anonymous** usage snapshot on launch so we can
-see roughly how many people use it and which features are worth developing - a random device ID,
-app version, which OCR engine you use and how accurately it reads your contracts, the ships you
-haul with, and a few toggle settings. It never
-includes your contracts, screenshots, or any personal information, and you can turn it off under
-**Settings -> Usage Stats**. Everything else that leaves your machine (OCR training uploads) is
-strictly opt-in.
+see roughly how many people use it and which features are worth developing. That snapshot is a
+random device ID, app version, which OCR engine you use and how accurately it reads your
+contracts, the ships you haul with, and a few toggle settings. It never includes your contracts,
+screenshots, or any personal information, and you can turn it off under **Settings -> Usage
+Stats**. Everything else that leaves your machine (OCR training uploads) is strictly opt-in.
 
 ## Credits
 

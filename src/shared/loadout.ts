@@ -21,9 +21,8 @@ export interface LooseSummary {
   scu: number
 }
 
-// Roll a set of off-grid boxes into a readable list: how many of each commodity,
-// at what size, bound where. Feeds the riding-loose tally and the "grab your loose
-// cargo" reminder at each drop.
+// roll off-grid boxes into a readable list: how many of each commodity, what
+// size, bound where. Feeds the riding-loose tally and the grab-your-cargo reminder.
 export function looseSummary(boxes: PackBox[]): LooseSummary {
   const by = new Map<string, LooseGroup>()
   for (const b of boxes) {
@@ -50,7 +49,7 @@ export interface SetAside {
   blocked: PackBox[]
 }
 
-// Boxes you physically lift out of the way to unload in delivery order. Not the
+// boxes you physically lift out of the way to unload in delivery order. Not the
 // trapped boxes (provePeel counts those) but the ones sitting in front of them.
 // "2 to shuffle" hides that you move fifteen 32-SCU cans to reach them; this is
 // the honest number.
@@ -95,10 +94,10 @@ export interface BucketDecision {
   digBoxes: PackBox[]
 }
 
-// what a pickup bucket needs the user to decide: it won't fit (overload), it buries
-// earlier-delivery cargo you'll dig out (digout), or nothing (just load it). The dig-out
-// cost is this bucket's own set-aside boxes, so the count matches why the card showed up
-// instead of a whole-hold tally that drags in stops you're nowhere near yet.
+// what a pickup bucket needs the user to decide: won't fit (overload), buries
+// earlier-delivery cargo you'll dig out (digout), or nothing (just load it). The
+// dig-out cost is this bucket's own set-aside boxes, so the count matches why the
+// card showed up instead of a whole-hold tally dragging in far-off stops.
 export function bucketDecision(
   setAside: SetAside,
   unplaced: PackBox[],
@@ -114,17 +113,17 @@ const toOcc = (p: Placement, stopIdx: number): Occupied => ({
   gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, stopIdx
 })
 
-// far edge of a placement measured from its bay's exit: the depth the NEXT box behind
-// it must clear. Later-delivery cargo has to sit past this to peel out cleanly.
+// far edge of a placement from its bay's exit: the depth the next box behind it
+// must clear. Later-delivery cargo sits past this to peel out cleanly.
 function farDepth(g: CargoGrid, p: Placement): number {
   const e = g.exit ?? DEFAULT_EXIT
   return e.axis === 'z' ? (e.dir === -1 ? p.z + p.l : g.l - p.z) : e.dir === -1 ? p.x + p.w : g.w - p.x
 }
 
-// a fake occupancy sealing the shallow space IN ONE PLACEMENT'S LANE, from the exit up to the
-// far edge of that box, full height. Forces later-delivery cargo to sit behind this box so it
-// peels clean, but only in the lane this box actually occupies. Other lanes stay usable, so a
-// late-delivery box can still fill genuinely-empty shallow space instead of hitting a false wall.
+// fake occupancy sealing the shallow space in one placement's lane, from the exit
+// to the far edge of that box, full height. Forces later-delivery cargo behind it
+// so it peels clean, but only in this box's own lane. Other lanes stay usable, so
+// a late box can still fill genuinely-empty shallow space, not hit a false wall.
 function laneShadow(g: CargoGrid, p: Placement): Occupied | null {
   const e = g.exit ?? DEFAULT_EXIT
   const D = Math.min(farDepth(g, p), e.axis === 'z' ? g.l : g.w)
@@ -139,11 +138,11 @@ function laneShadow(g: CargoGrid, p: Placement): Occupied | null {
     : { ...base, x: g.w - D, z: p.z, w: D, l: p.l }
 }
 
-// Interval loadout: assign every box ONE permanent slot up front, in delivery order.
-// Two boxes only contend for cells if their aboard windows overlap, so a delivered
-// box's space is reclaimed for later cargo (no false over-capacity). Each box is laid
-// BEHIND the earlier-delivery cargo it shares the hold with (via a per-bay depth floor),
-// so the arrangement peels cleanly at every step and nothing ever has to move.
+// Interval loadout: assign every box one permanent slot up front, in delivery
+// order. Two boxes contend for cells only if their aboard windows overlap, so a
+// delivered box's space is reclaimed for later cargo (no false over-capacity).
+// Each box lays behind the earlier-delivery cargo it shares the hold with (via a
+// per-bay depth floor), so it peels cleanly at every step and nothing has to move.
 export interface ScheduleOpts {
   /** box ids the user chose to overload off-grid */
   loose?: ReadonlySet<string>
@@ -169,17 +168,17 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   const dropOf = (id: string): number => dropAt.get(id) ?? events.length
   const overlap = (a: string, b: string): boolean =>
     loadOf(a) < dropOf(b) && loadOf(b) < dropOf(a)
-  // a can hold b up only if it's aboard the whole time b is: loaded no later, gone no earlier.
-  // "same delivery stop" isn't enough (multi-pickup boxes share a stop but load at different
-  // steps), so a box stacked on a later-loading neighbour would hang in the air until it arrives.
+  // a holds b up only if aboard the whole time b is: loaded no later, gone no
+  // earlier. Same stop isn't enough (multi-pickup boxes share a stop but load at
+  // different steps), so a box on a later-loading neighbour would hang mid-air.
   const contains = (a: string, b: string): boolean => loadOf(a) <= loadOf(b) && dropOf(a) >= dropOf(b)
 
   const assigned = new Map<string, Placement>()
   if (pins) for (const [id, p] of pins) { const b = boxOf.get(id); if (b) assigned.set(id, { ...p, box: b }) }
 
-  // Superbucket units: boxes sharing a delivery stop AND a load step, so they share an aboard
-  // window. The frozen wall-packer lays a whole unit as one contiguous block (bucketId keeps a
-  // contract's boxes together); nothing floats inside a unit; two stops never share a unit.
+  // Superbucket units: boxes sharing a delivery stop and a load step, so they
+  // share an aboard window. The wall-packer lays a whole unit as one contiguous
+  // block; nothing floats inside a unit, and two stops never share one.
   const units = new Map<string, PackBox[]>()
   for (const b of boxOf.values()) {
     if (loose?.has(b.id) || pins?.has(b.id)) continue
@@ -190,14 +189,14 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
     (a, b) => a[0].stopIdx - b[0].stopIdx || loadOf(a[0].id) - loadOf(b[0].id)
   )
 
-  // Fill bays deliberately: keep a growing set of OPEN bays and only crack a new one when the
-  // open ones can't seat a unit. That consolidates cargo into the fewest bays and leaves the
-  // rest genuinely empty, instead of the packer grabbing the shallowest open bay every call.
+  // fill bays deliberately: grow a set of open bays, crack a new one only when the
+  // open ones can't seat a unit. Consolidates cargo into the fewest bays and leaves
+  // the rest genuinely empty, instead of grabbing the shallowest open bay every call.
   const seedFor = (bays: CargoGrid[], rep: string, stopIdx: number): Occupied[] => {
     const inBay = new Set(bays.map((g) => g.id))
     const concurrent = [...assigned.values()].filter((p) => inBay.has(p.gridId) && overlap(p.box.id, rep))
     const seed = concurrent.map((p) => toOcc(p, contains(p.box.id, rep) ? stopIdx : -1))
-    // shadow each earlier-delivery box's own lane so this cargo peels out behind it, lane by lane
+    // shadow each earlier-delivery box's lane so this cargo peels out behind it
     for (const p of concurrent) {
       if (p.box.stopIdx >= stopIdx) continue
       const g = gridById.get(p.gridId)
@@ -215,8 +214,8 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   for (const unit of ordered) {
     const rep = unit[0].id
     const stopIdx = unit[0].stopIdx
-    // keep a Superbucket in ONE bay when it fits there: try each open bay alone (fill order),
-    // then a fresh bay. Only when no single bay holds it does it spill across bays.
+    // keep a Superbucket in one bay when it fits: try each open bay alone (fill
+    // order), then a fresh bay. It spills across bays only when none holds it whole.
     let placed: Placement[] | null = null
     for (const b of open) if ((placed = fits([b], rep, stopIdx, unit))) break
     if (!placed) {

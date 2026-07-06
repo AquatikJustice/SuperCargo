@@ -4,8 +4,8 @@ import { desktopCapturer, screen, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
 import type { CropRect, DisplayInfo } from '@shared/types'
 
-// Electron's numeric display id gets reassigned across a full PC reboot, so we key on
-// position+resolution instead, which stays put as long as the physical layout doesn't change.
+// Electron's numeric display id gets reassigned across a reboot, so key on
+// position+resolution instead. Stable as long as the physical layout doesn't move.
 function displayKey(d: Electron.Display): string {
   const b = d.bounds
   return `${b.x}_${b.y}_${b.width}x${b.height}`
@@ -24,7 +24,7 @@ export function listDisplays(): DisplayInfo[] {
 
 function resolveDisplay(displayId: string): Electron.Display {
   if (displayId) {
-    // match the stable key, but still honor an old numeric id saved before this change
+    // stable key, but still honor a numeric id saved before this change
     const found = screen
       .getAllDisplays()
       .find((d) => displayKey(d) === displayId || String(d.id) === displayId)
@@ -50,7 +50,7 @@ function isMostlyBlack(img: NativeImage): boolean {
   return checked > 0 && lit / checked < 0.01
 }
 
-// grab the game window's own surface, so our windows (or anything else) on top of it aren't in the shot
+// grab the game window's own surface so anything on top of it isn't in the shot
 export async function captureGameWindow(): Promise<NativeImage | null> {
   const displays = screen.getAllDisplays()
   const width = Math.max(...displays.map((d) => d.size.width * (d.scaleFactor || 1)))

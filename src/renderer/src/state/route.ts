@@ -187,8 +187,8 @@ function sameLoc(a: Location | null, b: Location | null): boolean {
   return norm(a.name) === norm(b.name) && (a.system ?? '') === (b.system ?? '')
 }
 
-// split a bucket by what physically packs in one go, not raw SCU: a
-// 696-SCU chunk can pass the sum check yet never tile the bays
+// split a bucket by what physically packs in one go, not raw SCU: a big chunk
+// can pass the sum check yet never tile the bays
 function chunkToFit(
   boxes: number[],
   cap: number,
@@ -328,8 +328,7 @@ export function buildRouteModel(
   const jobInfo: JobInfo[] = []
   for (const c of activeContracts(contracts)) {
     for (const o of c.objectives) {
-      // turnedInScu set = already submitted in-game, so it needs no more pickups or drop-offs;
-      // without this a reroute (e.g. after accepting new contracts) re-adds its now-done stations
+      // turnedInScu set = already submitted in-game; skip it so a reroute doesn't re-add its done stations
       if (o.delivered || o.turnedInScu !== undefined) continue
       const destNode = nodeFor(o.destination, true)
       // dedupe, repeats halve scu

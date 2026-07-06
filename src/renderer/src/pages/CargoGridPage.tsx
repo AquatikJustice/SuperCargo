@@ -40,11 +40,9 @@ const locationFont = jetbrainsFont
 
 const LOADING_PANEL_W = 360
 
-// the virtual off-grid pane: a place to stash loose cargo beside the ship. cells,
-// not SCU. the packer never sees it; it's display + drop-target only.
+// off-grid pane: stash loose cargo beside the ship. cells, not SCU. packer never sees it
 const OFF_GRID_ID = 'off-grid'
-const OFF_GAP = 8 // clear space between the ship's last bay and the pane; the
-// STARBOARD floor label lives in this gap, so keep it generous
+const OFF_GAP = 8 // gap holds the STARBOARD floor label too, keep it generous
 
 const STBD_OF: Record<BayDir, BayDir> = { 'z-': 'x+', 'z+': 'x-', 'x+': 'z+', 'x-': 'z-', 'y+': 'x+', 'y-': 'x+' }
 const OPP: Record<BayDir, BayDir> = { 'x+': 'x-', 'x-': 'x+', 'y+': 'y-', 'y-': 'y+', 'z+': 'z-', 'z-': 'z+' }
@@ -120,7 +118,7 @@ function center(p: number, size: number, origin: number): number {
   return p + size / 2 - origin
 }
 
-// authored off-axis spin (e.g. Hull B's diamond), degrees -> radians for the bay group
+// authored bay spin (e.g. Hull B's diamond), deg -> rad
 function bayRot(grid: CargoGrid): [number, number, number] | undefined {
   const r = grid.rot
   return r ? [(r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180] : undefined
@@ -141,10 +139,9 @@ interface Cell {
   h: number
 }
 
-// which boxes are held up by the floor or, transitively, by a box that is.
-// Runs in each bay's own frame (floor axis + face), so a tilted or roof-floored
-// bay resolves the same as a plain y-down one. Anything NOT in this set lost its
-// footing (its supporter was dragged away) and should be left to settle.
+// boxes held up by the floor, or transitively by one that is. Runs in each bay's
+// own frame so a tilted/roof-floored bay resolves like a plain y-down one.
+// Anything not in the set lost its footing and should settle.
 function groundedSet(cells: Cell[], gridById: Map<string, CargoGrid>, pre?: ReadonlySet<string>): Set<string> {
   const pos = (c: Cell, a: Ax): number => (a === 0 ? c.x : a === 1 ? c.y : c.z)
   const ext = (c: Cell, a: Ax): number => (a === 0 ? c.w : a === 1 ? c.h : c.l)
@@ -181,14 +178,13 @@ function groundedSet(cells: Cell[], gridById: Map<string, CargoGrid>, pre?: Read
   return grounded
 }
 
-// world-extent per axis for a hand-held box in this bay: h grows off the
-// floor face, l runs the exit axis, w takes the axis that's left
+// world extents for a hand-held box: h off the floor face, l on the exit axis, w on the rest
 function extentsFor(g: CargoGrid, dims: { w: number; l: number; h: number }, rotated: boolean): [number, number, number] {
   const floor = g.floor ?? 'y-'
   const up = axOf(floor[0])
   const depth = g.exit && axOf(g.exit.axis) !== up ? axOf(g.exit.axis) : up === 2 ? 0 : 2
   const cross = (3 - up - depth) as Ax
-  // a swap on a sky-pointing cross axis stands the box on end
+  // rotating a sky-pointing cross axis would stand the box on end, so skip it
   const rot = rotated && cross !== 1
   const ext: [number, number, number] = [0, 0, 0]
   ext[up] = dims.h
@@ -231,7 +227,7 @@ function Box({
   const wx = (grid.x || 0) + pl.x
   const wy = (grid.y || 0) + pl.y
   const wz = (grid.z || 0) + pl.z
-  // place boxes relative to the bay center so a rotated bay carries its cargo with it
+  // position relative to bay center so a rotated bay carries its cargo along
   const bcx = center(grid.x || 0, grid.w, origin[0])
   const bcy = center(grid.y || 0, grid.h, origin[1])
   const bcz = center(grid.z || 0, grid.l, origin[2])
@@ -245,9 +241,8 @@ function Box({
   const W = pl.w - GAP
   const H = pl.h - GAP
   const L = pl.l - GAP
-  // separates adjacent boxes
   const bevel = Math.min(0.09, Math.min(W, H, L) / 2 - 0.02)
-  // the band hugs the face away from the bay's floor, whatever axis that is
+  // band hugs the face opposite the bay floor, whatever axis that is
   const floorFace = grid.floor ?? 'y-'
   const upAx = axOf(floorFace[0])
   const grow = floorFace[1] === '-' ? 1 : -1
@@ -328,11 +323,10 @@ function Box({
           const sd = splitDestination(pl.box.dest)
           const loc = sd.code || sd.name
           if (!loc) return null
-          // text lives on the four faces parallel to the bay's up axis and
-          // reads with its top toward the band, whatever axis that is
+          // text on the four faces parallel to the up axis, top toward the band
           const availH = exts[upAx] - STRIPE_MARGIN - STRIPE_T
-          // u already carries the grow sign; putting it here too cancels it
-          // and slides the text INTO the band on plus-face floors
+          // u carries the grow sign; adding it here cancels it and slides text into
+          // the band on plus-face floors
           const lowU = -(STRIPE_MARGIN + STRIPE_T) / 2
           const eps = 0.015
           const u = new THREE.Vector3(upAx === 0 ? grow : 0, upAx === 1 ? grow : 0, upAx === 2 ? grow : 0)
@@ -378,7 +372,6 @@ function Box({
           const hl = (pl.l - GAP) / 2
           const fs = Math.min(0.9, 0.4 + Math.min(pl.w, pl.l, pl.h) * 0.12)
           const eps = 0.025
-          // stamp on all four sides
           const faces: Array<[[number, number, number], [number, number, number]]> = [
             [[cx, cy, cz + hl + eps], [0, 0, 0]],
             [[cx, cy, cz - hl - eps], [0, Math.PI, 0]],
@@ -479,7 +472,7 @@ function StorAllBox({
       >
         <meshStandardMaterial color={STOR_BODY} roughness={0.88} metalness={0.05} />
       </RoundedBox>
-      {/* silver cage rails on the edges running floor to lid */}
+      {/* cage rails, floor to lid */}
       {([-1, 1] as const).flatMap((sa) =>
         ([-1, 1] as const).map((sb) => {
           const args: [number, number, number] = [rail, rail, rail]
@@ -495,7 +488,7 @@ function StorAllBox({
           )
         })
       )}
-      {/* orange latch caps on the lid */}
+      {/* latch caps on the lid */}
       {([-1, 1] as const).map((s) => {
         const off = [0, 0, 0]
         off[upAx] = grow * (exts[upAx] / 2)
@@ -511,7 +504,7 @@ function StorAllBox({
           </mesh>
         )
       })}
-      {/* orange X and name on the four side faces */}
+      {/* X mark and name on the four sides */}
       {others.flatMap((na) =>
         ([1, -1] as const).map((sign) => {
           const n = new THREE.Vector3(na === 0 ? sign : 0, na === 1 ? sign : 0, na === 2 ? sign : 0)
@@ -573,7 +566,6 @@ function GridShell({
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={line} transparent opacity={refOnly ? 0.5 : 0.32} />
       </lineSegments>
-      {/* faint fill for empty bays */}
       <mesh geometry={geo}>
         <meshBasicMaterial
           color={line}
@@ -623,7 +615,6 @@ export default function CargoGridPage(): React.ReactElement {
   const clearAllPickedUp = useStore((s) => s.clearAllPickedUp)
   const gridFacesSyncedAt = useStore((s) => s.gridFacesSyncedAt)
 
-  // clear old frozen layout
   useEffect(() => {
     const st = useStore.getState()
     if (st.layout) st.unlockLayout()
@@ -635,10 +626,9 @@ export default function CargoGridPage(): React.ReactElement {
     [activeShip, installed, gridFacesSyncedAt]
   )
   const frame = useMemo(() => shipFrame(activeShip), [activeShip, gridFacesSyncedAt])
-  // ships positioned around world 0 in the markup tool render at their real coords;
-  // the rest still auto-center on the bounding box
+  // markup-authored ships render at their real coords; the rest auto-center on the bbox
   const anchored = useMemo(() => shipAnchored(activeShip), [activeShip, gridFacesSyncedAt])
-  // off-grid stash pad size, or null when the ship has it turned off
+  // stash pad size, null when the ship has it off
   const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesSyncedAt])
   // secure vaults can't haul
   const shownGrids = useMemo(() => grids.filter((g) => !isSecureBay(g)), [grids])
@@ -648,7 +638,7 @@ export default function CargoGridPage(): React.ReactElement {
     [contracts, route, order]
   )
 
-  // number by drop-off, route order
+  // numbered by drop-off, in route order
   const { num: dropNum, color: objColor } = useMemo(() => objectiveStops(route), [route])
 
   // restamp drop-off number + color
@@ -674,7 +664,7 @@ export default function CargoGridPage(): React.ReactElement {
   const setFrozenBoxes = useStore((s) => s.setLoadingBoxes)
   useEffect(() => {
     if (loading) {
-      // every walk opens on step 0: empty ship at the depot, park crates, head out
+      // step 0 is always the empty ship at the depot: park crates, then head out
       setFrozenSteps((prev) => {
         if (prev) return prev
         const first = liveSteps[0]
@@ -761,7 +751,7 @@ export default function CargoGridPage(): React.ReactElement {
 
   const clearLoadedPin = useStore((s) => s.clearLoadedPin)
 
-  // survives the running pk-ids
+  // stable across re-minted pk-ids
   const boxKey = (b: { objectiveId?: string; slot?: number }): string => `${b.objectiveId}#${b.slot}`
 
   const looseBoxes = useStore((s) => s.looseBoxes)
@@ -790,8 +780,8 @@ export default function CargoGridPage(): React.ReactElement {
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
     const events = buildLoadEvents(loadSteps, source)
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
-    // cargo already aboard is locked at the spot it was loaded; re-plans pack
-    // around it. Extents follow the bay's floor axis, not a blanket y-up
+    // cargo aboard is locked where it loaded; re-plans pack around it.
+    // Extents follow the bay's floor axis, not a blanket y-up
     const pins = new Map<string, Placement>()
     for (const b of source) {
       const lp = loadedPins[boxKey(b)]
@@ -813,7 +803,7 @@ export default function CargoGridPage(): React.ReactElement {
       gap: spaceDeliveryPiles ? 1 : 0
     })
     const raw = whole.snaps
-    // commitDrag probes hypothetical pins against this exact environment
+    // commitDrag probes hypothetical pins against this exact env
     packEnvRef.current = { events, looseIds, pins, source }
     const snaps = raw.map((s) => ({
       placements: s.placements,
@@ -824,8 +814,8 @@ export default function CargoGridPage(): React.ReactElement {
     return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
   }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures, spaceDeliveryPiles])
 
-  // which pickup each aboard box arrived on, so freezing the layout can pin a
-  // box under the same key it would carry if you'd hand-placed it there
+  // which pickup each aboard box arrived on, so a frozen pin gets the same key
+  // it would carry if you'd hand-placed it
   const pickupKeyById = useMemo(() => {
     const m = new Map<string, string>()
     if (!loadingPack) return m
@@ -897,7 +887,7 @@ export default function CargoGridPage(): React.ReactElement {
       }
       return shape(placements, unplaced)
     }
-    // show only what's aboard now
+    // only what's aboard now
     if (loading && loadingPack) {
       const snaps = loadingPack.snaps
       if (loadIdx >= snaps.length) return shape([], [])
@@ -911,7 +901,7 @@ export default function CargoGridPage(): React.ReactElement {
     () => setAsideToUnload(grids.filter((g) => g.autoLoad !== false), result.placements),
     [grids, result]
   )
-  // off-grid boxes aboard at the current step (they drop off as their stop is delivered)
+  // off-grid boxes aboard at the current step (they drop as their stop delivers)
   const looseNow = useMemo<PackBox[]>(() => {
     if (!(loading && loadingPack) || !loadingPack.snaps.length) return []
     const at = Math.min(Math.max(0, loadIdx), loadingPack.snaps.length - 1)
@@ -921,9 +911,8 @@ export default function CargoGridPage(): React.ReactElement {
   // heavy once off-grid cargo is a real slice of the hold, not a box or two
   const offGridHeavy = result.capacity > 0 && offGrid.scu > result.capacity * 0.04
 
-  // blink detector: a replan must never change what's visible at the same
-  // step. When it does, name the boxes and the inputs that moved, so a report
-  // carries the cause instead of another round of guessing
+  // blink detector: a replan must never change what's visible at the same step.
+  // When it does, log the boxes and inputs that moved so a report carries the cause
   const blinkRef = useRef<{ idx: number; ids: Set<string>; pins: number; loose: number; steps: number } | null>(null)
   useEffect(() => {
     if (!loading || !loadingPack || !loadingPack.snaps.length) {
@@ -947,8 +936,8 @@ export default function CargoGridPage(): React.ReactElement {
   const shownScu = useMemo(() => visiblePlacements.reduce((a, p) => a + p.box.size, 0), [visiblePlacements])
   const visibleCount = result.placements.length + result.unplaced.length
 
-  // bounds over visible grids, plus the off-grid pane so it stays in frame.
-  // shipHalf/shipCenter stay ship-only so the floor labels sit on the ship, not out by the pane
+  // bounds over visible grids plus the off-grid pane so it stays in frame.
+  // shipHalf/shipCenter stay ship-only so the floor labels sit on the ship, not the pane
   const { origin, span, half, floorY, shipHalf, shipCenter, offGrid: offGridBay } = useMemo(() => {
     if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], floorY: -5, shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -958,7 +947,7 @@ export default function CargoGridPage(): React.ReactElement {
       minZ = Math.min(minZ, g.z || 0); maxZ = Math.max(maxZ, (g.z || 0) + g.l)
     }
     const shipMinX = minX, shipMinY = minY, shipMinZ = minZ, shipMaxX = maxX, shipMaxY = maxY, shipMaxZ = maxZ
-    // park the pane past the ship's starboard edge, on the deck, centered on the hold's length
+    // pane sits past the starboard edge, on the deck, centered on the hold's length
     const off: CargoGrid | null = offPad && {
       id: OFF_GRID_ID, name: 'OFF GRID', source: 'override', autoLoad: false,
       x: maxX + OFF_GAP, y: minY, z: minZ + (maxZ - minZ - offPad.l) / 2,
@@ -969,7 +958,7 @@ export default function CargoGridPage(): React.ReactElement {
       maxY = Math.max(maxY, off.y + off.h)
       minZ = Math.min(minZ, off.z); maxZ = Math.max(maxZ, off.z + off.l)
     }
-    // anchored ships keep world 0 as the fixed center; the rest ride the bounding-box centroid
+    // anchored ships keep world 0 as center; the rest ride the bbox centroid
     const o: [number, number, number] = anchored
       ? [0, 0, 0]
       : [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
@@ -977,7 +966,7 @@ export default function CargoGridPage(): React.ReactElement {
       origin: o,
       span: Math.max(maxX - minX, maxY - minY, maxZ - minZ, 6),
       half: [(maxX - minX) / 2, (maxY - minY) / 2, (maxZ - minZ) / 2] as [number, number, number],
-      // deck level in view space: -half[1] when centered, the real min-y once anchored
+      // deck level in view space: -half[1] centered, real min-y once anchored
       floorY: minY - o[1],
       shipHalf: [(shipMaxX - shipMinX) / 2, (shipMaxY - shipMinY) / 2, (shipMaxZ - shipMinZ) / 2] as [number, number, number],
       shipCenter: [(shipMinX + shipMaxX) / 2 - o[0], (shipMinY + shipMaxY) / 2 - o[1], (shipMinZ + shipMaxZ) / 2 - o[2]] as [number, number, number],
@@ -986,10 +975,8 @@ export default function CargoGridPage(): React.ReactElement {
   }, [shownGrids, offPad, anchored])
 
   // lay the loose boxes out in the pane: parked ones keep their spot, the rest
-  // auto-shelve on the deck, front-to-back, so a legacy stash still shows somewhere.
-  // Everything runs in a stable key order so the layout is the same every render,
-  // and a spot that no longer fits drops onto whatever's under it instead of
-  // interpenetrating a neighbour
+  // auto-shelve on the deck front-to-back. Stable key order keeps the layout the
+  // same every render; a spot that no longer fits drops onto whatever's under it.
   const loosePlacements = useMemo<Placement[]>(() => {
     if (!offGridBay || !looseNow.length) return []
     const pw = offGridBay.w, pl = offGridBay.l, ph = offGridBay.h
@@ -1002,7 +989,7 @@ export default function CargoGridPage(): React.ReactElement {
       for (let dy = 0; dy < h; dy++) for (let dz = 0; dz < l; dz++) for (let dx = 0; dx < w; dx++) if (occ.has(`${x + dx},${y + dy},${z + dz}`)) return false
       return true
     }
-    // lowest free y at this footprint, so a stale spot lands on top of its neighbour
+    // lowest free y for this footprint, so a stale spot lands on top of a neighbour
     const settle = (x: number, z: number, w: number, l: number, h: number): number => {
       for (let y = 0; y + h <= ph; y++) if (fits(x, y, z, w, l, h)) return y
       return -1
@@ -1018,8 +1005,7 @@ export default function CargoGridPage(): React.ReactElement {
       if (sp && sp.gridId === OFF_GRID_ID) {
         const w = sp.rotated ? dims.l : dims.w
         const l = sp.rotated ? dims.w : dims.l
-        // keep the stored spot when it's still clear; otherwise settle down its
-        // column onto whatever moved in under it
+        // keep the stored spot if still clear, else settle down its column
         const inPane = sp.x >= 0 && sp.z >= 0 && sp.x + w <= pw && sp.z + l <= pl
         const y = inPane
           ? fits(sp.x, sp.y, sp.z, w, l, dims.h)
@@ -1052,15 +1038,15 @@ export default function CargoGridPage(): React.ReactElement {
 
   const done = loading && loadIdx >= loadSteps.length
   const currentLoad = loading && !done ? loadSteps[loadIdx] : undefined
-  // what the open pickup needs the user to settle: won't-fit (must stash or come
-  // back) or dig-out (a heads-up). Drives the red overlay AND the advance gate.
+  // what the open pickup needs settled: won't-fit (stash or come back) or dig-out
+  // (a heads-up). Drives the red overlay and the advance gate.
   const currentDecision = useMemo(() => {
     if (currentLoad?.kind !== 'load') return null
     return bucketDecision(setAside, result.unplaced, new Set(currentLoad.loadIds))
   }, [currentLoad, setAside, result])
   // won't-fit has no "load anyway": stash or leave, so hold NEXT until they do.
-  // dig-out has a valid "load it now", but it's still a call to make, so hold NEXT
-  // until they pick load-and-dig or come-back (acknowledged per step).
+  // dig-out has a valid "load it now" but it's still a call, so hold NEXT until
+  // they pick load-and-dig or come-back (acknowledged per step).
   const [decidedIdx, setDecidedIdx] = useState<number | null>(null)
   const blockKind: 'overload' | 'digout' | null =
     currentDecision?.kind === 'overload'
@@ -1068,16 +1054,15 @@ export default function CargoGridPage(): React.ReactElement {
       : currentDecision?.kind === 'digout' && decidedIdx !== loadIdx
         ? 'digout'
         : null
-  // cargo you'd dig to reach: lit red ONLY on the step whose DIG-OUT warning is
-  // showing, so it's a heads-up for this load decision, not a permanent state.
-  // live within the step, so restacking to clear the dig-out drops the red
+  // cargo you'd dig to reach, lit red only while its dig-out warning shows, so
+  // restacking to clear the dig-out drops the red
   const blockedKeys = useMemo(() => {
     if (currentDecision?.kind !== 'digout') return new Set<string>()
     return new Set(setAside.blocked.map((b) => boxKey(b)))
   }, [currentDecision, setAside])
-  // green outline of where the plan wants this step's boxes, one box per bay.
-  // frozen when the step opens so it keeps showing the recommendation even after
-  // the user drags cargo off it. keyed by step so a rewind or advance recaptures
+  // green outline of where the plan wants this step's boxes, one per bay. frozen
+  // when the step opens so it holds even after you drag cargo off it. keyed by
+  // step so a rewind or advance recaptures
   type Footprint = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number }
   const footprintRef = useRef<{ idx: number; boxes: Footprint[] } | null>(null)
   const planFootprint = useMemo<Footprint[]>(() => {
@@ -1104,10 +1089,9 @@ export default function CargoGridPage(): React.ReactElement {
     // capture once per step: dragging must not move the recommendation
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadIdx, currentLoad])
-  // a later visit of this node that only fetches cargo: when raw space is
-  // aboard from here to there, offer to grab it now and skip the return.
-  // Only offered while standing at the node's first visit, where the grab
-  // will land
+  // a later fetch-only visit of this node: if there's room from here to there,
+  // offer to grab it now and skip the return. Only at the node's first visit,
+  // where the grab lands
   const grabOffer = useMemo(() => {
     if (!loading || !frozenSteps || currentLoad?.kind !== 'load' || !loadingPack) return null
     const node = currentLoad.nodeKey
@@ -1139,9 +1123,9 @@ export default function CargoGridPage(): React.ReactElement {
     return null
   }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result])
 
-  // if it fits, it sits: a return-visit pickup that packs cleanly into the
-  // hold as it stands right now just joins this stop's list. The card only
-  // asks when the fit is volume-only and the stack would get ugly
+  // if it fits, it sits: a return-visit pickup that packs cleanly into the hold
+  // as it stands just joins this stop's list. The card only asks when the fit is
+  // volume-only and the stack would get ugly
   const grabbedOnce = useRef('')
   const [grabAsk, setGrabAsk] = useState(false)
   useEffect(() => {
@@ -1158,12 +1142,11 @@ export default function CargoGridPage(): React.ReactElement {
     return 'loaded'
   }
   const startLoading = (): void => {
-    // resume saved step, clamped
     setLoadIdx((i) => Math.min(Math.max(0, i), Math.max(0, loadSteps.length - 1)))
     setLoading(true)
   }
 
-  // include the pane so its ghost + placements resolve, but it never joins the packer's grids
+  // include the pane so its ghost + placements resolve; it never joins the packer's grids
   const gridById = useMemo(() => {
     const m = new Map(grids.map((g) => [g.id, g]))
     if (offGridBay) m.set(offGridBay.id, offGridBay)
@@ -1207,7 +1190,7 @@ export default function CargoGridPage(): React.ReactElement {
     setHover({ ...h, x: e.nativeEvent.clientX - (r?.left ?? 0), y: e.nativeEvent.clientY - (r?.top ?? 0) })
   }
 
-  // gravity drag to lowest support
+  // drag falls to the lowest support
   type GhostSpot = { key: string; x: number; y: number; z: number; w: number; l: number; h: number; rotated: boolean }
   type Ghost = { gridId: string; x: number; y: number; z: number; w: number; l: number; h: number; valid: boolean; members?: GhostSpot[] }
   type GroupMember = { key: string; box: PackBox; dx: number; dz: number; w: number; l: number; h: number; rotated: boolean }
@@ -1241,8 +1224,7 @@ export default function CargoGridPage(): React.ReactElement {
     })
     const base = new Set<string>()
     for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
-    // volume said yes but the stack says no: someone never finds a seat.
-    // That's not an offer, so no card either
+    // volume said yes but the stack says no (someone never seats): not an offer, no card
     for (const s of probe.snaps) for (const u of s.unplaced) if (!base.has(u.id)) return
     if (probe.concessions.length > loadingPack.conc) setGrabAsk(true)
     else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
@@ -1277,8 +1259,8 @@ export default function CargoGridPage(): React.ReactElement {
     return m
   }, [result, dragKeys, crates])
 
-  // a dragged crate can rest on the floor or on another crate, never on cargo:
-  // cargo columns read as full-height walls so the ghost slides past them
+  // a crate rests on the floor or another crate, never on cargo; cargo columns
+  // read as full-height walls so the ghost slides past them
   const crateOcc = useMemo(() => {
     const m = new Map<string, Set<string>>()
     const setOf = (gridId: string): Set<string> => {
@@ -1315,7 +1297,7 @@ export default function CargoGridPage(): React.ReactElement {
     return m
   }, [result, dragKeys, crates, gridById])
 
-  // pane cells taken by other loose boxes, so a drop or reshuffle doesn't overlap
+  // pane cells taken by other loose boxes, so a drop doesn't overlap
   const offOcc = useMemo(() => {
     const set = new Set<string>()
     for (const p of loosePlacements) {
@@ -1329,8 +1311,7 @@ export default function CargoGridPage(): React.ReactElement {
 
   const dragRay = useRef<THREE.Ray | null>(null)
 
-  // rest a box against the bay's floor face, or the stack growing off it,
-  // whatever axis that floor happens to be on
+  // rest a box on the bay's floor face or the stack growing off it, any floor axis
   const dropOn = (occ: Set<string>, g: CargoGrid, at: [number, number, number], ext: [number, number, number]): [number, number, number] | null => {
     const floor = g.floor ?? 'y-'
     const up = axOf(floor[0])
@@ -1365,9 +1346,9 @@ export default function CargoGridPage(): React.ReactElement {
     return null
   }
 
-  // pointer ray -> fractional local coords on a bay's floor plane. The bay
-  // renders spun about its center, so the ray goes through the inverse spin
-  // before any cell math; without this a 45deg pallet reads garbage cells
+  // pointer ray -> fractional local coords on a bay's floor plane. The bay renders
+  // spun about its center, so the ray gets the inverse spin before cell math;
+  // without it a 45deg pallet reads garbage cells
   const tiltedHit = (g: CargoGrid, ray: THREE.Ray): { at: [number, number, number]; t: number } | null => {
     const size = sizeOf(g)
     const min = new THREE.Vector3((g.x || 0) - origin[0], (g.y || 0) - origin[1], (g.z || 0) - origin[2])
@@ -1410,10 +1391,9 @@ export default function CargoGridPage(): React.ReactElement {
     return -1
   }
 
-  // slide the footprint around the hovered cell so the whole top face of a
-  // support box is a valid stack target, not just its min corner. Candidates are
-  // every anchor whose footprint still covers the cursor; the one that rests
-  // highest wins, ties nearest the raw anchor so ground drops don't drift
+  // slide the footprint around the hovered cell so a support box's whole top face
+  // is a target, not just its min corner. Candidates are every anchor whose
+  // footprint still covers the cursor; highest rest wins, ties to the nearest anchor
   const bestAnchor = (
     occ: Set<string>, g: CargoGrid, hx: number, hz: number, gw: number, gl: number, fw: number, fl: number, fh: number
   ): { x: number; z: number; y: number } => {
@@ -1444,9 +1424,8 @@ export default function CargoGridPage(): React.ReactElement {
     const fh = dims.h
     const isCrate = drag.key.startsWith('storall:')
     const cellsOf = (gid: string): Set<string> => (isCrate ? crateOcc.get(gid) : occCells.get(gid)) ?? new Set()
-    // spun or re-floored bays aim through the pointer ray at their own floor
-    // plane; the ground-plane projection below never lands on a 45deg pallet.
-    // Nearest hit wins
+    // spun/re-floored bays aim through the ray at their own floor plane; the
+    // ground projection below never lands on a 45deg pallet. Nearest hit wins
     if (dragRay.current) {
       let hitBest: { g: CargoGrid; at: [number, number, number]; t: number } | null = null
       for (const g of grids) {
@@ -1455,9 +1434,8 @@ export default function CargoGridPage(): React.ReactElement {
         if (hit && (!hitBest || hit.t < hitBest.t)) hitBest = { g, at: hit.at, t: hit.t }
       }
       if (hitBest && group) {
-        // the formation's flat offsets map onto the bay's two floor-plane
-        // axes; each member rests on its own support, earlier members count
-        // as floor for the ones above
+        // formation offsets map onto the bay's two floor-plane axes; each member
+        // rests on its own support, earlier members count as floor for the ones above
         const g = hitBest.g
         const size = sizeOf(g)
         const floor = g.floor ?? 'y-'
@@ -1533,7 +1511,7 @@ export default function CargoGridPage(): React.ReactElement {
         return { gridId: g.id, x: spot[0], y: spot[1], z: spot[2], w: ext[0], h: ext[1], l: ext[2], valid: true }
       }
     }
-    // a crate stays aboard; it comes off via the shelf, not the pane
+    // a crate comes off via the shelf, not the pane
     if (offGridBay && !isCrate) {
       const gx = offGridBay.x
       const gz = offGridBay.z
@@ -1542,7 +1520,7 @@ export default function CargoGridPage(): React.ReactElement {
           const b = bestAnchor(offOcc, offGridBay, Math.floor(shipX - gx), Math.floor(shipZ - gz), offGridBay.w, offGridBay.l, fw, fl, fh)
           return { gridId: OFF_GRID_ID, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
         }
-        // whole group onto the pad, same offsets, each box to its own support
+        // group onto the pad, same offsets, each box to its own support
         const lx = Math.max(0, Math.min(offGridBay.w - fw, Math.floor(shipX - gx)))
         const lz = Math.max(0, Math.min(offGridBay.l - fl, Math.floor(shipZ - gz)))
         const occ = new Set(offOcc)
@@ -1577,8 +1555,8 @@ export default function CargoGridPage(): React.ReactElement {
         const b = bestAnchor(cellsOf(g.id), g, Math.floor(shipX - gx), Math.floor(shipZ - gz), g.w, g.l, fw, fl, fh)
         return { gridId: g.id, x: b.x, y: b.y < 0 ? 0 : b.y, z: b.z, w: fw, l: fl, h: fh, valid: b.y >= 0 }
       }
-      // rigid group: same cell offsets, each box falls to its own support.
-      // Members go bottom-up and count as floor for whatever rides above
+      // rigid group: same offsets, each box falls to its own support. Members go
+      // bottom-up and count as floor for whatever rides above
       const occ = new Set(occCells.get(g.id))
       const members: GhostSpot[] = []
       let valid = true
@@ -1608,9 +1586,8 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
-  // the route only re-solves when its inputs change: which pickups ride
-  // (defer/grab), what's stashed off-grid, the crates eating space. Rearranging
-  // boxes changes none of that, so it never triggers one.
+  // route only re-solves when its inputs change: which pickups ride (defer/grab),
+  // what's stashed off-grid, the crates eating space. Rearranging boxes doesn't.
   const compositionSig = (): string =>
     JSON.stringify({
       d: [...deferredObjectives].sort(),
@@ -1624,17 +1601,16 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
-  // a plan that went off the rails gets thrown away, never argued with: the
-  // stops ahead re-solve from where the ship sits, cargo aboard seeded, walked
-  // steps kept as history. replanCurrent also hands the OPEN step back to the
-  // router (its pickup wouldn't seat), letting it defer or re-split
+  // a plan that went off the rails gets thrown away: stops ahead re-solve from
+  // where the ship sits, cargo aboard seeded, walked steps kept as history.
+  // replanCurrent also hands the open step back to the router (its pickup
+  // wouldn't seat) to defer or re-split
   const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
-    // seed aboard from what's actually in the hold right now (the live snap), not
-    // from pins: a delivered box's pin can outlive its walked drop step, and
-    // seeding it would re-board already-delivered cargo and re-emit its delivery
+    // seed aboard from the live snap, not pins: a delivered box's pin can outlive
+    // its drop step, and seeding it would re-board delivered cargo and re-emit the delivery
     const curIds = new Set(cur.kind === 'load' ? cur.loadIds : [])
     for (const p of loadingPack?.snaps[loadIdx]?.placements ?? []) {
       const oid = p.box.objectiveId
@@ -1657,8 +1633,7 @@ export default function CargoGridPage(): React.ReactElement {
     let tail = buildLoadingSteps(contracts, tailRoute, order)
     const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : loadIdx + 1)
     if (!replanCurrent) {
-      // the tail re-plans this visit's remaining work; anything the open card
-      // already covers would walk twice
+      // tail re-plans this visit's remaining work; what the open card covers would walk twice
       const curIds = new Set([...cur.loadIds, ...cur.dropIds])
       while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => curIds.has(l.objectiveId)))
         tail = tail.slice(1)
@@ -1666,8 +1641,8 @@ export default function CargoGridPage(): React.ReactElement {
     // visit keys must stay unique across the splice
     const tripBase = Math.max(0, ...prefix.map((s) => s.trip)) + 1
     tail = tail.map((s) => ({ ...s, trip: s.trip + tripBase }))
-    // the tail's leading steps at this node ARE the visit the user stands at;
-    // a re-minted trip there orphans every pin made at this stop
+    // the tail's leading steps at this node are the visit you stand at; a
+    // re-minted trip there orphans every pin made at this stop
     for (const s of tail) {
       if (s.nodeKey !== cur.nodeKey) break
       s.trip = cur.trip
@@ -1703,9 +1678,8 @@ export default function CargoGridPage(): React.ReactElement {
   }, [loading, loadingPack, loadIdx, loadSteps, looseBoxes])
 
   // a won't-fit step gets the router one shot at re-splitting or deferring the
-  // overflow the moment you arrive; just once, before the card asks you to decide, so
-  // the card and the held NEXT button reflect what actually can't fit. One shot
-  // per step: a second pass on the re-solved plan is how the feedback storms start
+  // overflow on arrival, before the card asks, so the card and NEXT reflect what
+  // actually can't fit. One shot per step: a second pass is how feedback storms start
   const negotiatedStep = useRef(-1)
   useEffect(() => {
     if (!loading || !loadingPack || drag) return
@@ -1715,16 +1689,15 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
-  // moving one box shouldn't shuffle the rest. Pin every box still standing on
-  // its own feet where it sits, so the re-pack echoes the layout instead of
-  // re-dealing it. Boxes that were riding on what you just moved are left out -
-  // they lost their footing, so the packer settles them straight down.
+  // moving one box shouldn't shuffle the rest. Pin every box still on its own
+  // feet where it sits so the re-pack echoes the layout instead of re-dealing it.
+  // Boxes that were riding on what you moved are left out to settle straight down.
   const freezeVisible = (moved: Set<string>): Record<string, LoadedPin> => {
     if (!loading) return {}
     const cells: Cell[] = result.placements
       .filter((p) => !moved.has(boxKey(p.box)))
       .map((p) => ({ key: boxKey(p.box), gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h }))
-    // crates are permanent platforms: a box perched on one still has its footing
+    // crates are permanent platforms: a box on one keeps its footing
     const platforms = new Set<string>()
     for (const c of crates) {
       const key = `crate:${c.id}`
@@ -1748,16 +1721,15 @@ export default function CargoGridPage(): React.ReactElement {
       if (d && ghost && ghost.valid) {
         const spots = ghost.members ?? [{ key: d.key, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h, rotated: dragRot }]
         if (d.key.startsWith('storall:')) {
-          // your crate always lands where you drop it; the route re-plans around
-          // the space it takes at the next checkpoint, never under your hands
+          // your crate lands where you drop it; the route re-plans around the
+          // space it takes at the next checkpoint, never under your hands
           const isNew = d.key.startsWith('storall:new')
           const id = isNew ? `storall:${Date.now().toString(36)}` : d.key
           const crate: StorAllCrate = { id, size: d.box.size, gridId: ghost.gridId, x: ghost.x, y: ghost.y, z: ghost.z, w: ghost.w, l: ghost.l, h: ghost.h }
           if (isNew) addStorAll(crate)
           else moveStorAll(d.key, crate)
         } else if (ghost.gridId === OFF_GRID_ID) {
-          // dropped into the pane: it rides loose here, out of the plan; a
-          // stale pin would keep haunting the bay it left
+          // into the pane: rides loose, out of the plan; a stale pin would haunt the bay it left
           const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
           const moved = new Set(spots.map((s) => s.key))
           for (const s of spots) {
@@ -1768,10 +1740,10 @@ export default function CargoGridPage(): React.ReactElement {
           const frozen = freezeVisible(moved)
           if (Object.keys(frozen).length) addLoadedPins(frozen)
         } else {
-          // placing a box pins it there and nothing else moves; the future only
-          // re-packs when you advance. a box pulled off the pane rejoins the plan,
-          // loaded now. an already-aboard box keeps the pickup it arrived on; a
-          // fresh one takes this step's, so restacking works on a drop step too
+          // placing a box pins it and nothing else moves; the future re-packs only
+          // when you advance. a box off the pane rejoins the plan, loaded now. an
+          // aboard box keeps the pickup it arrived on, a fresh one takes this step's,
+          // so restacking works on a drop step too
           const here = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
           const moved = new Set(spots.map((s) => s.key))
           const pins: Record<string, LoadedPin> = freezeVisible(moved)
@@ -1808,7 +1780,7 @@ export default function CargoGridPage(): React.ReactElement {
     }
     setHover(null)
     if (sel.has(key)) {
-      // grab the whole selection; sort low boxes first so stacks re-seat bottom-up
+      // grab the whole selection, low boxes first so stacks re-seat bottom-up
       const byKey = new Map(result.placements.map((p) => [boxKey(p.box), p]))
       const picked = [...sel]
         .map((k) => {
@@ -1859,8 +1831,7 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(null)
   }
 
-  // shelf hand-off: pointer goes down on a template, the crate rides the
-  // cursor onto the grid and lands on release
+  // shelf hand-off: pointer down on a template, the crate rides the cursor and lands on release
   const spawnCrate = (size: number): void => {
     setHover(null)
     if (sel.size) setSel(new Set())
@@ -1874,7 +1845,7 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (!drag) return
     const onKey = (e: KeyboardEvent): void => {
-      // no rotating a group; the offsets don't spin
+      // can't rotate a group, the offsets don't spin
       if ((e.key === 'r' || e.key === 'R') && !group) setDragRot((r) => !r)
       else if (e.key === 'Escape') {
         setDrag(null)
@@ -1906,8 +1877,8 @@ export default function CargoGridPage(): React.ReactElement {
     setSel((s) => (s.size ? new Set<string>() : s))
   }, [loading, loadIdx])
 
-  // first walk-step index bearing each pickup key / objective, so a rewind can
-  // tell which decisions were made past where the cursor landed
+  // first walk-step index for each pickup key / objective, so a rewind can tell
+  // which decisions were made past where the cursor landed
   const stepPos = useMemo(() => {
     const byPickup = new Map<string, number>()
     const byObjective = new Map<string, number>()
@@ -1920,31 +1891,29 @@ export default function CargoGridPage(): React.ReactElement {
   }, [loadSteps])
 
   // a pin must belong to a step at or behind the cursor. Anything else is a
-  // squatter from a dead walk (re-minted trip numbers, an older freeze, a
-  // resumed session) eating hold space the plan can't see past
+  // squatter from a dead walk (re-minted trips, an older freeze, a resumed
+  // session) eating hold space the plan can't see past
   useEffect(() => {
     if (!loading || !frozenSteps) return
     for (const [key, p] of Object.entries(loadedPins)) {
-      // unknown key = squatter from a dead walk. Ahead-of-cursor pins are the
-      // back-unwind's job; clearing them here races the re-solve splices
+      // unknown key = squatter. Ahead-of-cursor pins are the back-unwind's job;
+      // clearing them here races the re-solve splices
       if (!stepPos.byPickup.has(p.pickupKey)) clearLoadedPin(key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, frozenSteps, stepPos, loadedPins])
 
-  // every box that lands on the grid gets pinned the moment it shows, so the
-  // re-solver can never shuffle it: only a drag or gravity moves it after. A
-  // delivery can still pull the floor from under locked cargo; the snap shows
-  // it settled, and moving the pin down with it makes that real, so later stops
-  // plan around where the box actually sits instead of the hole it left.
+  // every box on the grid gets pinned the moment it shows so the re-solver can't
+  // shuffle it; only a drag or gravity moves it after. A delivery can still pull
+  // the floor from under locked cargo, so moving the pin down with the settled
+  // snap keeps later stops planning around where the box actually sits.
   useEffect(() => {
     if (!loading || !loadingPack || drag) return
     const snap = loadingPack.snaps[loadIdx]
     if (!snap) return
-    // a delivered box's pin outlives its drop step. Left in place, the packer
-    // re-seats it as a phantom anchor at its old spot, and anchors skip the
-    // overlap check, so a live box can end up inside it (box-in-box). Prune any
-    // pin whose cargo is no longer aboard at the cursor.
+    // a delivered box's pin outlives its drop step. Left in place the packer
+    // re-seats it as a phantom anchor, and anchors skip the overlap check, so a
+    // live box can land inside it (box-in-box). Prune pins whose cargo is gone.
     const active = new Set<string>()
     for (const p of snap.placements) active.add(boxKey(p.box))
     for (const u of snap.unplaced) active.add(boxKey(u))
@@ -1955,7 +1924,7 @@ export default function CargoGridPage(): React.ReactElement {
       const key = boxKey(p.box)
       const lp = loadedPins[key]
       if (!lp) {
-        // fresh on the grid: pin it where the packer just put it
+        // fresh on the grid: pin it where the packer put it
         if (looseBoxes.includes(key)) continue
         const pk = pickupKeyById.get(p.box.id)
         if (pk) moved[key] = { gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, rotated: p.rotated, pickupKey: pk }
@@ -1968,10 +1937,9 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, loadIdx, drag, loadedPins, looseBoxes, pickupKeyById])
 
-  // rewinding "past" a decision undoes it: pins, stashes, grabs and ticks made
-  // at a step now ahead of the cursor reset; deferrals resolve in frozen space
-  // since their steps are pruned from the walk. Only fires stepping back, and
-  // not when a come-back prunes steps and shifts the cursor to hold its spot
+  // rewinding past a decision undoes it: pins, stashes, grabs and ticks now ahead
+  // of the cursor reset; deferrals resolve in frozen space since their steps are
+  // pruned. Only fires stepping back, not when a come-back prunes steps and shifts the cursor
   const prevIdx = useRef(loadIdx)
   const prevLen = useRef(loadSteps.length)
   useEffect(() => {
@@ -2022,7 +1990,7 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadIdx, loading])
 
-  // re-snap on rotate in place
+  // re-snap on rotate
   useEffect(() => {
     if (drag && lastPt.current) setGhost(computeGhost(lastPt.current.x, lastPt.current.z))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2109,8 +2077,7 @@ export default function CargoGridPage(): React.ReactElement {
                 })
               }}
               onComeBack={(ids) => {
-                // the deferred pickup's steps vanish from the walk; keep the
-                // cursor on the same physical step
+                // deferred pickup's steps vanish; keep the cursor on the same physical step
                 const gone = new Set(ids.filter((id) => !tickedObj.has(id)))
                 const shift = loadSteps.slice(0, loadIdx).filter((s) => s.lines.every((l) => gone.has(l.objectiveId))).length
                 ids.forEach((id) => setObjectiveDeferred(id, true))
@@ -2131,8 +2098,8 @@ export default function CargoGridPage(): React.ReactElement {
               onTurnIn={(entries) => turnInDestination(entries)}
               onUnmark={(ids) => unmarkTurnIn(ids)}
               onLoaded={() => {
-                // loaded step ticks the manifest pickups and locks each box
-                // where the plan put it; you can't restack what's aboard
+                // ticks the manifest pickups and locks each box where the plan
+                // put it; you can't restack what's aboard
                 if (currentLoad?.kind === 'load') {
                   const key = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
                   for (const oid of currentLoad.loadIds) {
@@ -2152,19 +2119,17 @@ export default function CargoGridPage(): React.ReactElement {
                     addLoadedPins(pins)
                   }
                 }
-                // gate: the future re-packs only when the plan's inputs changed
-                // since the last checkpoint (defer/grab/stash/crates). Just
-                // rearranging boxes never lands here; won't-fit already re-solved
-                // on arrival. A blocked step can't get here at all.
+                // gate: re-pack only when the plan's inputs changed since the last
+                // checkpoint (defer/grab/stash/crates). Rearranging boxes doesn't
+                // land here; won't-fit already re-solved on arrival, a blocked step can't reach it
                 const sig = compositionSig()
                 if (sig !== lastSolvedSig.current) resolveTail()
                 lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {
-                // re-open the step you land on; everything decided past the
-                // cursor (pins, stashes, grabs, defers, ticks) unwinds in the
-                // back-movement effect
+                // re-open the step you land on; everything decided past the cursor
+                // unwinds in the back-movement effect
                 const prev = loadSteps[loadIdx - 1]
                 if (prev?.kind === 'load')
                   for (const oid of prev.loadIds) {
@@ -2176,8 +2141,7 @@ export default function CargoGridPage(): React.ReactElement {
               }}
               onExit={() => setLoading(false)}
               onRestart={() => {
-                // starting over wipes every pickup, turn-in, placed pin, stash
-                // and decision so the walk is a fresh start
+                // wipe every pickup, turn-in, pin, stash and decision for a fresh walk
                 clearAllPickedUp()
                 unmarkTurnIn(contracts.flatMap((c) => c.objectives.map((o) => o.id)))
                 resetWalkDecisions()
@@ -2340,9 +2304,8 @@ export default function CargoGridPage(): React.ReactElement {
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
           {shownGrids.map((g) => {
-            // spun/re-floored bays get a solid floor plate: it reads as the
-            // surface cargo mounts to, and it eats clicks that would otherwise
-            // pass through the open wireframe and grab a box behind it
+            // spun/re-floored bays get a solid floor plate: it reads as the mount
+            // surface and eats clicks that would pass through the wireframe onto a box behind
             if (!g.rot && (g.floor ?? 'y-') === 'y-') return null
             const floor = g.floor ?? 'y-'
             const up = axOf(floor[0])
@@ -2446,8 +2409,7 @@ export default function CargoGridPage(): React.ReactElement {
             const g = gridById.get(pl.gridId)
             if (!g) return null
             const mode = boxMode(pl.box.objectiveId)
-            // this step's cargo and anything already aboard is yours to rearrange;
-            // future-trip boxes stay put
+            // this step's cargo and anything aboard is yours to rearrange; future-trip boxes stay
             const mkey = mode === 'current' || mode === 'loaded' ? boxKey(pl.box) : undefined
             // ghost stands in while dragging
             if (mkey && dragKeys?.has(mkey)) return null
@@ -2507,8 +2469,8 @@ export default function CargoGridPage(): React.ReactElement {
               const dims = BOX_DIMS[drag.box.size]
               if (!dims) return null
               const gg = ghost ? gridById.get(ghost.gridId) : undefined
-              // on a spun or re-floored bay the ground projection parallaxes away
-              // from the cursor, so the held box rides the ghost spot instead
+              // on a spun/re-floored bay the ground projection parallaxes off the
+              // cursor, so the held box rides the ghost spot instead
               if (ghost && gg && !ghost.members && (gg.rot || (gg.floor ?? 'y-') !== 'y-')) {
                 const floor = gg.floor ?? 'y-'
                 const up = axOf(floor[0])
@@ -2717,7 +2679,7 @@ function LoadingPanel({
   const isDrop = step?.kind === 'drop'
   const { series, peak } = useMemo(() => loadProfile(steps), [steps])
   const aboard = done || !series.length ? 0 : series[Math.max(0, Math.min(idx, series.length - 1))]
-  // split bucket: only last trip
+  // split bucket: last trip only
   const isFinalChunk = (l: LoadingStep['lines'][number]): boolean => l.tripPos >= l.tripTotal
   const dropLines = isDrop ? step!.lines.filter(isFinalChunk) : []
 
@@ -2781,7 +2743,7 @@ function LoadingPanel({
   const isLoad = step.kind === 'load'
   const blockAdvance = blockKind != null
   const destLabel = destLabelOf(step.boundFor)
-  // this location's contiguous steps
+  // contiguous steps at this location
   let visitStart = idx
   while (visitStart > 0 && steps[visitStart - 1]?.nodeKey === step.nodeKey && steps[visitStart - 1]?.trip === step.trip)
     visitStart--
@@ -2898,7 +2860,7 @@ function LoadingPanel({
             ALSO HERE · SKIP THE RETURN
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
-            {grab.count} boxes / {grab.scu} SCU planned for a return at step {grab.stepNo}; grab them now to drop that stop.
+            {grab.count} boxes / {grab.scu} SCU are set for a return at step {grab.stepNo}. Grab them now and skip that stop.
           </div>
           <Btn
             onClick={onGrab}
@@ -3065,7 +3027,7 @@ function DropLineRow({
   )
 }
 
-// earlier trips, turn in later
+// earlier trip, turn in later
 function SplitDropRow({ line }: { line: LoadingStep['lines'][number] }): React.ReactElement {
   const rest = Math.max(0, line.totalScu - line.scu)
   return (
@@ -3082,7 +3044,7 @@ function SplitDropRow({ line }: { line: LoadingStep['lines'][number] }): React.R
   )
 }
 
-// amber cube = cargo riding off-grid; the manifest badge uses a different (red) glyph
+// amber cube = cargo off-grid; the manifest badge uses a red glyph instead
 function OffGridGlyph({ size = 14 }: { size?: number }): React.ReactElement {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="1.7" style={{ flex: 'none' }}>
@@ -3092,7 +3054,7 @@ function OffGridGlyph({ size = 14 }: { size?: number }): React.ReactElement {
   )
 }
 
-// at a drop, the off-grid boxes bound for THIS stop so nothing rattling around gets left behind
+// at a drop, the off-grid boxes bound for this stop so nothing gets left behind
 function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }): React.ReactElement | null {
   const ids = new Set(dropIds)
   const mine = loose.filter((b) => b.objectiveId && ids.has(b.objectiveId))
@@ -3125,8 +3087,8 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
   )
 }
 
-// the pickup decision card: when a bucket buries earlier cargo (dig-out) or won't fit
-// (overload), surface the honest cost + the choices. Quiet (renders nothing) otherwise.
+// pickup decision card: when a bucket buries earlier cargo (dig-out) or won't fit
+// (overload), show the cost and the choices. Renders nothing otherwise.
 function PickupDecision({
   decision,
   destLabel,
@@ -3165,7 +3127,7 @@ function PickupDecision({
         { id: 'come', title: 'Come back for it', desc: 'Grab it on a later pass.', run: () => onComeBack(loadIds) }
       ]
     : [
-        // no stash on ships with no off-grid: the boxes would just vanish
+        // no stash without off-grid: the boxes would just vanish
         ...(canStash
           ? [{ id: 'stash', title: 'Stash the overflow off-grid', desc: `${offBreakdown} rides off grid, the rest loads normally.`, run: () => onStashOffGrid(decision.overloadBoxes) }]
           : []),

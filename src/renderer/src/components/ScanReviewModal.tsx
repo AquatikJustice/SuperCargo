@@ -18,7 +18,7 @@ export default function ScanReviewModal(): React.ReactElement | null {
   const captureOpen = useStore((s) => s.captureOpen)
   const queue = useStore((s) => s.scanQueue)
 
-  // capture takes over the screen when scanning details; come back after
+  // capture takes over the screen; come back to the queue after
   if (!open || captureOpen || !queue.length) return null
 
   const current = queue[0]

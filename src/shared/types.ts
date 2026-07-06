@@ -245,9 +245,8 @@ export interface ManifestDoc {
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
 
-/** a finished contract's reproducible inputs, so a run can be replayed step by step
- *  when debugging a route or loading issue. the contract is reset to its
- *  pre-delivery state so re-running the planner reproduces the original route. */
+/** a finished contract's inputs, reset to their pre-delivery state, so re-running
+ *  the planner reproduces the original route when debugging. */
 export interface RunReplay {
   ship: string
   installedModules?: string[]

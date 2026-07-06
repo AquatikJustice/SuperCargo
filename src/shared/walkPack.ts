@@ -1,15 +1,10 @@
 // The loading-walk packer. Lays the run out into tight per-destination sections,
-// biggest box first so it anchors the floor, delivery order front to back, each
-// stop its own block. The walk then reveals boxes as they board and hides them as
-// they leave; homes are fixed so the stacks look settled the whole way through.
+// biggest box first so it anchors the floor, delivery order front to back. Two
+// rules keep the walk honest: a box only rests on its own destination's cargo
+// (so each stop is a clean tower), and never on cargo that boards later than it
+// does (nothing you haven't loaded is holding something up).
 //
-// Two rules keep it honest during the walk:
-//  - a box only rests on its OWN destination's cargo, so each stop is a clean tower
-//    and delivering one never pulls the floor from another.
-//  - a box never rests on cargo that boards later than it does, so nothing you
-//    haven't loaded yet is holding something up (no floaters mid-load).
-//
-// Its own module on purpose, clear of the exit-face helpers packer.ts grew.
+// Own module on purpose, clear of the exit-face helpers packer.ts grew.
 
 import type { CargoGrid } from './cargoGrids'
 import { BOX_DIMS } from './boxGeometry'
@@ -33,8 +28,8 @@ interface Bay {
 
 const idx = (g: CargoGrid, x: number, y: number, z: number): number => x + z * g.w + y * (g.w * g.l)
 
-// which x side is the wall to build off of. Aisle marks the open side, so we hug
-// the opposite. Default: low-x wall.
+// which x side is the wall to build off. Aisle marks the open side, so we hug the
+// opposite. Default: low-x wall.
 function wallHigh(grid: CargoGrid): boolean {
   const f = grid.faces
   if (!f) return false
@@ -54,7 +49,7 @@ function canPlace(s: Bay, x: number, y: number, z: number, fw: number, fl: numbe
   for (let dy = 0; dy < fh; dy++)
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) if (s.occ[idx(g, x + dx, y + dy, z + dz)]) return false
-  // floor, or resting fully on this stop's own cargo, so each stop is a clean tower
+  // floor, or resting fully on this stop's own cargo
   if (y > 0) {
     for (let dz = 0; dz < fl; dz++)
       for (let dx = 0; dx < fw; dx++) {
@@ -76,16 +71,15 @@ function fill(s: Bay, p: Placement, owner: number): void {
         s.owner[i] = owner
         s.size[i] = p.box.size
       }
-  // crates (fixtures) sit in a slice without owning it, so cargo can pack beside them
+  // crates sit in a slice without owning it, so cargo can pack beside them
   if (owner >= 0) for (let dz = 0; dz < p.l; dz++) if (p.z + dz < g.l) s.slice[p.z + dz] = owner
   s.used += p.w * p.l * p.h
 }
 
 type Spot = { x: number; y: number; z: number; fw: number; fl: number }
 
-// First fit for one orientation, scanned z (front) then x (from the wall toward
-// the aisle) then y, so each column stacks all the way UP before the next starts
-// across.
+// First fit for one orientation, scanned z (front) then x (wall toward aisle)
+// then y, so each column stacks all the way up before the next starts across.
 function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number): Spot | null {
   const g = s.grid
   for (let z = Math.max(0, minZ); z + fl <= g.l; z++)
@@ -96,8 +90,8 @@ function firstFit(s: Bay, fw: number, fl: number, h: number, minZ: number, stop:
   return null
 }
 
-// Every cell directly under this footprint is a box strictly bigger than mine, so
-// a box only rides on top of a genuinely larger one, never towers on its own size.
+// every cell under this footprint is a strictly bigger box, so a box only rides a
+// genuinely larger one, never towers on its own size
 function supportBigger(s: Bay, x: number, y: number, z: number, fw: number, fl: number, mySize: number): boolean {
   const g = s.grid
   for (let dz = 0; dz < fl; dz++)
@@ -105,8 +99,8 @@ function supportBigger(s: Bay, x: number, y: number, z: number, fw: number, fl: 
   return true
 }
 
-// Fill the lowest layer of gaps across the block, on top of bigger boxes, before
-// stacking any higher, so tops stay flat for a later merge to slide onto.
+// fill the lowest layer of gaps across the block, on bigger boxes, before
+// stacking higher, so tops stay flat for a later merge to slide onto
 function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number, mySize: number): Spot | null {
   const g = s.grid
   const lim = Math.min(g.l, maxZ)
@@ -119,7 +113,7 @@ function firstFitOnTop(s: Bay, fw: number, fl: number, h: number, minZ: number, 
   return null
 }
 
-// Same scan, but no deeper than maxZ, so a filler stays inside the block already built.
+// same scan, no deeper than maxZ, so a filler stays inside the block already built
 function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number, stop: number, maxZ: number): Spot | null {
   const g = s.grid
   const lim = Math.min(g.l, maxZ)
@@ -131,8 +125,8 @@ function firstFitBounded(s: Bay, fw: number, fl: number, h: number, minZ: number
   return null
 }
 
-// Is the wall side between this deep box and the wall packed solid to the box's
-// full depth, floor to ceiling? False when the box sits right against the wall.
+// wall side beside this deep box packed solid to its full depth, floor to
+// ceiling? False when the box sits right against the wall.
 function aisleFlush(s: Bay, spot: { x: number; z: number; fw: number; fl: number }, stop: number): boolean {
   const g = s.grid
   const from = s.wallHigh ? spot.x + spot.fw : 0
@@ -147,10 +141,9 @@ function aisleFlush(s: Bay, spot: { x: number; z: number; fw: number; fl: number
   return true
 }
 
-// A stop packs its wall side solid — turning boxes across the bay and stacking
-// them tall — to a box's full depth before it ever drops one into the leftover
-// aisle strip, so the block builds front-to-back on the wall first and the aisle
-// only fills once it sits flush against it. Square boxes never turn.
+// A stop packs its wall side solid (turning boxes across the bay, stacking them
+// tall) to a box's full depth before it drops one into the leftover aisle strip.
+// The aisle only fills once the wall beside it is flush. Square boxes never turn.
 function findSpot(
   s: Bay,
   w: number,
@@ -164,7 +157,7 @@ function findSpot(
   let blockZ = 0
   for (let z = 0; z < g.l; z++) if (s.slice[z] === stop) blockZ = z + 1
 
-  // a box sits on top of a strictly bigger one, filling its surface flat, before floor
+  // ride a strictly bigger box, filling its surface flat, before taking floor
   const onTop = firstFitOnTop(s, w, l, h, minZ, stop, blockZ > 0 ? blockZ : g.l, size)
   if (onTop) return { ...onTop, rotated: false }
   // a small filler stays inside the block rather than opening fresh floor
@@ -188,7 +181,7 @@ export interface RunOpts {
   fixtures?: ReadonlyMap<string, Placement>
 }
 
-// One packing pass: each destination its own front-to-back section, biggest box
+// one packing pass: each destination its own front-to-back section, biggest box
 // first so it anchors the floor. Every box aboard at once.
 export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}): { homes: Map<string, Placement>; unplaced: PackBox[] } {
   const gap = opts.gap ?? 0
@@ -200,8 +193,8 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
   const giOf = (gridId: string): number => bays.findIndex((b) => b.grid.id === gridId)
   const homes = new Map<string, Placement>()
 
-  // Seat every locked box first and claim its slices, so no matter which
-  // destination each pin belongs to, the packed cargo lands clear of it.
+  // seat every locked box first and claim its slices, so packed cargo lands clear
+  // of it whatever destination each pin belongs to
   const pinnedIds = new Set<string>()
   if (opts.pins)
     for (const [id, p] of opts.pins) {
@@ -229,7 +222,7 @@ export function packRun(grids: CargoGrid[], boxes: PackBox[], opts: RunOpts = {}
     }
 
     for (const box of stopBoxes) {
-      // a locked box is already seated; just fold its depth into this block
+      // a locked box is already seated; fold its depth into this block
       if (pinnedIds.has(box.id)) {
         const p = homes.get(box.id)!
         reach(giOf(p.gridId), p.z + p.l)
@@ -268,10 +261,9 @@ export interface WalkOpts {
   gap?: number
 }
 
-// Per-step snapshots. Each step repacks only what's aboard right then, so a stop
-// delivered earlier frees its room for a later pickup instead of holding the hold
-// hostage for the whole run. Everything in one snapshot is aboard together, so the
-// section layout can't float.
+// per-step snapshots. Each step repacks only what's aboard right then, so a stop
+// delivered earlier frees its room for a later pickup. Everything in one snapshot
+// is aboard together, so the section layout can't float.
 export function walkPack(grids: CargoGrid[], events: LoadEvent[], opts: WalkOpts = {}): { snaps: LoadSnap[]; concessions: never[] } {
   const loose = opts.loose ?? new Set<string>()
   const boxOf = new Map<string, PackBox>()

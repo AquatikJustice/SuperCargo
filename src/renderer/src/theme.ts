@@ -31,10 +31,8 @@ export const F = {
 export const GLOW = '0 0 7px rgba(255,210,30,0.45)'
 export const GLOW_SOFT = '0 0 5px rgba(255,210,30,0.20)'
 
-// stepping hue by the golden angle looked even on paper but clustered in the
-// eye: a big arc of the wheel all reads as "green," so neighbouring stops came
-// out near-identical. hand-picked hues instead, ordered warm/cool so any run of
-// stops stays far apart. lightness drops a notch each time we wrap the palette.
+// golden-angle stepping looked even but clustered in the eye (too much of the wheel reads as green).
+// hand-picked warm/cool alternating hues keep neighbouring stops apart; lightness drops a notch per wrap.
 const STOP_HUES: [number, number, number][] = [
   [0, 85, 66],   // red
   [212, 90, 64], // blue
@@ -55,7 +53,7 @@ export function fmt(n: number): string {
   return n.toLocaleString('en-US')
 }
 
-// distances come in gigameters; show them in the game's own units, largest that reads >= 1
+// distances come in gigameters; show the largest unit that reads >= 1
 export function fmtDistance(gm: number): string {
   const m = Math.max(0, gm) * 1e9
   if (m >= 1e9) return `${(m / 1e9).toFixed(1)} Gm`

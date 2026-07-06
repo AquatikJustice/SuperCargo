@@ -1,9 +1,7 @@
 import React from 'react'
 import { C, F, fmt } from '../theme'
 
-// capacity bar: fill = what's aboard right now, the tick marks the run's peak so you
-// can watch the fill climb toward your ceiling as you load. Stor-All crates eat the
-// hatched chunk at the right end.
+// fill = what's aboard now, tick = the run's peak, hatched end = Stor-All reserve
 export default function LoadBar({
   current,
   peak,

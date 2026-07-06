@@ -161,7 +161,7 @@ export default function CaptureModal(): React.ReactElement | null {
     close()
   }
 
-  // which ocr-filled fields the user had to correct, for the accuracy stat
+  // ocr-filled fields the user corrected, for the accuracy stat
   const touched = useRef(new Set<string>())
 
   const update = (key: number, patch: Partial<ObjRow>): void => {
@@ -183,8 +183,7 @@ export default function CaptureModal(): React.ReactElement | null {
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
   const canSubmit = validRows.length > 0
 
-  // score OCR against what the user had to fix. every field OCR attempted counts;
-  // a touched field is a miss. nothing touched = 100%.
+  // every field ocr attempted counts; a touched one is a miss, nothing touched = 100%
   const reportOcrAccuracy = (): void => {
     let attempted = 0
     let edited = 0
@@ -407,7 +406,7 @@ export default function CaptureModal(): React.ReactElement | null {
                   </div>
                 ) : tab === 'ocr' && hasOcr ? (
                   <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 3 }}>
-                    not read - using default
+                    not read, using default
                   </div>
                 ) : null}
               </div>
@@ -558,7 +557,7 @@ export default function CaptureModal(): React.ReactElement | null {
                 cursor: 'pointer'
               }}
             >
-              DONE - BACK TO CAPTURE
+              DONE, BACK TO CAPTURE
             </Btn>
           ) : (
           <>
@@ -636,7 +635,7 @@ function OcrCapturePane({
   return (
     <div style={{ padding: '36px 24px', textAlign: 'center', fontFamily: F.body }}>
       <div style={{ fontFamily: F.body, fontSize: 13, color: C.dim, lineHeight: 1.6, marginBottom: 22 }}>
-        Capture the contract; SuperCargo reads the objectives and matches them for you to confirm.
+        Capture the contract and SuperCargo reads the objectives for you to confirm.
       </div>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Btn
@@ -731,7 +730,7 @@ function ContributePane({
           lineHeight: 1.6
         }}
       >
-        ✓ Sample contributed. Thank you. This helps train the OCR for everyone.
+        ✓ Sample contributed. Thanks, this helps train the OCR for everyone.
       </div>
     )
   }
@@ -772,7 +771,7 @@ function ContributePane({
         />
       ) : (
         <div style={{ fontFamily: F.body, fontSize: 12, color: C.amber, marginBottom: 16 }}>
-          No preview available - recapture to try again.
+          No preview yet. Recapture to try again.
         </div>
       )}
       <div style={{ fontFamily: F.body, fontSize: 11, color: C.faint, marginTop: -8, marginBottom: 16, lineHeight: 1.5 }}>
@@ -803,7 +802,7 @@ function ContributePane({
       <div style={{ fontFamily: F.body, fontSize: 11, color: collecting ? C.dim : C.amber, marginTop: 8, lineHeight: 1.5 }}>
         {collecting
           ? 'Fix any misreads, then contribute. Only the cropped image and your text are saved.'
-          : 'Turn on "Contribute training data" in Settings to keep this. Without it, contributing does nothing.'}
+          : 'Turn on "Contribute training data" in Settings to keep this. Otherwise contributing does nothing.'}
       </div>
     </div>
   )

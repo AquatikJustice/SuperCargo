@@ -72,9 +72,6 @@ async function fetchStarmap() {
   return { byName, entities }
 }
 
-// contract phrases come from a facility's ClassName; parse operator + body off it
-// so the app resolves them instead of guessing by name
-
 // body code to display name, per system
 const STANTON_BODIES = {
   '1': 'Hurston', '1a': 'Arial', '1b': 'Aberdeen', '1c': 'Magda', '1d': 'Ita',

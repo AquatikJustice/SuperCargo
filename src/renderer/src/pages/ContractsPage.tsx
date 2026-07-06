@@ -245,8 +245,7 @@ export default function ContractsPage(): React.ReactElement {
                     <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
                       {c.dataSource === 'manual' ? (
-                        // the game log has no mission id for a hand-added contract, so it can never
-                        // auto-file (#21). manual close-out is the only way to finish it.
+                        // no mission id on a hand-added contract, so it can't auto-file (#21)
                         <>
                           <Btn
                             onClick={() => {
@@ -273,7 +272,7 @@ export default function ContractsPage(): React.ReactElement {
                             {confirmFile === c.id ? 'CONFIRM · FILE COMPLETE' : 'MARK COMPLETE'}
                           </Btn>
                           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-                            manual contracts don't file from your game log, close it out here when it's done
+                            manual contracts don't file from the game log, close it out here when it's done
                           </span>
                         </>
                       ) : c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (

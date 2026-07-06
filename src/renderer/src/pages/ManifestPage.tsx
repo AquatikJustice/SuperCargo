@@ -52,7 +52,7 @@ export default function ManifestPage(): React.ReactElement {
   const reserved = (storAlls[activeShip] ?? []).reduce((a, c) => a + c.size, 0)
   const loadSteps = useMemo(() => (route ? buildLoadingSteps(contracts, route, order) : []), [route, contracts, order])
   const { series, peak } = useMemo(() => loadProfile(loadSteps), [loadSteps])
-  // what's on the ship right now: 0 until you're actually walking the load
+  // 0 until you're actually walking the load
   const aboard = loadingActive && series.length ? series[Math.max(0, Math.min(loadingIdx, series.length - 1))] : 0
 
   if (totals.contracts === 0) {
@@ -548,7 +548,6 @@ function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): 
   )
 }
 
-// red is the one alarm color on the manifest: a bucket carrying cargo off-grid
 function OffGridBadge({ variant, count }: { variant: 'tag' | 'rollup'; count?: number }): React.ReactElement {
   const red = '#ec7470'
   const rollup = variant === 'rollup'

@@ -698,9 +698,8 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // fix scu in place, no dupe
-        // include scu so two deliveries of the same commodity to the same place both register (#27);
-        // the delivered total is fixed per objective, so a re-emit of the same one still dedups
+        // key on scu too, so two deliveries of the same commodity to the same place both register (#27);
+        // a re-emit of the exact same objective still dedups
         const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}|${e.scuAmount}`
         const exists = c.objectives.some(
           (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}|${o.scuAmount}` === ek
@@ -727,8 +726,8 @@ export const useStore = create<StoreState>((set, get) => {
           scheduleReroute()
           return
         }
-        // a shared mission fires a bogus "Player left" abandon mid-haul during party churn;
-        // the real end still arrives, so don't archive it
+        // shared missions fire a bogus "Player left" abandon mid-haul during party churn; the real
+        // end still arrives, so ignore this one
         if (e.completion === 'Abandon' && /left/i.test(e.reason ?? '')) return
         // coalesce against a disconnect wipe
         if (e.completion === 'Abandon' || e.completion === 'Fail') {
@@ -822,10 +821,9 @@ export const useStore = create<StoreState>((set, get) => {
         patch.installedModules !== undefined &&
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
-        // a different hold means a fresh EVERYTHING: the walk closes, the
-        // frozen plan dies, and the route re-solves for the new capacity.
-        // Leaving loadingActive on let the page re-freeze the old ship's
-        // route before the reroute landed (peaks over the new hold's cap)
+        // different hold, reset everything: close the walk, drop the frozen plan, re-solve for the
+        // new capacity. leaving loadingActive on re-froze the old ship's route before the reroute
+        // landed, peaking over the new hold's cap
         set({
           loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadingActive: false,
           loadedPins: {}, deferredObjectives: [], grabbedObjectives: [],
@@ -864,8 +862,8 @@ export const useStore = create<StoreState>((set, get) => {
     addObjectivesToContract: (contractId, objectives, maxBoxSize) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
-        // the modal seeds existing objectives into editable rows, so the submitted set is authoritative.
-        // replace rather than merge, but carry delivery progress for rows that survive unchanged.
+        // modal seeds existing objectives as editable rows, so the submitted set replaces rather
+        // than merges; carry delivery progress for rows that survive unchanged
         const sig = (commodity: string, destination: string, scu: number): string =>
           `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}|${scu}`
         const prior = new Map<string, DeliveryObjective[]>()
@@ -1345,9 +1343,8 @@ export const useStore = create<StoreState>((set, get) => {
         commit(contracts)
         scheduleReroute()
       }
-      // everything not already in the list and not dismissed goes to the review queue.
-      // the log can't hand us box size, and re-emits accepts without objectives, so we
-      // never inject blind; the user reviews each one before it lands.
+      // everything not already listed and not dismissed goes to the review queue. the log can't give
+      // us box size and re-emits accepts without objectives, so the user reviews each one before it lands
       const { dismissedMissions } = get()
       const have = new Set(get().contracts.map((c) => c.id))
       const queued = scanned.filter(
@@ -1374,9 +1371,8 @@ export const useStore = create<StoreState>((set, get) => {
       const item = get().scanQueue.find((s) => s.accepted.missionId === missionId)
       dropScanItem(missionId)
       if (!item) return
-      // hold it hidden until the capture resolves, same as a live accept.
-      // leave scanReviewOpen alone: the capture modal masks the review while it's
-      // up, and it comes back for the rest of the queue once capture closes.
+      // hold it hidden until capture resolves, same as a live accept. leave scanReviewOpen alone:
+      // the capture modal masks the review while it's up, and it returns for the rest of the queue after
       commitScanContract(item, { pendingOcr: true })
       set({ captureOpen: true, captureTargetId: missionId, ocrResult: null, ocrStatus: 'idle' })
     },

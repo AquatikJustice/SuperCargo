@@ -1,6 +1,6 @@
 // One hold model for feasibility, the grid, and the loading walk.
-// Boxes get one permanent slot; two boxes only contend when their
-// aboard windows overlap, so delivered cargo's space comes back.
+// Each box gets one permanent slot; two boxes only contend when their
+// aboard windows overlap, so delivered cargo frees its space back up.
 
 import type { CargoGrid } from './cargoGrids'
 import { BOX_DIMS } from './boxGeometry'
@@ -19,10 +19,10 @@ export interface HoldOpts {
   loose?: ReadonlySet<string>
   pins?: ReadonlyMap<string, Placement>
   /** permanent crates (personal storage): aboard the whole run, never freed,
-   *  and the packer never stacks cargo on them */
+   *  packer never stacks on them */
   fixtures?: ReadonlyMap<string, Placement>
-  /** the previous plan's placements: a box that still fits its old spot
-   *  keeps it, so a re-plan never re-deals cargo the user already saw settled */
+  /** previous plan's placements: a box that still fits its old spot keeps it,
+   *  so a re-plan doesn't re-deal cargo the user already saw settled */
   prev?: ReadonlyMap<string, Placement>
   /** empty cells kept between different-stop blocks while space allows */
   gap?: number
@@ -41,8 +41,8 @@ export interface UnitVerdict {
 
 export interface Concession {
   boxId: string
-  /** peel = out of delivery-depth order, unloads around it need lift-outs;
-   *  flank = pins a neighbor (game bug), plan a shuffle at its drop;
+  /** peel = out of delivery-depth order, unloads around it need lift-outs.
+   *  flank = pins a neighbor (game bug), plan a shuffle at its drop.
    *  build = loads buried, a dig-out */
   kind: 'peel' | 'flank' | 'build'
 }
@@ -64,7 +64,7 @@ export interface HoldPlan {
 type Axis = 'x' | 'y' | 'z'
 
 // bay-local frame: d runs exit-inward, c across, y away from the floor face.
-// Each canonical dimension maps to one grid axis with an optional flip
+// Each canonical dimension maps to one grid axis with an optional flip.
 interface BayCtx {
   idx: number
   grid: CargoGrid
@@ -119,8 +119,7 @@ function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
   const floor = frame?.floor ?? grid.floor ?? 'y-'
   let up = floor[0] as Axis
   let upFlip = floor[1] === '+'
-  // an exit through the floor axis can't carry a horizontal peel; keep the
-  // default deck rather than guessing
+  // exit through the floor axis can't carry a horizontal peel; keep the default deck
   if (exit.axis === up) {
     up = 'y'
     upFlip = false
@@ -143,8 +142,8 @@ function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
   }
 }
 
-// canonical (c,d,y) <-> grid-local (x,y,z): each canonical dimension writes
-// one grid axis, flipped when its reference face sits on the plus side
+// canonical (c,d,y) <-> grid-local (x,y,z): each canonical dimension writes one
+// grid axis, flipped when its reference face sits on the plus side
 function toPlacement(b: BayCtx, s: Slot): Placement {
   const dims = BOX_DIMS[s.box.size]
   const pos = { x: 0, y: 0, z: 0 }
@@ -209,14 +208,11 @@ interface Relax {
   flank?: boolean
 }
 
-// strict legality for one candidate slot: free cells, own-stop support held
-// the whole window, row exclusivity, peel order, insertable, no flank pair.
-// Mirrors the checks findSpot applies on its strict rung; keep in lockstep.
-// A hand-pinned rival only binds physically: it never claims row ownership,
-// and in keep mode it doesn't impose lane order either; the user parked it
-// there, settled neighbors stay put and any dig cost is theirs to see.
-// relax rungs match findSpot's: peel skips row+lane, build skips insert,
-// build or flank skips the sandwich test
+// strict legality for one candidate slot. Mirrors findSpot's strict rung, keep
+// in lockstep. A hand-pinned rival only binds physically: no row ownership, and
+// in keep mode no lane order either (the user parked it, any dig cost is theirs).
+// relax rungs match findSpot: peel skips row+lane, build skips insert, build or
+// flank skips the sandwich test.
 function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false, relax: Relax = {}): boolean {
   if (rivals.some((r) => cellsClash(t, r))) return false
   if (t.y > 0)
@@ -250,24 +246,22 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
   return true
 }
 
-// long boxes turn ACROSS the bay and stack tall against the wall; the wall
-// side packs solid to a box's depth before a box drops into the leftover
-// aisle strip. A box rides a strictly bigger one before taking floor, and
-// smalls fill the lowest gaps flat so tops stay clean for a later pickup.
-// fits() still gates every spot, so delivery zones, peel order and the
-// flank-bug guard are untouched. The final delivery scans from the far wall
-// backward so it anchors against the bulkhead.
+// long boxes turn across the bay and stack tall against the wall; the wall side
+// packs solid to a box's depth before anything drops into the leftover aisle
+// strip. A box rides a strictly bigger one before taking floor; smalls fill the
+// lowest gaps flat so tops stay clean for a later pickup. fits() still gates
+// every spot. The final delivery scans from the far wall back so it anchors
+// against the bulkhead.
 function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: number, deep: boolean): Slot | null {
   const dims = BOX_DIMS[probe.box.size]
   if (!dims) return null
   if (bay.grid.maxSize && probe.box.size > bay.grid.maxSize) return null
   const aboardAtLoad = rivals.filter((r) => r.load < probe.load && r.drop > probe.load)
   const size = probe.box.size
-  // a wall-floored bay's cross axis points at the sky: turning would stand the
-  // box on end, so it never swaps its footprint there
+  // a wall-floored bay's cross axis points at the sky; turning would stand the box
+  // on end, so it never swaps its footprint there
   const canTurn = !(dims.w === dims.l || bay.cross === 'y')
 
-  // how deep this stop's section already reaches
   let blockEnd = d0
   for (const r of rivals) if (!r.anchor && r.stop === probe.stop) blockEnd = Math.max(blockEnd, r.d + r.dl)
   const capped = blockEnd > d0 ? blockEnd : bay.dl
@@ -276,9 +270,8 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   const underAt = (c: number, d: number, y: number): Slot | undefined =>
     rivals.find((r) => r.y + r.h === y && c >= r.c && c < r.c + r.cw && d >= r.d && d < r.d + r.dl)
 
-  // never auto-rest a box on another stop's cargo: fits() would allow it on a
-  // pinned box, but a pin's cross-stop relaxation is for hand-moves, not the
-  // packer. Stops share a footprint only when the user drags one there.
+  // never auto-rest a box on another stop's cargo. fits() allows it on a pinned
+  // box, but that cross-stop relaxation is for hand-moves, not the packer
   const ownSupport = (t: Slot): boolean => {
     if (t.y === 0) return true
     for (let dd = 0; dd < t.dl; dd++)
@@ -288,9 +281,9 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
       }
     return true
   }
-  // a superbucket owns the full X-width of every depth slice it sits in, so no
-  // other stop may share that depth, pinned or not. fits() relaxes this for a
-  // hand-pinned rival (its own drag), but the packer never gets to.
+  // a superbucket owns the full width of every depth slice it sits in; no other
+  // stop shares that depth, pinned or not. fits() relaxes this for a hand-pinned
+  // rival, the packer never does.
   const sliceOwn = (t: Slot): boolean => {
     for (const r of rivals)
       if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
@@ -358,7 +351,7 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
 
   if (!canTurn) return firstFit(dims.w, dims.l, bay.dl)
 
-  // turn across against the wall; a deep box only drops into the aisle strip
+  // turn across against the wall; a deep box drops into the aisle strip only
   // once the wall beside it is solid to its depth
   const across = firstFit(dims.l, dims.w, bay.dl)
   const narrow = firstFit(dims.w, dims.l, bay.dl)
@@ -367,8 +360,8 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   return narrow
 }
 
-// slide in at its level, or lower it down an open-topped column: a pit
-// between stacks is fine, a spot with cargo overhead is not
+// slide in at its level, or lower down an open-topped column: a pit between
+// stacks is fine, a spot with cargo overhead is not
 function canInsert(aboard: Slot[], t: Slot): boolean {
   if (!aboard.some((r) => laneClash(t, r) && r.d < t.d)) return true
   return !aboard.some(
@@ -443,8 +436,7 @@ function findSpot(
         if (rivals.some((r) => cellsClash(t, r))) continue
         if (y > 0) {
           // rests only on its own stop's boxes (or anchors), held the whole
-          // window, and never on a smaller box: biggest bottom is literal;
-          // different stops never stack on each other
+          // window, never on a smaller one; stops never stack on each other
           let held = true
           for (let dc = 0; dc < cwf && held; dc++)
             for (let dd = 0; dd < dlf && held; dd++) {
@@ -466,40 +458,37 @@ function findSpot(
           if (!held) continue
         }
         let ok = true
-        // a superbucket owns the full width of every depth slice it sits in:
-        // no other stop shares that depth, pinned or not, ever (this is the one
-        // rule that outranks a dig concession)
+        // superbucket owns the full width of every depth slice it sits in: no
+        // other stop shares that depth, pinned or not (outranks a dig concession)
         for (const r of rivals)
           if (!r.anchor && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) { ok = false; break }
         if (ok && !relax.peel)
           for (const r of rivals) {
             if (!laneClash(t, r)) continue
             const pad = r.stop !== t.stop ? gap : 0
-            // earlier drop peels first, so it sits nearer the exit
+            // earlier drop peels first, sits nearer the exit
             if (r.drop < t.drop && r.d + r.dl + pad > t.d) { ok = false; break }
             if (r.drop > t.drop && t.d + t.dl + pad > r.d) { ok = false; break }
           }
         if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
         if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
         if (!ok) continue
-        // in the depth zone, glued to own stop, stack HIGH before claiming new
-        // floor (floor is the scarce resource), low, shallow. Orientation is a
-        // tiebreak at equal depth: stretch across, but a rotated box that fills
-        // the current row beats an across box opening a new one
+        // in the depth zone, glued to own stop, stack high before claiming new
+        // floor (floor is scarce), low, shallow. Orientation breaks ties at equal
+        // depth: a rotated box that fills the current row beats one opening a new one
         let contacts = 0
         for (const r of rivals) if (r.stop === t.stop && touches(t, r)) contacts++
         const glued = contacts ? 0 : 1
-        // perching smalls keep off the wall-side tops: that's where the next
-        // unit's tall column lands, and a squatter there shoves it off line
+        // perching smalls stay off the wall-side tops: that's where the next unit's
+        // tall column lands, and a squatter there shoves it off line
         const hugHigh = cwf * dlf <= 4 && y > 0 ? !bay.wallHigh : bay.wallHigh
         const cWall = hugHigh ? bay.cw - (t.c + cwf) : t.c
-        // the run's final delivery anchors at the far wall: nothing ever
-        // loads behind it, so shallow-packing would strand it mid-bay
+        // the final delivery anchors at the far wall; nothing loads behind it, so
+        // shallow-packing would strand it mid-bay
         const dKey = deep ? bay.dl - (t.d + dlf) : t.d
-        // small boxes nestle before edging: more own-stop faces touched beats
-        // a spot at the rim, and kissing the hull counts once a box is
-        // already nestling. Bigger boxes keep pure geometry; contact-chasing
-        // there walls off space and costs the route real trips
+        // small boxes nestle before edging: more own-stop faces touched beats a spot
+        // at the rim, and kissing the hull counts once already nestling. Big boxes
+        // keep pure geometry; contact-chasing there walls off space and costs trips
         const wallKiss = (bay.wallHigh ? t.c + cwf === bay.cw : t.c === 0) ? 1 : 0
         const snug = probe.box.size <= 4 && contacts ? -(contacts + wallKiss) : 0
         const key = [t.d >= zone ? 0 : 1, glued, y === 0 ? cwf * dlf : 0, t.y, dKey, dlf, snug, cWall]
@@ -530,8 +519,8 @@ function bestFace(
   // the unit's reserved depth zone starts past every co-aboard earlier delivery
   let zone = 0
   for (const s of rivals) if (!s.anchor && s.drop < probe.drop) zone = Math.max(zone, s.d + s.dl)
-  // a wall-floored bay's cross axis points at the sky: a footprint swap there
-  // stands the box on end, so the long side stays on the level depth axis
+  // wall-floored bay's cross axis points at the sky; a swap there stands the box
+  // on end, so the long side stays on the level depth axis
   const faces: Array<[number, number]> =
     dims.w === dims.l || bay.cross === 'y' ? [[dims.w, dims.l]] : [[dims.w, dims.l], [dims.l, dims.w]]
   let best: { slot: Slot; key: number[] } | null = null
@@ -554,9 +543,8 @@ function seatBoxes(
   const placed: Slot[] = []
   for (const box of [...unit].sort(unitOrder)) {
     const probe: Slot = { box, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0, load, drop, stop: box.stopIdx, anchor: false }
-    // best spot across every permitted bay, not the first bay with any spot:
-    // a spilled box would rather glue to its stack next door than squat in
-    // an empty pocket here
+    // best spot across every permitted bay, not the first bay with any spot: a
+    // spilled box would rather glue to its stack next door than squat an empty pocket
     let got: { slot: Slot; key: number[] } | null = null
     for (const bay of cfg) {
       const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
@@ -570,8 +558,8 @@ function seatBoxes(
 }
 
 // whole unit into one bay set, no concessions. Seat once to pick the bay and
-// find the section start, then rebuild it with the wall scanner so the block
-// comes out as solid full-width slices
+// find the section start, then rebuild with the wall scanner so the block comes
+// out as solid full-width slices
 function seatUnit(
   cfg: BayCtx[],
   slots: Slot[],
@@ -585,8 +573,8 @@ function seatUnit(
   const first = seatBoxes(cfg, slots, unit, load, drop, gap, deep)
   if (!first || !shaping) return first
   // rebuild each bay's share with the wall scanner; a stop's later pickups
-  // continue the section its first pickup started, plugging its leftover
-  // holes instead of opening a fresh wall beside it
+  // continue the section its first pickup started, plugging its leftover holes
+  // instead of opening a fresh wall beside it
   const byBay = new Map<number, PackBox[]>()
   for (const s of first) (byBay.get(s.bay) ?? byBay.set(s.bay, []).get(s.bay)!).push(s.box)
   const placed: Slot[] = []
@@ -645,13 +633,11 @@ function seatConceding(
       for (const rung of rungList)
         for (const bay of bayList) {
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
-          // the scanner visits every cell, so on the strict rung it finds a
-          // spot whenever one exists; shaped passes use it here too so a
-          // bucket too big for any bay still comes out as long lines. The
-          // final delivery keeps its bulkhead anchor even here: a mega
-          // bucket packing shallow floods the fronts everyone after it
-          // needs. Deep stays off the relaxed rungs; forcing it there made
-          // a near-full hold trade real placements for the anchor
+          // scanner visits every cell, so on the strict rung it finds a spot
+          // whenever one exists; shaped passes use it here too so an oversized
+          // bucket still comes out as long lines. deep stays off the relaxed
+          // rungs: forcing it there made a near-full hold trade placements for
+          // the anchor
           const s =
             shaping && !rung.kind
               ? scanSpot(bay, rivals, probe, rung.gap, 0, deep)
@@ -692,7 +678,7 @@ function extractIssues(slots: Slot[], step: number): Strand[] {
   const whyStuck = (r: Slot, others: Slot[]): string[] | null => {
     const blockers = new Set<string>()
     if (others.some((q) => laneClash(q, r) && q.d < r.d)) {
-      // blocked at its level; lifts out the open top unless something hangs over it
+      // blocked at its level; lifts out the top unless something hangs over it
       const overCol = others.filter(
         (q) => spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && spans(q.d, q.d + q.dl, r.d, r.d + r.dl) && q.y >= r.y + r.h
       )
@@ -737,10 +723,10 @@ function extractIssues(slots: Slot[], step: number): Strand[] {
   }
 }
 
-// Live fit oracle for the route walk. Cargo placed at pickup stays put;
-// deliveries free real space. Answers use the same physics as planHold but
-// only clean and lift-tier placements, so "won't fit" nudges the walk to
-// deliver first and come back rather than plan a dig.
+// Live fit oracle for the route walk. Cargo placed at pickup stays put,
+// deliveries free real space. Same physics as planHold but only clean and
+// lift-tier placements, so "won't fit" nudges the walk to deliver first and
+// come back rather than plan a dig.
 export interface OracleJob {
   id: number
   dest: number
@@ -876,9 +862,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   let ordered = [...units.values()].sort(
     (a, b) => dropOf(a[0].id) - dropOf(b[0].id) || loadOf(a[0].id) - loadOf(b[0].id)
   )
-  // on an over-full hold, boxes the previous plan couldn't seat stay at the
-  // back of the line: letting them jump into a spot a drag just vacated is
-  // what makes OTHER boxes blink out of the hold mid-walk
+  // on an over-full hold, boxes the previous plan couldn't seat stay at the back
+  // of the line: letting them grab a spot a drag just vacated is what makes other
+  // boxes blink out of the hold mid-walk
   if (prev?.size) {
     const had = (u: PackBox[]): boolean => u.some((b) => prev.has(b.id))
     ordered = ordered.filter(had).concat(ordered.filter((u) => !had(u)))
@@ -922,13 +908,13 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       const drop = dropOf(unit[0].id)
       const stop = unit[0].stopIdx
       const deep = drop === lastDrop
-      // a box that still fits the spot the previous plan gave it keeps it;
-      // only displaced boxes re-seat, so the layout the user saw stays put
+      // a box that still fits the spot the previous plan gave it keeps it; only
+      // displaced boxes re-seat, so the layout the user saw stays put
       let rest = unit
       if (prev) {
         rest = []
-        // floor first: a kept box's supporter must already be back in place
-        // before the support check runs
+        // floor first: a kept box's supporter must be back in place before its
+        // support check runs
         for (const box of [...unit].sort((a, b) => (prev.get(a.id)?.y ?? 0) - (prev.get(b.id)?.y ?? 0))) {
           const pl = prev.get(box.id)
           const bay = pl ? bayById.get(pl.gridId) : undefined
@@ -936,9 +922,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             const t = fromPlacement(bay, { ...pl, box }, load, drop, false)
             const rivals = slots.filter((s) => s.bay === bay.idx && windowsOverlap(s, t))
             const support = rivals.filter((r) => r.load < load && r.drop > load)
-            // a spot the previous plan seated as a declared concession must
-            // keep on the same terms, or every conceded box re-deals on every
-            // re-plan; the ladder mirrors the seat ladder and re-declares
+            // a spot seated last time as a declared concession keeps on the same
+            // terms, or every conceded box re-deals on every re-plan; the ladder
+            // mirrors the seat ladder and re-declares
             let seat: Slot | null = null
             let cost: Concession['kind'] | null = null
             const tiers: Array<[Relax, Concession['kind'] | null]> = [
@@ -953,8 +939,8 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
                 cost = kind
                 break
               }
-            // its supporter left: settle straight down in its own column
-            // before the ladder gets to fling it somewhere fresh
+            // supporter left: settle straight down in its own column before the
+            // ladder flings it somewhere fresh
             for (let y = 0; !seat && y < t.y; y++) {
               const s2 = { ...t, y }
               if (fits(rivals, s2, gap, support, true)) seat = s2
@@ -992,7 +978,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
         }
       }
       // whole unit clean in one bay, then a fresh bay, then spilled, then per-box
-      // concessions. Bays holding this stop's pinned or kept cargo count as homes
+      // concessions. Bays holding this stop's pinned/kept cargo count as homes
       // even before any unit opened them
       const has = (b: BayCtx): boolean => slots.some((s) => s.bay === b.idx && s.stop === stop)
       const homes = open
@@ -1002,9 +988,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       let placed: Slot[] | null = null
       for (const b of homes) if ((placed = seatUnit([b], slots, rest, load, drop, gap, shaping, deep))) break
       if (!placed) {
-        // the final delivery opens the smallest bay that takes it whole:
-        // a handful of last-drop boxes claiming the big bay's bulkhead rows
-        // starves the mid-run stop that needed exactly that depth
+        // the final delivery opens the smallest bay that takes it whole: a few
+        // last-drop boxes claiming the big bay's bulkhead rows starve the mid-run
+        // stop that needed exactly that depth
         const fresh = bays.filter((b) => !open.includes(b))
         if (deep) fresh.sort((a, b) => a.cw * a.dl * a.h - b.cw * b.dl * b.h)
         for (const next of deep ? fresh : fresh.slice(0, 1))
@@ -1031,8 +1017,8 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   }
 
   const homeless = (p: PassResult): number => p.verdicts.reduce((a, v) => a + (v.ok ? 0 : v.boxes.length), 0)
-  // the most window-constrained cargo shouldn't go last: on any homeless
-  // boxes, retry once with their units placed first
+  // the most window-constrained cargo shouldn't go last: on any homeless boxes,
+  // retry once with their units placed first
   const solve = (shaping: boolean): PassResult => {
     let pass = runPass(ordered, shaping)
     if (pass.verdicts.some((v) => !v.ok)) {
@@ -1050,9 +1036,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     return pass
   }
 
-  // neat shapes when they're free; a near-full hold keeps whichever world
-  // owes fewer concessions, and once boxes are homeless the flat world also
-  // takes ties; shapes have no business winning under that kind of pressure
+  // neat shapes when they're free; a near-full hold keeps whichever world owes
+  // fewer concessions, and once boxes are homeless the flat world takes ties too
+  // (shapes have no business winning under that pressure)
   let pass = solve(true)
   let shapedWon = true
   if (homeless(pass) || pass.concessions.length) {
@@ -1070,15 +1056,12 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
     }
   }
 
-  // a stop smeared across bays pulls its strays back to its main bay when
-  // they all fit there cleanly; anything resting on a stray is the same
-  // stop's cargo, so the whole group moves or none of it does. In the
-  // shaped world the strays re-seat through the wall scanner so they
-  // continue the stop's section instead of landing as a rank-shaped tower.
-  // When the strays miss, each squatter group in the main bay gets a shot
-  // at re-homing whole into another bay first: short-stay cargo parked in
-  // the front rows early poisons whole-run cells by a hair, and evicting
-  // it is a solver-time move like any other
+  // a stop smeared across bays pulls its strays back to its main bay when they
+  // all fit there cleanly; the whole group moves or none of it does. Shaped
+  // strays re-seat through the wall scanner so they continue the stop's section.
+  // When the strays miss, each squatter group in the main bay gets a shot at
+  // re-homing whole into another bay first (short-stay cargo parked in the front
+  // rows poisons whole-run cells by a hair, and evicting it is a solver-time move)
   const reunite = (p: PassResult, shaped: boolean): Set<string> => {
     const moved = new Set<string>()
     const nailed = (id: string): boolean => (pins?.has(id) ?? false) || p.kept.has(id)
@@ -1096,15 +1079,14 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       const start = isFinite(d0) ? d0 : 0
       const deep = s.drop === lastDrop
       const got = scanSpot(bays[bayIdx], rivals, probe, gap, start, deep)
-      // the family can also grow toward the door: rows in front of its
-      // section freed by a delivery are fair game when the section is full
+      // the family can also grow toward the door: rows in front of its section,
+      // freed by a delivery, are fair game once the section is full
       return got ?? (start > 0 ? scanSpot(bays[bayIdx], rivals, probe, gap, 0, deep) : null)
     }
     const moveAll = (list: Slot[], bayIdx: number): Slot[] | null => {
       const saved = list.map((s) => ({ ...s }))
-      // bigs claim their columns before smalls eat the floor, and within a
-      // size the earliest load goes first so stacking chains stay legal
-      // (a box only rests on cargo aboard for its whole window)
+      // bigs claim their columns before smalls eat the floor, and within a size
+      // the earliest load goes first so stacking chains stay legal
       for (const s of [...list].sort((a, b) => b.box.size - a.box.size || a.load - b.load)) {
         const slot = seatIn(s, bayIdx)
         if (!slot) {
@@ -1115,22 +1097,21 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       }
       return saved
     }
-    // earlier deliveries reunite first, same as they seat: a late stop's
-    // eviction needs the bays the early stops have already tidied. Pins
-    // land in the slot list ahead of everything, so insertion order would
-    // put a pinned stop at the front and starve its eviction
+    // earlier deliveries reunite first, same as they seat: a late stop's eviction
+    // needs the bays the early stops have tidied. Sort by drop, not insertion order
+    // (pins land ahead of everything, which would starve their own eviction)
     const groups = [...byStop.values()].sort((a, b) => a[0].drop - b[0].drop || a[0].stop - b[0].stop)
     for (const group of groups) {
       const count = new Map<number, number>()
       for (const s of group) count.set(s.bay, (count.get(s.bay) ?? 0) + 1)
       if (count.size < 2) continue
       const scu = group.reduce((a, s) => a + s.box.size, 0)
-      // pinned and kept cargo is nailed down: it can't move, but it still
-      // votes; only a bay holding every nailed box can be the family's home
+      // pinned/kept cargo can't move but still votes: only a bay holding every
+      // nailed box can be the family's home
       const nailedBays = new Set(group.filter((s) => nailed(s.box.id)).map((s) => s.bay))
       if (nailedBays.size > 1) continue
-      // consolidation target: its biggest cluster's bay first, then the rest;
-      // a bay the whole family can't even volume-fit isn't worth a scan
+      // consolidation target: biggest cluster's bay first, then the rest; a bay
+      // the whole family can't even volume-fit isn't worth a scan
       const targets = [...count.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([i]) => i)
@@ -1144,9 +1125,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
           done = true
           break
         }
-        // a single short-stay unit squatting the target bay can poison
-        // whole-window rows by a hair; give each one a shot at re-homing
-        // whole into another bay, then try the strays again
+        // a single short-stay unit squatting the target bay can poison whole-window
+        // rows by a hair; give each a shot at re-homing whole elsewhere, then retry
+        // the strays
         const units = new Map<string, Slot[]>()
         for (const q of p.slots)
           if (!q.anchor && !nailed(q.box.id) && q.bay === homeIdx && q.stop !== group[0].stop)
@@ -1172,9 +1153,9 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   }
   const movedIds = reunite(pass, shapedWon)
 
-  // a tiny box seated before its family arrived may sit at the rim of what
-  // became a hole; re-nestle it against the finished layout (solver-time
-  // move, its permanent slot just improves before anyone sees the plan)
+  // a tiny box seated before its family arrived may sit at the rim of what became
+  // a hole; re-nestle it against the finished layout (solver-time move, its slot
+  // just improves before anyone sees the plan)
   const tidyTiny = (p: PassResult): void => {
     const contactsOf = (t: Slot, rivals: Slot[]): number => {
       let n = 0
@@ -1195,17 +1176,17 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
       if (rider) continue
       const rivals = p.slots.filter((q) => q !== s && q.bay === s.bay && windowsOverlap(q, s))
       const got = bestFace(bays[s.bay], rivals, { ...s, bay: -1, c: 0, d: 0, y: 0, cw: 0, dl: 0, h: 0 }, gap, {})
-      // this pass exists only to nestle: move on a strict contact gain,
-      // never sideways into a spot the key likes but the eye doesn't
+      // nestle only: move on a strict contact gain, never sideways into a spot
+      // the key likes but the eye doesn't
       if (got && contactsOf(got.slot, rivals) > contactsOf(s, rivals)) Object.assign(s, got.slot)
     }
   }
   tidyTiny(pass)
 
-  // pins are immovable in c/d, but gravity still applies: dragging the box
-  // out from under a hand-placed (or loaded) stack must not leave it hanging.
-  // The floating pin and everything resting on it fall together, straight
-  // down, onto the nearest legal support
+  // pins are immovable in c/d, but gravity still applies: dragging the box out
+  // from under a hand-placed (or loaded) stack must not leave it hanging. The
+  // floating pin and everything on it fall together, straight down, onto the
+  // nearest legal support
   const settlePins = (p: PassResult): void => {
     const holds = (r: Slot, t: Slot): boolean =>
       (r.anchor && !r.fixture) || ((r.stop === t.stop || !!r.pinned) && containsWindow(r, t) && r.box.size >= t.box.size)
@@ -1268,11 +1249,10 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   const { slots, byBox, verdicts } = pass
   const concessions = pass.concessions.filter((c) => !movedIds.has(c.boxId))
 
-  // a seat is one position for the box's whole stay, but a delivery can pull
-  // the floor out from under a pinned stack mid-stay (re-solves reorder drops
-  // after pins are made). Each step's snap settles what remains straight down,
-  // like the game does. The slot keeps its seat; the walk makes a settle real
-  // by promoting it into the pin, and future stops plan around it from there
+  // a seat is one position for the box's whole stay, but a delivery can pull the
+  // floor out from under a pinned stack mid-stay (re-solves reorder drops after
+  // pins are made). Each step's snap settles what remains straight down, like the
+  // game does; the walk makes a settle real by promoting it into the pin
   const anchorSlots = slots.filter((q) => q.anchor)
   const overCD = (a: Slot, b: Slot): boolean =>
     a.c < b.c + b.cw && b.c < a.c + a.cw && a.d < b.d + b.dl && b.d < a.d + a.dl

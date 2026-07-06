@@ -42,9 +42,8 @@ function createWindow(): void {
     height: ws.height,
     x: ws.x,
     y: ws.y,
-    // the content pages are dense fixed-column tables (contracts, history); below ~960 their
-    // columns crowd and wrap into a mess. the compact overlay is the skinny companion, the
-    // main window stays a full workspace.
+    // below ~960 the fixed-column tables (contracts, history) crowd and wrap; the compact
+    // overlay is the skinny companion, this stays a full workspace
     minWidth: 960,
     minHeight: 560,
     show: false,
@@ -286,8 +285,8 @@ function captureDisplayMatches(win: BrowserWindow): boolean {
   return screen.getDisplayMatching(win.getBounds()).id === target.id
 }
 
-// keep our own windows out of the screenshot: hide them for the grab, then restore.
-// the main window only needs hiding when it's on the display being captured (single-monitor case).
+// hide our own windows for the grab, then restore. the main window only needs hiding
+// when it's on the display being captured (single-monitor case).
 async function withWindowsHidden<T>(fn: () => Promise<T>): Promise<T> {
   const restore: Array<() => void> = []
 
