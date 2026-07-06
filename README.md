@@ -11,7 +11,7 @@ interface.
 
 ## Download
 
-Grab the latest build (**v0.7.0**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
+Grab the latest build (**v0.8.0**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
 
 - **Windows installer** (`SuperCargo-Setup-*.exe`) installs and auto-updates.
 - **Windows portable** (`SuperCargo-Portable-*.exe`) is a single exe with no install.
@@ -34,26 +34,29 @@ If you hit problems, please open an issue with your distro and what happened.
 
 ## Features
 
-- **Automatic Contract Tracking.** Picks up hauling contract accepts, objectives, completions,
-  and abandons as they happen.
-- **Manifest.** Every active contract's cargo in one place, grouped by destination or by
-  contract, with per-stop SCU and box totals and a color-coded hold-capacity bar.
-- **Auto-loading mode.** Follows your route and tells you what to load at each pickup, where to put it
-  on your ship, and what to drop along the way. A multi-pickup run becomes a checklist.
-- **Manual loading mode.** Would rather pack it your own way? Place every box in the 3D hold by hand.
-- **Route optimization.** Orders your stops to cut down on travel. Drag to override whenever you
-  want.
-- **3D cargo grid and loading guide.** A packed view of your hold plus a per-stop walkthrough of
-  what to pull from the freight elevator, in load order.
+- **Automatic contract tracking.** Picks up hauling accepts, objectives, completions, and abandons
+  from the game log as they happen.
+- **Manifest.** Every active contract's cargo in one place, grouped by destination or by contract,
+  with per-stop SCU and box totals and a live hold-capacity bar.
+- **Guided loading.** One walk plans the whole load: what to grab at each stop, where it goes in the
+  3D hold, and what to drop along the way. Drag any box anywhere at any step, and undo any move.
+- **3D cargo grid.** A packed view of your hold, color-coded by destination, loaded in delivery
+  order so you never dig one stop out from under another.
+- **Personal storage.** Park Stor-All crates in your hold; the planner packs and routes around them.
+- **Off-grid cargo.** Carry loose boxes on a pad beside your bays and drag them on and off any time.
+- **Route optimization.** Orders your stops to cut travel, and shows the run's total distance. Drag
+  to override whenever you want.
 - **OCR capture.** Reads the mobiGlas contract screen to fill in objectives, max box size, and
-  reward for you to confirm before it lands on the manifest.
+  reward for you to confirm. Can also scan the game log to catch contracts you accepted while the
+  app was closed.
 - **Edit anything.** Change a contract after you add it. Pickup, reward, rank, max box size, and
   each objective's commodity, amount, and destination are all editable inline.
-- **Turn-in tracking.** On submit, record a full, partial, or no turn-in per stop, including
-  partial payouts and the reputation line.
+- **Turn-in tracking.** On submit, record a full, partial, or no turn-in per stop, including partial
+  payouts and the reputation line.
 - **Runs and history.** Work is grouped into runs. One trip is one run. History keeps each run's
   contracts and earnings.
-- **Compact overlay.** A small always-on-top "next stop" card you can pin over the game.
+- **Compact overlay.** A small always-on-top "next stop" card you can pin over the game, with
+  adjustable size, opacity, and corner.
 - **StarStrings compatible.** When it's present, blueprint chances and reputation show up.
 
 ## Screenshots
