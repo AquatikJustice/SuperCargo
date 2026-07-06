@@ -139,6 +139,9 @@ export default function CaptureModal(): React.ReactElement | null {
     if (ocrResult.reward) setReward(ocrResult.reward)
   }, [ocrResult])
 
+  // ocr-filled fields the user corrected, for the accuracy stat
+  const touched = useRef(new Set<string>())
+
   if (!open) return null
 
   const reset = (): void => {
@@ -160,9 +163,6 @@ export default function CaptureModal(): React.ReactElement | null {
     reset()
     close()
   }
-
-  // ocr-filled fields the user corrected, for the accuracy stat
-  const touched = useRef(new Set<string>())
 
   const update = (key: number, patch: Partial<ObjRow>): void => {
     if ('commodity' in patch) touched.current.add(`commodity:${key}`)
