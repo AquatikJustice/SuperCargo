@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
+import { isSystemDestination } from '@shared/contract'
 import type { DeliveryObjective, MatchResult, OcrObjective, OcrEditTally } from '@shared/types'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
@@ -129,7 +130,23 @@ export default function CaptureModal(): React.ReactElement | null {
     setContributed(false)
     const logged = target?.objectives ?? []
     if (logged.length > 0) {
-      setRows(logged.map(rowFromContract))
+      // the log only knows the system for cross-system deliveries; take the real
+      // destination OCR read off the panel, matched by commodity + scu
+      setRows(
+        logged.map((o) => {
+          const row = rowFromContract(o)
+          if (!isSystemDestination(o.destination)) return row
+          const hit = ocrResult.objectives.find(
+            (x) =>
+              x.scuAmount === o.scuAmount &&
+              (x.commodity.match ?? x.commodity.input).trim().toLowerCase() ===
+                o.commodity.trim().toLowerCase()
+          )
+          if (!hit) return row
+          const d = seedField(hit.destination)
+          return { ...row, destination: d.value, ocrDestination: d.hint }
+        })
+      )
     } else if (ocrResult.objectives.length > 0) {
       setRows(ocrResult.objectives.map(rowFromOcr))
     } else {

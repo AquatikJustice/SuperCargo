@@ -30,6 +30,7 @@ import { payoutFactor, snapPayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules } from '@shared/shipModules'
+import { isSystemDestination } from '@shared/contract'
 import { gridCapacity, gridsFor, loadableGrids, setGridFaces, type CargoGrid } from '@shared/cargoGrids'
 import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
@@ -115,7 +116,7 @@ function makeObjective(input: ManualObjectiveInput, maxBoxSize: number): Deliver
 }
 
 function contractNeedsOcr(c: HaulingContract): boolean {
-  return !c.boxSizeConfirmed
+  return !c.boxSizeConfirmed || c.objectives.some((o) => isSystemDestination(o.destination))
 }
 
 function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingContract {
@@ -709,10 +710,19 @@ export const useStore = create<StoreState>((set, get) => {
           ...c.objectives,
           makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, c.maxBoxSize)
         ]
+        // cross-system deliveries log only the system; hold for OCR to read the real
+        // station off the contract screen, same as the box-size capture
+        const wantsOcr =
+          get().settings.ocrAutoCapture && isSystemDestination(e.destination) && !c.pendingOcr
         const updated = [...contracts]
-        updated[idx] = { ...c, objectives }
+        updated[idx] = { ...c, objectives, pendingOcr: c.pendingOcr || wantsOcr }
         commit(updated)
         scheduleReroute()
+        if (wantsOcr) {
+          set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
+          window.supercargo.requestOcrCapture(e.missionId)
+          setTimeout(() => resolvePending(e.missionId), 20000)
+        }
       }))
       track(window.supercargo.onContractEnded((e: ContractEndedEvent) => {
         const { contracts } = get()
