@@ -91,8 +91,7 @@ function wallIsHigh(grid: CargoGrid, cross: Axis): boolean {
   if (!f) return false
   const hi = f[`${cross}+` as keyof typeof f]
   const lo = f[`${cross}-` as keyof typeof f]
-  if (hi === 'wall' || lo === 'aisle') return true
-  return false
+  return hi === 'wall' || lo === 'aisle'
 }
 
 interface Slot {

@@ -1634,8 +1634,8 @@ export default function CargoGridPage(): React.ReactElement {
     const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : loadIdx + 1)
     if (!replanCurrent) {
       // tail re-plans this visit's remaining work; what the open card covers would walk twice
-      const curIds = new Set([...cur.loadIds, ...cur.dropIds])
-      while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => curIds.has(l.objectiveId)))
+      const visitIds = new Set([...cur.loadIds, ...cur.dropIds])
+      while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => visitIds.has(l.objectiveId)))
         tail = tail.slice(1)
     }
     // visit keys must stay unique across the splice

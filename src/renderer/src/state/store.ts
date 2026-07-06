@@ -871,7 +871,7 @@ export const useStore = create<StoreState>((set, get) => {
           const k = sig(o.commodity, o.destination, o.scuAmount)
           ;(prior.get(k) ?? prior.set(k, []).get(k)!).push(o)
         }
-        const objectives2 = objectives
+        const rebuilt = objectives
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
           .map((o) => {
             const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
@@ -893,7 +893,7 @@ export const useStore = create<StoreState>((set, get) => {
           maxBoxSize,
           boxSizeConfirmed: true,
           pendingOcr: false,
-          objectives: objectives2
+          objectives: rebuilt
         }
       })
       commit(contracts)

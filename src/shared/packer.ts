@@ -109,9 +109,7 @@ function wallIsHigh(grid: CargoGrid, axis: 'x' | 'z'): boolean {
   if (!f) return false
   const hi = axis === 'z' ? f['x+'] : f['z+']
   const lo = axis === 'z' ? f['x-'] : f['z-']
-  if (hi === 'wall' || lo === 'aisle') return true
-  if (lo === 'wall' || hi === 'aisle') return false
-  return false
+  return hi === 'wall' || lo === 'aisle'
 }
 
 function makeBay(grid: CargoGrid): Bay {
