@@ -266,6 +266,7 @@ interface StoreState {
     objectiveId: string,
     patch: { commodity?: string; destination?: string }
   ) => void
+  deleteObjective: (contractId: string, objectiveId: string) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
   setContractReward: (contractId: string, reward: number) => void
   setObjectivesDelivered: (
@@ -1208,6 +1209,16 @@ export const useStore = create<StoreState>((set, get) => {
           })
         }
       })
+      commit(contracts)
+      scheduleReroute()
+    },
+
+    deleteObjective: (contractId, objectiveId) => {
+      const contracts = get().contracts.map((c) =>
+        c.id === contractId
+          ? { ...c, objectives: c.objectives.filter((o) => o.id !== objectiveId) }
+          : c
+      )
       commit(contracts)
       scheduleReroute()
     },

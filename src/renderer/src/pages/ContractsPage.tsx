@@ -9,7 +9,7 @@ import Typeahead from '../components/Typeahead'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
 // long names ellipsize, not widen
-const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px'
+const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px 26px'
 
 const statusColor: Record<string, string> = {
   active: C.green,
@@ -29,6 +29,7 @@ export default function ContractsPage(): React.ReactElement {
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const editContract = useStore((s) => s.editContract)
   const editObjective = useStore((s) => s.editObjective)
+  const deleteObjective = useStore((s) => s.deleteObjective)
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
   // hide until ocr capture resolves
@@ -169,6 +170,7 @@ export default function ContractsPage(): React.ReactElement {
                         { h: 'DESTINATION', align: 'left' },
                         { h: 'BOX BREAKDOWN', align: 'left' },
                         { h: 'COUNT', align: 'right' },
+                        { h: '', align: 'left' },
                         { h: '', align: 'left' }
                       ].map((c, i) => (
                         <span key={i} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: c.align as 'left' | 'right' }}>
@@ -215,6 +217,14 @@ export default function ContractsPage(): React.ReactElement {
                             hoverStyle={{ background: 'rgba(255,255,255,0.06)', textShadow: GLOW }}
                           >
                             {isTurnedIn ? '✓ EDIT' : 'TURN IN'}
+                          </Btn>
+                          <Btn
+                            onClick={() => deleteObjective(c.id, o.objectiveId)}
+                            title="Remove this objective"
+                            style={{ border: 'none', background: 'transparent', color: C.faint, fontFamily: F.display, fontSize: 15, lineHeight: 1, padding: 0, cursor: 'pointer', textAlign: 'center' }}
+                            hoverStyle={{ color: C.red }}
+                          >
+                            ✕
                           </Btn>
                         </div>
                       )
