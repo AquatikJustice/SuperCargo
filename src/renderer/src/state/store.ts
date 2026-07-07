@@ -3,6 +3,7 @@ import type {
   AppSettings,
   HaulingContract,
   DeliveryObjective,
+  BoxAllocation,
   WatcherStatus,
   UpdateState,
   ContractAcceptedEvent,
@@ -256,6 +257,8 @@ interface StoreState {
   clearAllPickedUp: () => void
   dismissNotice: () => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
+  /** override the box breakdown the game actually gave you; sums to the new scu */
+  setObjectiveBoxes: (contractId: string, objectiveId: string, boxes: BoxAllocation[]) => void
   /** maxBoxSize change re-boxes everything */
   editContract: (
     id: string,
@@ -1234,6 +1237,23 @@ export const useStore = create<StoreState>((set, get) => {
           return { ...o, scuAmount, boxes: calculateBoxes(scuAmount, c.maxBoxSize) }
         })
         return changed ? { ...c, objectives } : c
+      })
+      commit(contracts)
+      scheduleReroute()
+    },
+
+    setObjectiveBoxes: (contractId, objectiveId, boxes) => {
+      const clean = boxes.filter((b) => b.count > 0 && b.scuSize > 0)
+      const total = clean.reduce((a, b) => a + b.count * b.scuSize, 0)
+      if (total <= 0) return
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== contractId) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) =>
+            o.id === objectiveId ? { ...o, boxes: clean, scuAmount: total } : o
+          )
+        }
       })
       commit(contracts)
       scheduleReroute()

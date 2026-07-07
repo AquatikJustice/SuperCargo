@@ -18,8 +18,9 @@ import { listBreakdown } from '@shared/box'
 import { fixtureMap, planHold } from '@shared/hold'
 import { packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
-import type { FrozenBox, GridView, LoadedPin, StorAllCrate } from '@shared/types'
+import type { FrozenBox, GridView, LoadedPin, StorAllCrate, BoxAllocation } from '@shared/types'
 import { Btn } from '../components/ui'
+import BoxEditModal from '../components/BoxEditModal'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
 import TurnInModal, { type TurnInItem } from '../components/TurnInModal'
@@ -657,6 +658,7 @@ export default function CargoGridPage(): React.ReactElement {
   const loadIdx = useStore((s) => s.loadingIdx)
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
   const setPickedUp = useStore((s) => s.setPickedUp)
+  const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   // freeze while walking
   const frozenSteps = useStore((s) => s.loadingSteps)
   const setFrozenSteps = useStore((s) => s.setLoadingSteps)
@@ -1029,6 +1031,15 @@ export default function CargoGridPage(): React.ReactElement {
   // dig-out has a valid "load it now" but it's still a call, so hold NEXT until
   // they pick load-and-dig or come-back (acknowledged per step).
   const [decidedIdx, setDecidedIdx] = useState<number | null>(null)
+  const [editBoxes, setEditBoxes] = useState<{
+    contractId: string
+    objectiveId: string
+    commodity: string
+    scu: number
+    boxes: BoxAllocation[]
+  } | null>(null)
+  // bumped after a box-breakdown edit so the tail re-packs with fresh contracts
+  const [repackNonce, setRepackNonce] = useState(0)
   const blockKind: 'overload' | 'digout' | null =
     currentDecision?.kind === 'overload'
       ? 'overload'
@@ -1586,7 +1597,7 @@ export default function CargoGridPage(): React.ReactElement {
   // where the ship sits, cargo aboard seeded, walked steps kept as history.
   // replanCurrent also hands the open step back to the router (its pickup
   // wouldn't seat) to defer or re-split
-  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
+  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false, rebox = false): void => {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
@@ -1638,9 +1649,13 @@ export default function CargoGridPage(): React.ReactElement {
       n++
     }
     setFrozenSteps(combined)
-    if (frozenBoxes)
+    // a breakdown edit changes the box set, so rebuild boxes from fresh contracts;
+    // unchanged objectives keep their ids (and pins), the edited one gets new boxes.
+    // otherwise keep the frozen boxes and just re-seat them in the new drop order
+    const nextBoxes = rebox ? applyDropSeq(packBoxes(contracts, order, true) as PackBox[]) : frozenBoxes
+    if (nextBoxes)
       setFrozenBoxes(
-        frozenBoxes.map((b) => {
+        nextBoxes.map((b) => {
           const nn = b.objectiveId ? dn.get(b.objectiveId) : undefined
           return nn == null ? b : { ...b, stopIdx: nn }
         })
@@ -1669,6 +1684,12 @@ export default function CargoGridPage(): React.ReactElement {
     resolveTail(undefined, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
+
+  // a box-breakdown edit lands in the store first; re-pack once contracts are fresh
+  useEffect(() => {
+    if (repackNonce && loading) resolveTail(undefined, true, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repackNonce])
 
   // moving one box shouldn't shuffle the rest. Pin every box still on its own
   // feet where it sits so the re-pack echoes the layout instead of re-dealing it.
@@ -2120,6 +2141,12 @@ export default function CargoGridPage(): React.ReactElement {
                 else if (prev?.kind === 'drop') unmarkTurnIn(prev.lines.map((l) => l.objectiveId))
                 setLoadIdx((i) => Math.max(0, i - 1))
               }}
+              onEditBoxes={(line) => {
+                const c = contracts.find((c) => c.objectives.some((o) => o.id === line.objectiveId))
+                const o = c?.objectives.find((o) => o.id === line.objectiveId)
+                if (c && o)
+                  setEditBoxes({ contractId: c.id, objectiveId: o.id, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
+              }}
               onExit={() => setLoading(false)}
               onRestart={() => {
                 // wipe every pickup, turn-in, pin, stash and decision for a fresh walk
@@ -2130,6 +2157,19 @@ export default function CargoGridPage(): React.ReactElement {
               }}
             />
           </div>
+        )}
+        {editBoxes && (
+          <BoxEditModal
+            commodity={editBoxes.commodity}
+            scu={editBoxes.scu}
+            boxes={editBoxes.boxes}
+            onClose={() => setEditBoxes(null)}
+            onSave={(boxes) => {
+              setObjectiveBoxes(editBoxes.contractId, editBoxes.objectiveId, boxes)
+              setRepackNonce((n) => n + 1)
+              setEditBoxes(null)
+            }}
+          />
         )}
         <div style={{ ...(portrait && loading ? { order: 1, flex: 'none', height: '42%', minHeight: 220 } : { flex: 1 }), minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div
@@ -2624,6 +2664,7 @@ function LoadingPanel({
   onUnmark,
   onLoaded,
   onBack,
+  onEditBoxes,
   onExit,
   onRestart
 }: {
@@ -2654,6 +2695,7 @@ function LoadingPanel({
   onUnmark: (objectiveIds: string[]) => void
   onLoaded: () => void
   onBack: () => void
+  onEditBoxes: (line: LoadingStep['lines'][number]) => void
   onExit: () => void
   onRestart: () => void
 }): React.ReactElement {
@@ -2827,7 +2869,12 @@ function LoadingPanel({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {s.lines.map((l) =>
                   load ? (
-                    <LoadLineRow key={l.objectiveId} line={l} color={objColors.get(l.objectiveId)} />
+                    <LoadLineRow
+                      key={l.objectiveId}
+                      line={l}
+                      color={objColors.get(l.objectiveId)}
+                      onEdit={isCurrent ? () => onEditBoxes(l) : undefined}
+                    />
                   ) : !isFinalChunk(l) ? (
                     <SplitDropRow key={l.objectiveId} line={l} />
                   ) : (
@@ -2958,7 +3005,15 @@ function destLabelOf(destination: string): string {
   return d.code ? `${d.code} · ${d.name}` : d.name || destination
 }
 
-function LoadLineRow({ line, color }: { line: LoadingStep['lines'][number]; color?: string }): React.ReactElement {
+function LoadLineRow({
+  line,
+  color,
+  onEdit
+}: {
+  line: LoadingStep['lines'][number]
+  color?: string
+  onEdit?: () => void
+}): React.ReactElement {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
@@ -2974,6 +3029,16 @@ function LoadLineRow({ line, color }: { line: LoadingStep['lines'][number]; colo
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
         <span style={{ fontFamily: F.mono, fontSize: 13, color: color ?? C.text, fontWeight: 600 }}>{line.breakdown}</span>
         <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
+        {onEdit && (
+          <Btn
+            onClick={onEdit}
+            title="The game gave different boxes? Fix the breakdown and re-pack"
+            style={{ border: 'none', background: 'transparent', color: C.acc, fontFamily: F.body, fontSize: 11, letterSpacing: '0.04em', padding: 0, cursor: 'pointer', textDecoration: 'underline dotted' }}
+            hoverStyle={{ textShadow: GLOW }}
+          >
+            wrong boxes?
+          </Btn>
+        )}
         {line.tripTotal > 1 && (
           <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>
             trip {line.tripPos}/{line.tripTotal} · {line.scu} of {line.totalScu} SCU
