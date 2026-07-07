@@ -368,16 +368,23 @@ export const useStore = create<StoreState>((set, get) => {
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
     const crates = storAlls[settings.activeShip]
+    const active = contracts.filter((c) => !c.pendingOcr)
+    // cargo picked up but not yet handed over rides along; a re-solve must plan
+    // only its delivery, never send you back for a pickup you've already done
+    const aboard = new Set<string>()
+    for (const c of active)
+      for (const o of c.objectives)
+        if ((o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined) aboard.add(o.id)
     // manual keeps order, auto re-solves
     const plan = computeRoutePlan(
-      contracts.filter((c) => !c.pendingOcr),
+      active,
       locations,
       capacity,
       startLocation,
       bays,
       isRouteAuto ? undefined : stopOrder,
       deferredObjectives,
-      undefined,
+      aboard.size ? aboard : undefined,
       undefined,
       crates?.length ? fixtureMap(crates) : undefined
     )

@@ -635,17 +635,22 @@ function planManual(input: RouteInput): RouteResult {
     return i < 0 ? order.length : i
   }
   const all = indexedJobs(input.jobs)
-  const unfittable = all.filter((j) => j.scu > cap).map((j) => j.idx)
-  const byIdx = new Map(all.filter((j) => j.scu <= cap).map((j) => [j.idx, j]))
+  // cargo already aboard skips its pickup and is proven to fit, oversized or not
+  const aboardSet = input.aboard ?? new Set<number>()
+  const unfittable = all.filter((j) => j.scu > cap && !aboardSet.has(j.idx)).map((j) => j.idx)
+  const byIdx = new Map(all.filter((j) => j.scu <= cap || aboardSet.has(j.idx)).map((j) => [j.idx, j]))
   const pending = new Set(byIdx.keys())
-  const aboard: IJob[] = []
+  const seeded = [...aboardSet].flatMap((i) => byIdx.get(i) ?? [])
+  for (const j of seeded) pending.delete(j.idx)
+  const aboard: IJob[] = [...seeded]
   const oracle = input.bays ? holdOracle(input.bays) : null
-  let load = 0
+  if (oracle && seeded.length) oracle.take(oracleJobs(seeded), rankOf)
+  let load = seeded.reduce((a, j) => a + j.scu, 0)
   let cur = input.start ?? order[0] ?? 0
   let total = 0
-  let peak = 0
+  let peak = load
   let trip = 0
-  let started = false
+  let started = seeded.length > 0
   const stops: PlannedStop[] = []
 
   const deferred = input.deferred ?? new Set<number>()
