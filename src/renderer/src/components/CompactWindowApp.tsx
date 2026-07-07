@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
-import { buildLoadingSteps, filterDeferredSteps, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, filterDeferredSteps, withStartStep, type LoadingStep } from '../state/loading'
 import { offGridByObjective, objectiveStops } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
@@ -16,6 +16,7 @@ export default function CompactWindowApp(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const looseBoxes = useStore((s) => s.looseBoxes)
+  const startLocation = useStore((s) => s.startLocation)
   const settings = useStore((s) => s.settings)
   const scale = settings.overlayScale || 1
   const opacity = settings.overlayOpacity ?? 0.85
@@ -43,8 +44,8 @@ export default function CompactWindowApp(): React.ReactElement {
   // freeze so turn-ins don't reindex
   const [frozen, setFrozen] = useState<LoadingStep[] | null>(null)
   useEffect(() => {
-    setFrozen((prev) => (driven ? prev ?? liveSteps : null))
-  }, [driven, liveSteps])
+    setFrozen((prev) => (driven ? prev ?? withStartStep(liveSteps, startLocation) : null))
+  }, [driven, liveSteps, startLocation])
   // must match the main window's walk exactly or the synced idx points at the wrong step
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const grabbedObjectives = useStore((s) => s.grabbedObjectives)

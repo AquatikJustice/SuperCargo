@@ -170,6 +170,26 @@ export interface LoadingStep {
   dropIds: string[]
 }
 
+export function withStartStep(steps: LoadingStep[], startLocation: string): LoadingStep[] {
+  if (!steps.length) return []
+  const first = steps[0]
+  return [{
+    nodeKey: '__start__',
+    label: startLocation || first.label || 'START',
+    code: '',
+    region: '',
+    trip: first.trip ?? 0,
+    start: true,
+    kind: 'load',
+    boundFor: '',
+    groupPos: 0,
+    groupTotal: 0,
+    lines: [],
+    loadIds: [],
+    dropIds: []
+  }, ...steps]
+}
+
 interface ObjPool {
   contractId: string
   commodity: string

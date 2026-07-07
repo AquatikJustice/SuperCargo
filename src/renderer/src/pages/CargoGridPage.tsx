@@ -7,7 +7,7 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
-import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, withStartStep, type LoadingStep } from '../state/loading'
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, shipAnchored, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
@@ -665,32 +665,13 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (loading) {
       // step 0 is always the empty ship at the depot: park crates, then head out
-      setFrozenSteps((prev) => {
-        if (prev) return prev
-        const first = liveSteps[0]
-        const step0: LoadingStep = {
-          nodeKey: '__start__',
-          label: startLocation || first?.label || 'START',
-          code: '',
-          region: '',
-          trip: first?.trip ?? 0,
-          start: true,
-          kind: 'load',
-          boundFor: '',
-          groupPos: 0,
-          groupTotal: 0,
-          lines: [],
-          loadIds: [],
-          dropIds: []
-        }
-        return [step0, ...liveSteps]
-      })
+      setFrozenSteps((prev) => prev ?? withStartStep(liveSteps, startLocation))
       setFrozenBoxes((prev) => prev ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[]))
     } else {
       setFrozenSteps(null)
       setFrozenBoxes(null)
     }
-  }, [loading, liveSteps])
+  }, [loading, liveSteps, startLocation])
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const tickedObj = useMemo(
     () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id))),

@@ -60,7 +60,19 @@ export interface UexTerminal {
 
 // real uexIds so distances still work
 const EXTRA_LOCATIONS: Location[] = [
-  { name: 'Levski', code: 'LEVSKI', maxContainerSize: 32, uexId: 778, hasElevator: true }
+  { name: 'Levski', code: 'LEVSKI', maxContainerSize: 32, uexId: 778, hasElevator: true },
+  {
+    name: "Brio's Breaker Yard",
+    code: '',
+    maxContainerSize: 0,
+    uexId: 0,
+    hasElevator: true,
+    x: -8900468610.927538,
+    y: -15416937006.30173,
+    z: 132065.861482,
+    system: 'pyro',
+    body: 'Pyro III'
+  }
 ]
 
 export function withExtraLocations(locations: Location[]): Location[] {
