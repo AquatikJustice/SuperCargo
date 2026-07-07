@@ -171,17 +171,6 @@
       "body": "Yela"
     },
     {
-      "name": "Area18",
-      "code": "TDD Area 18",
-      "maxContainerSize": 32,
-      "uexId": 12,
-      "hasElevator": false,
-      "x": 18586917330.719185,
-      "y": -22152033653.831776,
-      "z": -262094.438106,
-      "system": "stanton"
-    },
-    {
       "name": "Arid Reach",
       "code": "Shop Arid Reach",
       "maxContainerSize": 0,
@@ -997,7 +986,7 @@
     },
     {
       "name": "Levski",
-      "code": "Cargo Levski",
+      "code": "Levski",
       "maxContainerSize": 0,
       "uexId": 793,
       "hasElevator": true,
@@ -1005,17 +994,6 @@
       "y": -11490738598.66563,
       "z": -93642.5508,
       "system": "nyx"
-    },
-    {
-      "name": "Lorville",
-      "code": "CBD Lorville",
-      "maxContainerSize": 32,
-      "uexId": 18,
-      "hasElevator": false,
-      "x": 12850128103.83473,
-      "y": -752434.615701,
-      "z": 572120.273853,
-      "system": "stanton"
     },
     {
       "name": "Loveridge Mineral Reserve",
@@ -1161,18 +1139,6 @@
       "body": "microTech"
     },
     {
-      "name": "Mogote Aid Shelter",
-      "code": "",
-      "maxContainerSize": 0,
-      "uexId": 0,
-      "hasElevator": true,
-      "x": -18987809783.623302,
-      "y": -2708958870.967037,
-      "z": 160874.780687,
-      "system": "stanton",
-      "body": "Cellin"
-    },
-    {
       "name": "Narena's Rest",
       "code": "",
       "maxContainerSize": 0,
@@ -1190,17 +1156,6 @@
       "maxContainerSize": 0,
       "uexId": 0,
       "hasElevator": true,
-      "x": 22462605975.476906,
-      "y": 37186164329.143265,
-      "z": 743654.685314,
-      "system": "stanton"
-    },
-    {
-      "name": "New Babbage",
-      "code": "MTP New Babbage",
-      "maxContainerSize": 32,
-      "uexId": 59,
-      "hasElevator": false,
       "x": 22462605975.476906,
       "y": 37186164329.143265,
       "z": 743654.685314,
@@ -1238,17 +1193,6 @@
       "y": -15417844552.575254,
       "z": 226043.640625,
       "system": "pyro"
-    },
-    {
-      "name": "Orison",
-      "code": "Orison Providence",
-      "maxContainerSize": 32,
-      "uexId": 62,
-      "hasElevator": false,
-      "x": -18956880483.059193,
-      "y": -2665823193.5330234,
-      "z": 5282237.225567,
-      "system": "stanton"
     },
     {
       "name": "Ostler's Claim",
@@ -1910,6 +1854,18 @@
     },
     {
       "name": "The Yard",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -8900468610.927538,
+      "y": -15416937006.30173,
+      "z": 132065.861482,
+      "system": "pyro",
+      "body": "Pyro III"
+    },
+    {
+      "name": "Brio's Breaker Yard",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
