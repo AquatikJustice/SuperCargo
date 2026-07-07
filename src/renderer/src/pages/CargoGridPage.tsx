@@ -2732,6 +2732,20 @@ function LoadingPanel({
   while (steps[visitEnd + 1]?.nodeKey === step.nodeKey && steps[visitEnd + 1]?.trip === step.trip) visitEnd++
   const here = steps.slice(visitStart, visitEnd + 1)
 
+  // a stop is one location visit; a trip can revisit the same place, so key on both
+  let stopTotal = 0
+  let stopNum = 0
+  let prevVisit: string | null = null
+  for (let s = 0; s < steps.length; s++) {
+    if (steps[s].start) continue
+    const vk = `${steps[s].nodeKey}#${steps[s].trip}`
+    if (vk !== prevVisit) {
+      stopTotal++
+      prevVisit = vk
+    }
+    if (s <= idx) stopNum = stopTotal
+  }
+
   const anyTurnedIn = dropLines.some((l) => turnedIn[l.objectiveId] !== undefined)
 
   return (
@@ -2747,6 +2761,9 @@ function LoadingPanel({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 44px 10px 16px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
           STEP {steps[0]?.start ? idx : idx + 1} / {steps[0]?.start ? total - 1 : total}
+        </span>
+        <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.dim }}>
+          STOP {stopNum} / {stopTotal}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
