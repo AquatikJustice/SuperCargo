@@ -201,6 +201,8 @@ interface StoreState {
   /** capture adds to this contract */
   captureTargetId: string | null
   compactOpen: boolean
+  /** transient toast, e.g. a new contract folded into the route */
+  notice: string | null
 
   // survives leaving the grid page
   loadingActive: boolean
@@ -252,6 +254,7 @@ interface StoreState {
   /** toggle a pickup checkoff */
   setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
   clearAllPickedUp: () => void
+  dismissNotice: () => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
   /** maxBoxSize change re-boxes everything */
   editContract: (
@@ -364,8 +367,15 @@ export const useStore = create<StoreState>((set, get) => {
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
+  // a contract just joined the manifest; the next solve reports how it folded in
+  let notifyAdd: { pickups: number; deliveries: number } | null = null
+  const noticeFor = (c: HaulingContract): { pickups: number; deliveries: number } => ({
+    pickups: new Set(c.objectives.flatMap((o) => (o.pickups?.length ? o.pickups : [c.pickup]))).size,
+    deliveries: c.objectives.length
+  })
   const doReroute = async (seed?: string[]): Promise<void> => {
     const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
+    const prevStops = get().route?.stopKeys.length ?? 0
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
@@ -391,6 +401,14 @@ export const useStore = create<StoreState>((set, get) => {
       crates?.length ? fixtureMap(crates) : undefined
     )
     set({ route: plan })
+    if (notifyAdd && !isCompactWindow) {
+      const added = Math.max(0, (plan?.stopKeys.length ?? 0) - prevStops)
+      const { pickups, deliveries } = notifyAdd
+      notifyAdd = null
+      const plur = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`
+      const drops = deliveries === 1 ? '1 delivery' : `${deliveries} deliveries`
+      set({ notice: `New contract added — ${plur(pickups, 'pickup')}, ${drops}. ${plur(added, 'stop')} folded into your route.` })
+    }
     // compact only displays the route
     if (!plan || isCompactWindow) return
     const cur = get()
@@ -490,15 +508,19 @@ export const useStore = create<StoreState>((set, get) => {
   const resolvePending = (missionId?: string): void => {
     const { contracts } = get()
     let changed = false
+    let resolved: HaulingContract | null = null
     const next = contracts.map((c) => {
       if (c.pendingOcr && (!missionId || c.id === missionId)) {
         changed = true
+        if (missionId) resolved = { ...c, pendingOcr: false }
         return { ...c, pendingOcr: false }
       }
       return c
     })
     if (changed) {
       commit(next)
+      // a single held contract just cleared capture and joins the route now
+      if (resolved) notifyAdd = noticeFor(resolved)
       scheduleReroute()
     }
   }
@@ -528,6 +550,7 @@ export const useStore = create<StoreState>((set, get) => {
     )
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
     set({ isRouteAuto: true })
+    if (!opts.pendingOcr) notifyAdd = noticeFor(contract)
     scheduleReroute()
   }
 
@@ -571,6 +594,7 @@ export const useStore = create<StoreState>((set, get) => {
     captureOpen: false,
     captureTargetId: null,
     compactOpen: false,
+    notice: null,
     loadingActive: false,
     loadedPins: {},
     loadingIdx: 0,
@@ -698,6 +722,8 @@ export const useStore = create<StoreState>((set, get) => {
         // hold until capture resolves
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
         set({ isRouteAuto: true })
+        // OCR-held contracts announce themselves when they resolve, not now
+        if (!willOcr) notifyAdd = noticeFor(contract)
         scheduleReroute()
         if (willOcr) {
           // open capture so the wait shows
@@ -879,6 +905,7 @@ export const useStore = create<StoreState>((set, get) => {
       }
       commit([...contracts, contract])
       set({ captureOpen: false, captureTargetId: null, view: 'manifest', isRouteAuto: true })
+      notifyAdd = noticeFor(contract)
       scheduleReroute()
     },
 
@@ -1113,6 +1140,10 @@ export const useStore = create<StoreState>((set, get) => {
         return { loadedPins: pins }
       })
       persist()
+    },
+
+    dismissNotice: () => {
+      if (get().notice !== null) set({ notice: null })
     },
 
     clearAllPickedUp: () => {

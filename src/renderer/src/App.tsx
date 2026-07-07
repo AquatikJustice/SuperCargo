@@ -13,6 +13,7 @@ import ScanReviewModal from './components/ScanReviewModal'
 import CompactWindowApp from './components/CompactWindowApp'
 import Onboarding from './components/Onboarding'
 import UpdateBanner from './components/UpdateBanner'
+import Toast from './components/Toast'
 
 // overlay window loads this bundle at #compact
 const IS_COMPACT = typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
@@ -89,6 +90,7 @@ function MainApp(): React.ReactElement {
         )}
       </div>
       <BottomNav />
+      <Toast />
       <CaptureModal />
       <ScanReviewModal />
       {ready && !onboarded && <Onboarding />}
