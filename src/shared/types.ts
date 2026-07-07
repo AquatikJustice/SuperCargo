@@ -222,6 +222,10 @@ export interface ManifestDoc {
   layout?: CargoLayout
   /** empty = let the solver pick the start */
   startLocation?: string
+  /** where the last pickup/turn-in happened; the router plans from here */
+  currentLocation?: string
+  /** false = the user hand-ordered the stops; preserve it across a restart */
+  isRouteAuto?: boolean
   /** boxes aboard mid-walk, locked at the spot they were loaded, keyed by objectiveId#slot */
   loadedPins?: Record<string, LoadedPin>
   /** resume the loading walkthrough where you left off after a restart */

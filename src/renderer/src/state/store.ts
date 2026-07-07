@@ -155,6 +155,8 @@ interface StoreState {
   stopOrder: string[]
   /** empty = solver picks start */
   startLocation: string
+  /** where the last pickup/turn-in happened; the router plans from here */
+  currentLocation: string
   /** null = live plan */
   layout: CargoLayout | null
   route: RoutePlan | null
@@ -338,8 +340,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, loadedPins, loadingActive, loadingIdx, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
+    const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
   }
 
   // active ship's grids
@@ -362,8 +364,8 @@ export const useStore = create<StoreState>((set, get) => {
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
-  const doReroute = async (): Promise<void> => {
-    const { contracts, locations, settings, startLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
+  const doReroute = async (seed?: string[]): Promise<void> => {
+    const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
@@ -375,17 +377,17 @@ export const useStore = create<StoreState>((set, get) => {
     for (const c of active)
       for (const o of c.objectives)
         if ((o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined) aboard.add(o.id)
-    // manual keeps order, auto re-solves
+    // manual keeps order, auto re-solves; a seed (restore) pins order either way
     const plan = computeRoutePlan(
       active,
       locations,
       capacity,
       startLocation,
       bays,
-      isRouteAuto ? undefined : stopOrder,
+      seed !== undefined ? seed : isRouteAuto ? undefined : stopOrder,
       deferredObjectives,
       aboard.size ? aboard : undefined,
-      undefined,
+      currentLocation || undefined,
       crates?.length ? fixtureMap(crates) : undefined
     )
     set({ route: plan })
@@ -406,11 +408,11 @@ export const useStore = create<StoreState>((set, get) => {
       persist()
     }
   }
-  const scheduleReroute = (): void => {
+  const scheduleReroute = (seed?: string[]): void => {
     if (rerouteTimer) clearTimeout(rerouteTimer)
     rerouteTimer = setTimeout(() => {
       rerouteTimer = null
-      void doReroute()
+      void doReroute(seed)
     }, 250)
   }
 
@@ -541,6 +543,7 @@ export const useStore = create<StoreState>((set, get) => {
     order: [],
     stopOrder: [],
     startLocation: '',
+    currentLocation: '',
     layout: null,
     route: null,
     isRouteAuto: true,
@@ -629,6 +632,8 @@ export const useStore = create<StoreState>((set, get) => {
         order: nextOrder(active, manifest.order),
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
+        currentLocation: manifest.currentLocation ?? '',
+        isRouteAuto: manifest.isRouteAuto ?? true,
         looseBoxes: manifest.loose ?? [],
         looseSpots: manifest.looseSpots ?? {},
         looseAt: manifest.looseAt ?? {},
@@ -652,7 +657,8 @@ export const useStore = create<StoreState>((set, get) => {
         gridFacesSyncedAt: faceRoster?.syncedAt ?? '',
         ready: true
       })
-      scheduleReroute()
+      // restart is not a wrench: rebuild the plan in the saved order, don't re-optimize
+      void doReroute(get().stopOrder)
 
       // bind once; a remount calls init again
       if (listenersBound) return
@@ -765,6 +771,8 @@ export const useStore = create<StoreState>((set, get) => {
           order: doc.order,
           stopOrder: doc.stopOrder ?? [],
           startLocation: doc.startLocation ?? '',
+          currentLocation: doc.currentLocation ?? '',
+          isRouteAuto: doc.isRouteAuto ?? true,
           looseBoxes: doc.loose ?? [],
           looseSpots: doc.looseSpots ?? {},
           looseAt: doc.looseAt ?? {},
@@ -775,7 +783,8 @@ export const useStore = create<StoreState>((set, get) => {
           loadedPins: doc.loadedPins ?? {},
           layout: doc.layout ?? null
         })
-        scheduleReroute()
+        // mirror the main window's order instead of re-optimizing our own
+        scheduleReroute(doc.stopOrder ?? [])
       }))
       track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
       // overlay reflects opacity/scale changes made in the main window's settings
@@ -1056,6 +1065,9 @@ export const useStore = create<StoreState>((set, get) => {
           )
         }
       })
+      // you turned in here, so that's where you are now
+      const nk = get().route?.steps.find((s) => s.dropRefs.some((r) => amounts.has(r.objectiveId)))?.nodeKey
+      if (nk && nk !== get().currentLocation) set({ currentLocation: nk })
       commit(updated)
     },
 
@@ -1079,6 +1091,10 @@ export const useStore = create<StoreState>((set, get) => {
           ([key, p]) => !(key.startsWith(`${objectiveId}#`) && p.pickupKey === pickupKey)
         )
         if (keep.length !== Object.keys(pins).length) set({ loadedPins: Object.fromEntries(keep) })
+      } else {
+        // you're now standing where you just loaded; strip the trip suffix off the key
+        const nk = pickupKey.includes('#') ? pickupKey.slice(0, pickupKey.lastIndexOf('#')) : pickupKey
+        if (nk && nk !== get().currentLocation) set({ currentLocation: nk })
       }
       commit(updated)
     },
@@ -1239,8 +1255,8 @@ export const useStore = create<StoreState>((set, get) => {
 
     setStartLocation: (loc) => {
       if (loc === get().startLocation) return
-      // new start, resume auto-sort
-      set({ startLocation: loc, isRouteAuto: true })
+      // an explicit start overrides wherever the last action left us
+      set({ startLocation: loc, currentLocation: '', isRouteAuto: true })
       persist()
       scheduleReroute()
     },
