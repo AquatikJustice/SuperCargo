@@ -541,14 +541,14 @@ function EditableNum({
   suffix?: string
 }): React.ReactElement {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(String(value))
-  useEffect(() => setDraft(String(value)), [value])
+  const [draft, setDraft] = useState(value ? String(value) : '')
+  useEffect(() => setDraft(value ? String(value) : ''), [value])
 
   const commit = (): void => {
     setEditing(false)
     const n = parseInt(draft, 10)
     if (Number.isFinite(n) && n >= 0 && n !== value) onCommit(n)
-    else setDraft(String(value))
+    else setDraft(value ? String(value) : '')
   }
 
   if (editing) {
@@ -563,7 +563,7 @@ function EditableNum({
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit()
           else if (e.key === 'Escape') {
-            setDraft(String(value))
+            setDraft(value ? String(value) : '')
             setEditing(false)
           }
         }}
