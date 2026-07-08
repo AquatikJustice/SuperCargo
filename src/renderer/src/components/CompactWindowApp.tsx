@@ -41,11 +41,38 @@ export default function CompactWindowApp(): React.ReactElement {
     []
   )
 
-  // freeze so turn-ins don't reindex
+  // editing a box breakdown mid-walk must reach the overlay; turn-ins/pickups must not
+  // reindex it. box edits change boxes + scuAmount, turn-ins only touch delivered/turnedIn
+  const boxSig = useMemo(
+    () =>
+      contracts
+        .map(
+          (c) =>
+            `${c.maxBoxSize}:` +
+            c.objectives
+              .map((o) => `${o.id}=${o.scuAmount}/${o.boxes?.map((b) => `${b.scuSize}x${b.count}`).join('+') ?? ''}`)
+              .join(',')
+        )
+        .join('|'),
+    [contracts]
+  )
+  const sigRef = useRef(boxSig)
+
+  // freeze so turn-ins don't reindex; re-snapshot when the box breakdown changes
   const [frozen, setFrozen] = useState<LoadingStep[] | null>(null)
   useEffect(() => {
-    setFrozen((prev) => (driven ? prev ?? withStartStep(liveSteps, startLocation) : null))
-  }, [driven, liveSteps, startLocation])
+    setFrozen((prev) => {
+      if (!driven) {
+        sigRef.current = boxSig
+        return null
+      }
+      if (!prev || sigRef.current !== boxSig) {
+        sigRef.current = boxSig
+        return withStartStep(liveSteps, startLocation)
+      }
+      return prev
+    })
+  }, [driven, liveSteps, startLocation, boxSig])
   // must match the main window's walk exactly or the synced idx points at the wrong step
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const grabbedObjectives = useStore((s) => s.grabbedObjectives)
