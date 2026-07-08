@@ -372,15 +372,19 @@ export const useStore = create<StoreState>((set, get) => {
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
-  // a contract just joined the manifest; the next solve reports how it folded in
-  let notifyAdd: { pickups: number; deliveries: number } | null = null
+  // a contract just joined the manifest; the next solve reports how it folded in.
+  // baseStops = route size before it joined, so the stop delta stays right even if
+  // the toast has to wait for the objectives (log accepts arrive empty, objectives follow)
+  let notifyAdd: { id: string; baseStops: number } | null = null
+  const announce = (id: string): void => {
+    notifyAdd = { id, baseStops: get().route?.stopKeys.length ?? 0 }
+  }
   const noticeFor = (c: HaulingContract): { pickups: number; deliveries: number } => ({
     pickups: new Set(c.objectives.flatMap((o) => (o.pickups?.length ? o.pickups : [c.pickup]))).size,
-    deliveries: c.objectives.length
+    deliveries: new Set(c.objectives.map((o) => o.destination)).size
   })
   const doReroute = async (seed?: string[]): Promise<void> => {
     const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
-    const prevStops = get().route?.stopKeys.length ?? 0
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
@@ -407,12 +411,18 @@ export const useStore = create<StoreState>((set, get) => {
     )
     set({ route: plan })
     if (notifyAdd && !isCompactWindow) {
-      const added = Math.max(0, (plan?.stopKeys.length ?? 0) - prevStops)
-      const { pickups, deliveries } = notifyAdd
-      notifyAdd = null
-      const plur = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`
-      const drops = deliveries === 1 ? '1 delivery' : `${deliveries} deliveries`
-      set({ notice: `New contract added — ${plur(pickups, 'pickup')}, ${drops}. ${plur(added, 'stop')} folded into your route.` })
+      const c = contracts.find((x) => x.id === notifyAdd!.id)
+      // objectives ride in on their own log events after the accept; wait for them
+      // rather than announce "0 pickups, 0 deliveries"
+      if (!c) {
+        notifyAdd = null
+      } else if (c.objectives.length) {
+        const { pickups, deliveries } = noticeFor(c)
+        const added = Math.max(0, (plan?.stopKeys.length ?? 0) - notifyAdd.baseStops)
+        notifyAdd = null
+        const plur = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
+        set({ notice: `New contract added — ${plur(pickups, 'pickup')}, ${plur(deliveries, 'delivery', 'deliveries')}. ${plur(added, 'stop')} folded into your route.` })
+      }
     }
     // compact only displays the route
     if (!plan || isCompactWindow) return
@@ -548,11 +558,11 @@ export const useStore = create<StoreState>((set, get) => {
   const resolvePending = (missionId?: string): void => {
     const { contracts } = get()
     let changed = false
-    let resolved: HaulingContract | null = null
+    let resolvedId: string | null = null
     const next = contracts.map((c) => {
       if (c.pendingOcr && (!missionId || c.id === missionId)) {
         changed = true
-        if (missionId) resolved = { ...c, pendingOcr: false }
+        if (missionId) resolvedId = c.id
         return { ...c, pendingOcr: false }
       }
       return c
@@ -560,7 +570,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (changed) {
       commit(next)
       // a single held contract just cleared capture and joins the route now
-      if (resolved) notifyAdd = noticeFor(resolved)
+      if (resolvedId) announce(resolvedId)
       scheduleReroute()
     }
   }
@@ -590,7 +600,7 @@ export const useStore = create<StoreState>((set, get) => {
     )
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
     set({ isRouteAuto: true })
-    if (!opts.pendingOcr) notifyAdd = noticeFor(contract)
+    if (!opts.pendingOcr) announce(contract.id)
     scheduleReroute()
     drainShare(contract.id)
   }
@@ -765,7 +775,7 @@ export const useStore = create<StoreState>((set, get) => {
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
         set({ isRouteAuto: true })
         // OCR-held contracts announce themselves when they resolve, not now
-        if (!willOcr) notifyAdd = noticeFor(contract)
+        if (!willOcr) announce(contract.id)
         scheduleReroute()
         // a MissionShared/PlayerJoined that beat the accept applies now
         drainShare(contract.id)
@@ -949,7 +959,7 @@ export const useStore = create<StoreState>((set, get) => {
       }
       commit([...contracts, contract])
       set({ captureOpen: false, captureTargetId: null, view: 'manifest', isRouteAuto: true })
-      notifyAdd = noticeFor(contract)
+      announce(contract.id)
       scheduleReroute()
     },
 
