@@ -57,6 +57,7 @@ export const IPC = {
   evtObjective: 'evt:objective',
   evtContractEnded: 'evt:contract:ended',
   evtContractPaid: 'evt:contract:paid',
+  evtContractShare: 'evt:contract:share',
   evtUpdate: 'evt:update',
   evtOpenCapture: 'evt:openCapture',
   evtShips: 'evt:ships',

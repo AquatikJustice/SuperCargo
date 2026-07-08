@@ -59,6 +59,10 @@ export interface HaulingContract {
   reputation?: number
   /** held + hidden until first OCR capture resolves; never persisted true */
   pendingOcr?: boolean
+  /** someone shared this contract with you (you're not the owner) */
+  sharedWithMe?: boolean
+  /** player ids who joined a contract you own and shared out; kept for the count */
+  sharedWith?: string[]
 }
 
 /** per-channel Game.log path */
@@ -324,6 +328,14 @@ export interface ContractPaidEvent {
   missionId: string
   /** actual aUEC the game awarded, already net of fees and any share split */
   amount: number
+}
+
+export interface ShareEvent {
+  missionId: string
+  /** shared = it was shared TO you; joined/left = someone came/went on yours */
+  kind: 'shared' | 'joined' | 'left'
+  /** owner id (shared) or the other player's id (joined/left); log gives no name */
+  actorId: string
 }
 
 export interface UexSyncResult {

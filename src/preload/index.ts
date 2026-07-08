@@ -10,6 +10,7 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   ContractPaidEvent,
+  ShareEvent,
   UpdateState,
   ShipRoster,
   LocationRoster,
@@ -125,6 +126,8 @@ const api = {
     on(IPC.evtContractEnded, cb),
   onContractPaid: (cb: (e: ContractPaidEvent) => void): Unsubscribe =>
     on(IPC.evtContractPaid, cb),
+  onContractShare: (cb: (e: ShareEvent) => void): Unsubscribe =>
+    on(IPC.evtContractShare, cb),
   onUpdate: (cb: (s: UpdateState) => void): Unsubscribe => on(IPC.evtUpdate, cb),
   onOpenCapture: (cb: () => void): Unsubscribe => on(IPC.evtOpenCapture, cb),
   onShips: (cb: (roster: ShipRoster) => void): Unsubscribe => on(IPC.evtShips, cb),

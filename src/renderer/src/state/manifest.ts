@@ -97,6 +97,8 @@ export interface DerivedContract {
   blueprints: string[]
   reputation?: number
   dataSource: DataSource
+  sharedWithMe: boolean
+  sharedWith: string[]
 }
 
 // hidden while capture modal open
@@ -406,7 +408,9 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       blueprint: !!c.blueprint,
       blueprints: c.blueprints ?? [],
       reputation: c.reputation,
-      dataSource: c.dataSource
+      dataSource: c.dataSource,
+      sharedWithMe: !!c.sharedWithMe,
+      sharedWith: c.sharedWith ?? []
     }
   })
 }

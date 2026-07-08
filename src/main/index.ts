@@ -402,6 +402,7 @@ function startWatcher(): void {
   watcher.on('objective', (e) => send(IPC.evtObjective, e))
   watcher.on('ended', (e) => send(IPC.evtContractEnded, e))
   watcher.on('paid', (e) => send(IPC.evtContractPaid, e))
+  watcher.on('share', (e) => send(IPC.evtContractShare, e))
   watcher.start()
 }
 

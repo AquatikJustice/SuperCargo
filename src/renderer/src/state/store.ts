@@ -10,6 +10,7 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   ContractPaidEvent,
+  ShareEvent,
   Location,
   Commodity,
   OcrResult,
@@ -438,6 +439,41 @@ export const useStore = create<StoreState>((set, get) => {
     }, 250)
   }
 
+  // sharing markers land around the accept; the contract owns the state, so events
+  // that beat the accept wait in pendingShare until it arrives
+  const pendingShare = new Map<string, ShareEvent[]>()
+  const applyShare = (c: HaulingContract, e: ShareEvent): HaulingContract => {
+    if (e.kind === 'shared') return c.sharedWithMe ? c : { ...c, sharedWithMe: true }
+    const ids = new Set(c.sharedWith ?? [])
+    const before = ids.size
+    if (e.kind === 'joined') ids.add(e.actorId)
+    else ids.delete(e.actorId)
+    if (ids.size === before) return c
+    const next = [...ids]
+    return { ...c, sharedWith: next.length ? next : undefined }
+  }
+  const onShare = (e: ShareEvent): void => {
+    const contracts = get().contracts
+    const idx = contracts.findIndex((c) => c.id === e.missionId)
+    if (idx < 0) {
+      pendingShare.set(e.missionId, [...(pendingShare.get(e.missionId) ?? []), e])
+      return
+    }
+    const updated = applyShare(contracts[idx], e)
+    if (updated !== contracts[idx]) commit(contracts.map((c, i) => (i === idx ? updated : c)))
+  }
+  const drainShare = (missionId: string): void => {
+    const events = pendingShare.get(missionId)
+    if (!events?.length) return
+    pendingShare.delete(missionId)
+    const contracts = get().contracts
+    const idx = contracts.findIndex((c) => c.id === missionId)
+    if (idx < 0) return
+    let c = contracts[idx]
+    for (const e of events) c = applyShare(c, e)
+    if (c !== contracts[idx]) commit(contracts.map((x, i) => (i === idx ? c : x)))
+  }
+
   const persistHistory = (entries: HistoryEntry[]): void => {
     void window.supercargo.saveHistory({ entries })
   }
@@ -556,6 +592,7 @@ export const useStore = create<StoreState>((set, get) => {
     set({ isRouteAuto: true })
     if (!opts.pendingOcr) notifyAdd = noticeFor(contract)
     scheduleReroute()
+    drainShare(contract.id)
   }
 
   return {
@@ -702,6 +739,7 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
       }))
+      track(window.supercargo.onContractShare((e) => onShare(e)))
       track(window.supercargo.onGridFaces((r) => {
         setGridFaces(r.gridFaces)
         set({ gridFacesSyncedAt: r.syncedAt || String(Date.now()) })
@@ -729,6 +767,8 @@ export const useStore = create<StoreState>((set, get) => {
         // OCR-held contracts announce themselves when they resolve, not now
         if (!willOcr) notifyAdd = noticeFor(contract)
         scheduleReroute()
+        // a MissionShared/PlayerJoined that beat the accept applies now
+        drainShare(contract.id)
         if (willOcr) {
           // open capture so the wait shows
           set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })

@@ -8,6 +8,7 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   ContractPaidEvent,
+  ShareEvent,
   WatcherStatus
 } from '@shared/types'
 
@@ -19,6 +20,7 @@ export interface LogWatcherEvents {
   objective: (e: ObjectiveEvent) => void
   ended: (e: ContractEndedEvent) => void
   paid: (e: ContractPaidEvent) => void
+  share: (e: ShareEvent) => void
 }
 
 export class LogWatcher extends EventEmitter {
@@ -186,6 +188,9 @@ export class LogWatcher extends EventEmitter {
           this.emit('paid', { missionId: this.lastCompleteId, amount: parsed.amount })
           this.lastCompleteId = ''
         }
+        break
+      case 'share':
+        this.emit('share', parsed.event)
         break
     }
   }

@@ -121,6 +121,11 @@ export default function ContractsPage(): React.ReactElement {
                           {c.title}
                         </span>
                         {c.blueprint && <BlueprintBadge />}
+                        {c.sharedWithMe ? (
+                          <ShareBadge label="SHARED WITH YOU" />
+                        ) : c.sharedWith.length ? (
+                          <ShareBadge label={`SHARED · ${c.sharedWith.length} joined`} />
+                        ) : null}
                       </div>
                       <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 1 }}>
                         {[c.rank, `${c.objCount} objectives`, `${c.totSCU} SCU`, c.reputation ? `${c.reputation} Rep` : '']
@@ -621,6 +626,36 @@ function BlueprintBadge(): React.ReactElement {
         <circle cx="12" cy="12" r="3" />
       </svg>
       BP
+    </span>
+  )
+}
+
+function ShareBadge({ label }: { label: string }): React.ReactElement {
+  return (
+    <span
+      title="Shared contract (from the game log)"
+      style={{
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        border: `1px solid ${C.lineStrong}`,
+        background: 'rgba(255,255,255,0.04)',
+        color: C.body,
+        fontFamily: F.display,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: '0.14em',
+        padding: '2px 7px'
+      }}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+      </svg>
+      {label}
     </span>
   )
 }
