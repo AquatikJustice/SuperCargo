@@ -57,6 +57,8 @@ export async function runOcr(
   if (!full) full = await aroundCapture(() => captureDisplay(settings.ocrDisplayId))
   if (!full) return { ...base, error: 'screen capture failed (no source available)' }
 
+  const fullSize = full.getSize()
+  const captureRes = `${fullSize.width}x${fullSize.height}`
   const cropped = cropImage(full, settings.ocrCrop)
   // 2x at 1080p, less above
   const factor = Math.min(2, Math.max(1, 2160 / cropped.getSize().height))
@@ -69,7 +71,7 @@ export async function runOcr(
   try {
     recognition = await engine.recognize(ocrImage)
   } catch (e) {
-    return { ...base, imageDataUrl, error: e instanceof Error ? e.message : String(e) }
+    return { ...base, imageDataUrl, captureRes, error: e instanceof Error ? e.message : String(e) }
   }
   const ms = Date.now() - started
 
@@ -101,7 +103,8 @@ export async function runOcr(
     maxBoxSize: parsed.maxBoxSize,
     reward: parsed.reward,
     objectives,
-    sampleId
+    sampleId,
+    captureRes
   }
 }
 

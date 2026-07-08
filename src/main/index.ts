@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -325,13 +325,23 @@ async function withWindowsHidden<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+// remembers the game resolution for the usage snapshot
+async function runOcrTracked(): Promise<OcrResult> {
+  const result = await runOcr(settings, withWindowsHidden)
+  if (result.captureRes && result.captureRes !== settings.ocrGameRes) {
+    settings = { ...settings, ocrGameRes: result.captureRes }
+    saveSettings(settings)
+  }
+  return result
+}
+
 // pushed back over ipc so the renderer can merge it in
 async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   if (ocrBusy) return
   ocrBusy = true
   send(IPC.evtOcrStatus, 'recognizing')
   try {
-    const result = await runOcr(settings, withWindowsHidden)
+    const result = await runOcrTracked()
     send(IPC.evtOcrResult, { ...result, targetMissionId })
   } catch (e) {
     send(IPC.evtOcrResult, {
@@ -568,7 +578,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ocrListDisplays, () => listDisplays())
   ipcMain.handle(IPC.ocrEngineInfo, () => engineInfo(settings))
   ipcMain.handle(IPC.ocrPreview, () => capturePreview(settings))
-  ipcMain.handle(IPC.ocrRun, () => runOcr(settings, withWindowsHidden))
+  ipcMain.handle(IPC.ocrRun, () => runOcrTracked())
   // only for genuinely-new hauling contracts
   ipcMain.on(IPC.ocrRequestCapture, (_e, missionId: unknown) => {
     scheduleAutoCapture(typeof missionId === 'string' ? missionId : undefined)

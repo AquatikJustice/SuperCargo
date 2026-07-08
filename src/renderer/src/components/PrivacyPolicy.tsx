@@ -43,7 +43,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'Anonymous usage stats (on by default)',
     body: [
-      'On launch SuperCargo sends a small anonymous snapshot so we can see roughly how many people use it and which features are worth our time: a random device ID, the app version and platform, which OCR engine you use and how accurately it reads your contracts (how many of the fields it reads you have to correct), the ships you have hauled with, and a few toggle settings (like the cargo-spacing option).',
+      'On launch SuperCargo sends a small anonymous snapshot so we can see roughly how many people use it and which features are worth our time: a random device ID, the app version and platform, which OCR engine you use and how accurately it reads your contracts (how many of the fields it reads you have to correct), your screen resolution (so we can spot resolutions the OCR reads poorly), the ships you have hauled with, and a few toggle settings (like the cargo-spacing option).',
       'It is tied only to the random ID, not to your name, account, or computer. It never includes your contracts, screenshots, game log, or any personal information. It is sent at most about once a day.',
       'You can turn it off any time under Settings > Usage Stats; turning it off stops all future snapshots.'
     ]

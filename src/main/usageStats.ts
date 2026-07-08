@@ -1,5 +1,6 @@
 // anonymous launch snapshot: unique-user count + which features get used.
 // insert-only table, the publishable key can't read it back.
+import { screen } from 'electron'
 import type { AppSettings, HistoryEntry } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
@@ -14,6 +15,12 @@ export function completedShips(entries: HistoryEntry[]): string[] {
   return [...ships]
 }
 
+function primaryRes(): string {
+  const d = screen.getPrimaryDisplay()
+  const s = d.scaleFactor || 1
+  return `${Math.round(d.size.width * s)}x${Math.round(d.size.height * s)}`
+}
+
 function snapshot(settings: AppSettings, appVersion: string, ships: string[]): Record<string, unknown> {
   return {
     client_id: settings.telemetryClientId,
@@ -21,6 +28,8 @@ function snapshot(settings: AppSettings, appVersion: string, ships: string[]): R
     platform: process.platform,
     arch: process.arch,
     ocr_engine: settings.ocrEngine || 'tesseract',
+    screen_res: primaryRes(),
+    game_res: settings.ocrGameRes ?? null,
     ships,
     ocr_fields_total: settings.ocrFieldsTotal ?? 0,
     ocr_fields_edited: settings.ocrFieldsEdited ?? 0,

@@ -11,6 +11,8 @@ create table if not exists public.usage_pings (
   platform text,
   arch text,
   ocr_engine text,
+  screen_res text,              -- primary display, "WxH" physical pixels
+  game_res text,                -- last OCR capture frame, i.e. what the game renders at
   ships text[],                 -- every ship they've finished a contract with
   ocr_fields_total integer,     -- fields OCR attempted, lifetime
   ocr_fields_edited integer,    -- of those, how many the user had to correct
@@ -63,3 +65,17 @@ create or replace view public.usage_engines as
   from public.usage_latest
   group by ocr_engine
   order by users desc;
+
+-- OCR accuracy by game resolution, to spot resolutions the reader struggles with.
+-- Falls back to the display resolution for users who haven't captured yet.
+create or replace view public.usage_resolutions as
+select
+  coalesce(game_res, screen_res)                                  as res,
+  count(*)                                                        as users,
+  sum(ocr_fields_total)                                           as ocr_fields_read,
+  sum(ocr_fields_edited)                                          as ocr_fields_corrected,
+  round(100.0 * (1 - nullif(sum(ocr_fields_edited), 0)::numeric
+                     / nullif(sum(ocr_fields_total), 0)), 1)      as ocr_accuracy_pct
+from public.usage_latest
+group by 1
+order by users desc;

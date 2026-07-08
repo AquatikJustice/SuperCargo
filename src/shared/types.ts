@@ -128,6 +128,8 @@ export interface AppSettings {
   ocrFieldsTotal?: number
   ocrFieldsEdited?: number
   ocrEdits?: OcrEditTally
+  /** "WxH" of the last OCR capture, i.e. the resolution the game runs at */
+  ocrGameRes?: string
   /** last usage ping, ISO; throttles pings to ~once a day */
   lastUsagePingAt?: string
 
@@ -541,6 +543,8 @@ export interface OcrResult {
   objectives: OcrObjective[]
   /** pass to ocrSaveSample to keep the crop */
   sampleId?: string
+  /** "WxH" of the full frame before cropping */
+  captureRes?: string
   /** merge target so auto-fired passes don't dupe */
   targetMissionId?: string
 }
