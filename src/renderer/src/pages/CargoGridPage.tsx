@@ -1695,7 +1695,11 @@ export default function CargoGridPage(): React.ReactElement {
 
   // a box-breakdown edit lands in the store first; re-pack once contracts are fresh
   useEffect(() => {
-    if (repackNonce && loading) resolveTail(undefined, true, true)
+    if (!repackNonce || !loading) return
+    // the edit can leave the step with overflow that needs a re-split; clear the once-per-step
+    // negotiation budget so it re-negotiates now instead of waiting for a step out-and-back
+    negotiatedStep.current = -1
+    resolveTail(undefined, true, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repackNonce])
 
