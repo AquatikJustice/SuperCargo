@@ -366,6 +366,11 @@ export const useStore = create<StoreState>((set, get) => {
     if (!contracts.length) layout = null
     else if (layout?.locked) layout = reconcileLayout(contracts, layout, holdGrids())
     set({ contracts, order: nextOrd, layout })
+    // an emptied manifest ends the walk; a stale frozen walk would otherwise strand
+    // phantom stops on the grid and the overlay that mirrors it
+    if (!contracts.length && get().loadingSteps) {
+      set({ loadingActive: false, loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadedPins: {} })
+    }
     persist()
   }
 
