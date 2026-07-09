@@ -42,13 +42,13 @@ export function parseContractTitle(raw: string): ParsedTitle {
   const haulType = parts[1] ?? ''
   let pickup = ''
 
+  // only trust a pickup the title spells out; the side panel is the real source
   const third = parts[2] ?? ''
-  if (third) {
-    if (/>/.test(third)) {
-      pickup = third.split('>')[0].trim()
-    } else {
-      pickup = third.replace(/^from\s+/i, '').trim()
-    }
+  const stripTail = (s: string): string => s.replace(/\[.*$/, '').trim()
+  if (/>/.test(third)) {
+    pickup = stripTail(third.split('>')[0])
+  } else if (/^from\s+/i.test(third)) {
+    pickup = stripTail(third.replace(/^from\s+/i, ''))
   }
 
   return { rank, haulType, pickup }

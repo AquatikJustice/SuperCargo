@@ -299,6 +299,11 @@ export function parseOcrText(rawText: string): ParsedOcr {
     const ps = pickupsByCommodity.get(o.commodity.toLowerCase())
     if (ps && ps.length) o.pickups = ps
   }
+  // ocr can drop a collect line; if every read pickup is one place, the misses share it
+  const allPickups = [...pickupsByCommodity.values()].flat()
+  if (allPickups.length && allPickups.every((p) => p.toLowerCase() === allPickups[0].toLowerCase())) {
+    for (const o of found) if (!o.pickups?.length) o.pickups = [allPickups[0]]
+  }
 
   let maxBoxSize: number | undefined
   for (const re of BOX_PATTERNS) {

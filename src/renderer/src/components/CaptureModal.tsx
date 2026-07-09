@@ -130,17 +130,17 @@ export default function CaptureModal(): React.ReactElement | null {
     setContributed(false)
     const logged = target?.objectives ?? []
     if (logged.length > 0) {
-      // cross-system: log only has the system, pull real dest from ocr by commodity+scu
+      // cross-system: log only names the system, pull the station off the ocr read
       setRows(
         logged.map((o) => {
           const row = rowFromContract(o)
           if (!isSystemDestination(o.destination)) return row
-          const hit = ocrResult.objectives.find(
-            (x) =>
-              x.scuAmount === o.scuAmount &&
-              (x.commodity.match ?? x.commodity.input).trim().toLowerCase() ===
-                o.commodity.trim().toLowerCase()
-          )
+          // match by scu, the commodity read is often just a guess ("Rg Fuel")
+          const sameScu = ocrResult.objectives.filter((x) => x.scuAmount === o.scuAmount)
+          const named = o.commodity.trim().toLowerCase()
+          const hit =
+            sameScu.find((x) => (x.commodity.match ?? x.commodity.input).trim().toLowerCase() === named) ??
+            (sameScu.length === 1 ? sameScu[0] : undefined)
           if (!hit) return row
           const d = seedField(hit.destination)
           return { ...row, destination: d.value, ocrDestination: d.hint }

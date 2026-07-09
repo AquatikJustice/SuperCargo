@@ -357,17 +357,16 @@ export function buildLoadEvents(
   }
   for (const arr of pool.values()) arr.sort((a, b) => b.size - a.size)
   const aboard = new Map<string, Set<string>>()
-  // exact sizes, match the breakdown
-  const take = (objId: string, sizes: number[]): PackBox[] => {
+  // load by scu, biggest first; a stale breakdown must never drop cargo (release mirrors this)
+  const take = (objId: string, scu: number): PackBox[] => {
     const have = aboard.get(objId) ?? new Set<string>()
-    const avail = pool.get(objId) ?? []
     const got: PackBox[] = []
-    for (const sz of [...sizes].sort((a, b) => b - a)) {
-      const b = avail.find((x) => x.size === sz && !have.has(x.id))
-      if (b) {
-        have.add(b.id)
-        got.push(b)
-      }
+    let acc = 0
+    for (const b of pool.get(objId) ?? []) {
+      if (have.has(b.id) || acc >= scu) continue
+      have.add(b.id)
+      got.push(b)
+      acc += b.size
     }
     aboard.set(objId, have)
     return got
@@ -404,7 +403,7 @@ export function buildLoadEvents(
   if (!loadSteps.length && preload.length) return [{ load: preload, drop: [] }]
   for (let i = 0; i < loadSteps.length; i++) {
     const s = loadSteps[i]
-    const load = s.kind === 'load' ? s.lines.flatMap((l) => take(l.objectiveId, l.loadBoxes)) : []
+    const load = s.kind === 'load' ? s.lines.flatMap((l) => take(l.objectiveId, l.scu)) : []
     events.push({ load: i === 0 ? [...preload, ...load] : load, drop: pendingDrop })
     pendingDrop = s.kind === 'drop' ? s.lines.flatMap((l) => release(l.objectiveId, l.scu)) : []
   }

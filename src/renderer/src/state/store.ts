@@ -220,6 +220,8 @@ interface StoreState {
 
   setView: (view: ViewId) => void
   setLoadingActive: (v: boolean | ((p: boolean) => boolean)) => void
+  /** leave loading mode and wipe the whole walk (pins, index, frozen steps/boxes, decisions) */
+  exitLoading: () => void
   setLoadingIdx: (v: number | ((p: number) => number)) => void
   setLoadingSteps: (v: LoadingStep[] | null | ((p: LoadingStep[] | null) => LoadingStep[] | null)) => void
   setLoadingBoxes: (v: PackBox[] | null | ((p: PackBox[] | null) => PackBox[] | null)) => void
@@ -550,6 +552,17 @@ export const useStore = create<StoreState>((set, get) => {
     abandonTimer = setTimeout(flushEnds, ABANDON_COALESCE_MS)
   }
 
+  // fires only if OCR never returns; a real result cancels it so review isn't rushed
+  let captureNetTimer: ReturnType<typeof setTimeout> | null = null
+  const clearCaptureNet = (): void => {
+    if (captureNetTimer) clearTimeout(captureNetTimer)
+    captureNetTimer = null
+  }
+  const armCaptureNet = (missionId: string): void => {
+    clearCaptureNet()
+    captureNetTimer = setTimeout(() => resolvePending(missionId), 45000)
+  }
+
   // release pending-ocr holds
   const resolvePending = (missionId?: string): void => {
     const { contracts } = get()
@@ -790,8 +803,7 @@ export const useStore = create<StoreState>((set, get) => {
           // open capture so the wait shows
           set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
           window.supercargo.requestOcrCapture(e.missionId)
-          // net if capture never opens
-          setTimeout(() => resolvePending(e.missionId), 20000)
+          armCaptureNet(e.missionId)
         }
       }))
       track(window.supercargo.onObjective((e: ObjectiveEvent) => {
@@ -821,7 +833,7 @@ export const useStore = create<StoreState>((set, get) => {
         if (wantsOcr) {
           set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
           window.supercargo.requestOcrCapture(e.missionId)
-          setTimeout(() => resolvePending(e.missionId), 20000)
+          armCaptureNet(e.missionId)
         }
       }))
       track(window.supercargo.onContractEnded((e: ContractEndedEvent) => {
@@ -884,7 +896,8 @@ export const useStore = create<StoreState>((set, get) => {
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })
       ))
       track(window.supercargo.onOcrResult((r) => {
-        // merge into the tagged contract
+        // capture came back, hold stays until the user acts
+        clearCaptureNet()
         const target =
           r.targetMissionId && get().contracts.some((c) => c.id === r.targetMissionId)
             ? r.targetMissionId
@@ -899,6 +912,21 @@ export const useStore = create<StoreState>((set, get) => {
     setView: (view) => set({ view }),
     setLoadingActive: (v) => {
       set((s) => ({ loadingActive: typeof v === 'function' ? v(s.loadingActive) : v }))
+      persist()
+    },
+    exitLoading: () => {
+      set({
+        loadingActive: false,
+        loadingSteps: null,
+        loadingBoxes: null,
+        loadingIdx: 0,
+        loadedPins: {},
+        looseBoxes: [],
+        looseSpots: {},
+        looseAt: {},
+        deferredObjectives: [],
+        grabbedObjectives: []
+      })
       persist()
     },
     setLoadingIdx: (v) => {
@@ -924,6 +952,7 @@ export const useStore = create<StoreState>((set, get) => {
       window.supercargo.requestOcrCapture(id)
     },
     closeCapture: () => {
+      clearCaptureNet()
       // dismiss releases the held contract
       resolvePending()
       set({ captureOpen: false, captureTargetId: null })
@@ -1011,9 +1040,16 @@ export const useStore = create<StoreState>((set, get) => {
                 }
               : base
           })
+        // reflect the side-panel pickup, not the title, when the read is unanimous
+        const objPickups = rebuilt.flatMap((o) => o.pickups ?? [])
+        const commonPickup =
+          objPickups.length && objPickups.every((p) => p.toLowerCase() === objPickups[0].toLowerCase())
+            ? objPickups[0]
+            : undefined
         // box size confirmed now, release hold and freeze against re-emits
         return {
           ...c,
+          pickup: commonPickup ?? c.pickup,
           maxBoxSize,
           boxSizeConfirmed: true,
           pendingOcr: false,
@@ -1021,6 +1057,7 @@ export const useStore = create<StoreState>((set, get) => {
           objectives: rebuilt
         }
       })
+      clearCaptureNet()
       commit(contracts)
       set({ captureOpen: false, captureTargetId: null, view: 'manifest', isRouteAuto: true })
       scheduleReroute()
@@ -1327,6 +1364,10 @@ export const useStore = create<StoreState>((set, get) => {
         }
       })
       commit(contracts)
+      // old pins point at the pre-edit box positions; drop them so this cargo re-seats fresh
+      const pins = get().loadedPins
+      const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))
+      if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
       scheduleReroute()
     },
 

@@ -14,7 +14,7 @@ import { gridsFor, shipFrame, shipAnchored, isSecureBay, offGridFor, gridCapacit
 import type { BayDir } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
-import { listBreakdown } from '@shared/box'
+import { listBreakdown, boxList } from '@shared/box'
 import { fixtureMap, planHold } from '@shared/hold'
 import { packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
@@ -651,6 +651,7 @@ export default function CargoGridPage(): React.ReactElement {
   // in store so nav survives
   const loading = useStore((s) => s.loadingActive)
   const setLoading = useStore((s) => s.setLoadingActive)
+  const exitLoading = useStore((s) => s.exitLoading)
   const loadIdx = useStore((s) => s.loadingIdx)
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
   const setPickedUp = useStore((s) => s.setPickedUp)
@@ -670,6 +671,33 @@ export default function CargoGridPage(): React.ReactElement {
       setFrozenBoxes(null)
     }
   }, [loading, liveSteps, startLocation])
+  // box edit leaves the frozen walk stale; rebuild boxes now, steps once the reroute lands (else it loops)
+  useEffect(() => {
+    if (!loading || !frozenSteps) return
+    const sig = (m: Map<string, number[]>): Map<string, string> => {
+      const out = new Map<string, string>()
+      for (const [k, v] of m) out.set(k, v.slice().sort((a, b) => a - b).join(','))
+      return out
+    }
+    const stepBoxesOf = (steps: LoadingStep[]): Map<string, number[]> => {
+      const m = new Map<string, number[]>()
+      for (const s of steps)
+        if (s.kind === 'load')
+          for (const l of s.lines) (m.get(l.objectiveId) ?? m.set(l.objectiveId, []).get(l.objectiveId)!).push(...l.loadBoxes)
+      return m
+    }
+    const want = new Map<string, number[]>()
+    for (const c of contracts) for (const o of c.objectives) want.set(o.id, boxList(o.boxes))
+    const wantSig = sig(want)
+    const matches = (have: Map<string, string>): boolean =>
+      [...have].every(([id, s]) => !wantSig.has(id) || s === wantSig.get(id))
+    const boxSig = new Map<string, number[]>()
+    for (const b of frozenBoxes ?? []) if (b.objectiveId) (boxSig.get(b.objectiveId) ?? boxSig.set(b.objectiveId, []).get(b.objectiveId)!).push(b.size)
+    if (!matches(sig(boxSig))) setFrozenBoxes(applyDropSeq(packBoxes(contracts, order, true) as PackBox[]))
+    if (!matches(sig(stepBoxesOf(frozenSteps))) && matches(sig(stepBoxesOf(liveSteps))))
+      setFrozenSteps(withStartStep(liveSteps, startLocation))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, frozenSteps, frozenBoxes, contracts, order, liveSteps, startLocation])
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const tickedObj = useMemo(
     () => new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id))),
@@ -1573,7 +1601,7 @@ export default function CargoGridPage(): React.ReactElement {
   }, [loading])
 
   // derailed plan gets tossed: stops ahead re-solve from where the ship sits, walked steps kept as history
-  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false, rebox = false): void => {
+  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
     const aboard = new Set<string>()
@@ -1623,8 +1651,8 @@ export default function CargoGridPage(): React.ReactElement {
       n++
     }
     setFrozenSteps(combined)
-    // rebox: rebuild from contracts (box set changed); else re-seat in the new drop order
-    const nextBoxes = rebox ? applyDropSeq(packBoxes(contracts, order, true) as PackBox[]) : frozenBoxes
+    // re-seat existing boxes into the new drop order
+    const nextBoxes = frozenBoxes
     if (nextBoxes)
       setFrozenBoxes(
         nextBoxes.map((b) => {
@@ -1655,12 +1683,10 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
-  // re-pack after the edit lands in the store
+  // a box-size edit rebuilds boxes via the drift effect; here just let the step re-negotiate if it overflows
   useEffect(() => {
     if (!repackNonce || !loading) return
-    // clear the once-per-step budget so the edit's overflow re-negotiates now
     negotiatedStep.current = -1
-    resolveTail(undefined, true, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repackNonce])
 
@@ -2099,7 +2125,7 @@ export default function CargoGridPage(): React.ReactElement {
                 if (c && o)
                   setEditBoxes({ contractId: c.id, objectiveId: o.id, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
               }}
-              onExit={() => setLoading(false)}
+              onExit={exitLoading}
               onRestart={() => {
                 // wipe every pickup, turn-in, pin, stash and decision for a fresh walk
                 clearAllPickedUp()
