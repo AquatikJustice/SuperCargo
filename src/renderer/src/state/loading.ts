@@ -1,5 +1,7 @@
-import type { HaulingContract } from '@shared/types'
+import type { HaulingContract, RouteLoadLine, LoadingStep } from '@shared/types'
 import { boxBreakdown, calculateBoxes, boxList, listBreakdown } from '@shared/box'
+
+export type { RouteLoadLine, LoadingStep } from '@shared/types'
 import type { PackBox, LoadEvent } from '@shared/packer'
 import { activeContracts, destinationsInOrder } from './manifest'
 import type { RoutePlan, StepRef } from './route'
@@ -49,28 +51,6 @@ function distinctiveTells(contracts: HaulingContract[]): Map<string, string | nu
     tells.set(c.id, uniqueCommodity ? `the only ${uniqueCommodity}` : null)
   }
   return tells
-}
-
-export interface RouteLoadLine {
-  ref: string
-  tell: string | null
-  commodity: string
-  /** scu moved this step */
-  scu: number
-  /** full objective scu */
-  totalScu: number
-  breakdown: string
-  /** box sizes loaded this step */
-  loadBoxes: number[]
-  /** breakdown of the whole objective */
-  totalBreakdown: string
-  destination: string
-  multiPickup: boolean
-  objectiveId: string
-  contractId: string
-  /** 1-based trip for this objective */
-  tripPos: number
-  tripTotal: number
 }
 
 export interface RouteLoadStop {
@@ -151,25 +131,6 @@ export function buildRouteLoadingPlan(
 }
 
 // one drop or destination load
-export interface LoadingStep {
-  nodeKey: string
-  label: string
-  code: string
-  region: string
-  trip: number
-  /** the synthetic step 0: empty ship at the depot, set up before heading out */
-  start?: boolean
-  kind: 'load' | 'drop'
-  /** load destination, else the stop */
-  boundFor: string
-  /** 1-based load group, 0 on drop */
-  groupPos: number
-  groupTotal: number
-  lines: RouteLoadLine[]
-  loadIds: string[]
-  dropIds: string[]
-}
-
 export function withStartStep(steps: LoadingStep[], startLocation: string): LoadingStep[] {
   if (!steps.length) return []
   const first = steps[0]
@@ -392,7 +353,11 @@ export function filterDeferredSteps(
 }
 
 // drops lag a step
-export function buildLoadEvents(loadSteps: LoadingStep[], source: PackBox[]): LoadEvent[] {
+export function buildLoadEvents(
+  loadSteps: LoadingStep[],
+  source: PackBox[],
+  aboardObjs?: Set<string>
+): LoadEvent[] {
   const pool = new Map<string, PackBox[]>()
   for (const b of source) {
     const arr = pool.get(b.objectiveId!) ?? []
@@ -431,9 +396,27 @@ export function buildLoadEvents(loadSteps: LoadingStep[], source: PackBox[]): Lo
   }
   const events: LoadEvent[] = []
   let pendingDrop: string[] = []
-  for (const s of loadSteps) {
+  // resuming mid-trip: cargo already on the ship whose pickup step this walk no longer
+  // holds (the route drops pickups for aboard cargo) would never load and would vanish
+  // from the grid. Load it up front so it rides from step 0 to its drop.
+  const willLoad = new Set(loadSteps.flatMap((s) => (s.kind === 'load' ? s.loadIds : [])))
+  const preload: PackBox[] = []
+  if (aboardObjs) {
+    for (const objId of aboardObjs) {
+      if (willLoad.has(objId)) continue
+      const boxes = pool.get(objId) ?? []
+      if (!boxes.length) continue
+      const have = aboard.get(objId) ?? new Set<string>()
+      for (const b of boxes) have.add(b.id)
+      aboard.set(objId, have)
+      preload.push(...boxes)
+    }
+  }
+  if (!loadSteps.length && preload.length) return [{ load: preload, drop: [] }]
+  for (let i = 0; i < loadSteps.length; i++) {
+    const s = loadSteps[i]
     const load = s.kind === 'load' ? s.lines.flatMap((l) => take(l.objectiveId, l.loadBoxes)) : []
-    events.push({ load, drop: pendingDrop })
+    events.push({ load: i === 0 ? [...preload, ...load] : load, drop: pendingDrop })
     pendingDrop = s.kind === 'drop' ? s.lines.flatMap((l) => release(l.objectiveId, l.scu)) : []
   }
   return events

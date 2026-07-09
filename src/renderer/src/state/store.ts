@@ -349,8 +349,8 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
+    const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
+    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
   }
 
   // active ship's grids
@@ -699,8 +699,9 @@ export const useStore = create<StoreState>((set, get) => {
           .map((c) => toHistoryEntry(c, c.status as HistoryStatus, manifest.runId, c.acceptedAt))
         history = [...migrated, ...history]
         persistHistory(history)
+        // keep the rest of the doc (pins, walk, positions) — only the contract set moved
         void window.supercargo.saveManifest({
-          runId: manifest.runId,
+          ...manifest,
           contracts: active,
           order: nextOrder(active, manifest.order)
         })
@@ -727,9 +728,12 @@ export const useStore = create<StoreState>((set, get) => {
         storAlls: manifest.storAlls ?? {},
         dismissedMissions: manifest.dismissed ?? [],
         loadedPins: manifest.loadedPins ?? {},
-        // resume walkthrough only with cargo
+        // resume walkthrough only with cargo, and resume the exact frozen plan so
+        // cargo already aboard keeps its load steps instead of being rebuilt away
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
         loadingIdx: manifest.loadingIdx ?? 0,
+        loadingSteps: active.length ? (manifest.loadingSteps ?? null) : null,
+        loadingBoxes: active.length ? (manifest.loadingBoxes ?? null) : null,
         layout,
         history,
         watcher,

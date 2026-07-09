@@ -1,4 +1,5 @@
 import type { Ship } from './ships'
+import type { PackBox } from './packer'
 
 /** rect as fractions (0..1) of the display */
 export interface CropRect {
@@ -218,6 +219,47 @@ export interface StorAllCrate {
   h: number
 }
 
+export interface RouteLoadLine {
+  ref: string
+  tell: string | null
+  commodity: string
+  /** scu moved this step */
+  scu: number
+  /** full objective scu */
+  totalScu: number
+  breakdown: string
+  /** box sizes loaded this step */
+  loadBoxes: number[]
+  /** breakdown of the whole objective */
+  totalBreakdown: string
+  destination: string
+  multiPickup: boolean
+  objectiveId: string
+  contractId: string
+  /** 1-based trip for this objective */
+  tripPos: number
+  tripTotal: number
+}
+
+export interface LoadingStep {
+  nodeKey: string
+  label: string
+  code: string
+  region: string
+  trip: number
+  /** the synthetic step 0: empty ship at the depot, set up before heading out */
+  start?: boolean
+  kind: 'load' | 'drop'
+  /** load destination, else the stop */
+  boundFor: string
+  /** 1-based load group, 0 on drop */
+  groupPos: number
+  groupTotal: number
+  lines: RouteLoadLine[]
+  loadIds: string[]
+  dropIds: string[]
+}
+
 export interface ManifestDoc {
   runId: string
   contracts: HaulingContract[]
@@ -252,6 +294,10 @@ export interface ManifestDoc {
   grabbed?: string[]
   /** parked Stor-All crates, keyed by ship */
   storAlls?: Record<string, StorAllCrate[]>
+  /** the frozen loading walk, so a restart resumes the exact plan instead of rebuilding
+   *  it from a route that has already dropped the pickups for cargo now aboard */
+  loadingSteps?: LoadingStep[] | null
+  loadingBoxes?: PackBox[] | null
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'

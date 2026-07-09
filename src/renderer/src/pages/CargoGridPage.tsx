@@ -761,7 +761,15 @@ export default function CargoGridPage(): React.ReactElement {
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
-    const events = buildLoadEvents(loadSteps, source)
+    // cargo aboard whose pickup the walk dropped (resume/re-solve) loads at step 0, not never
+    const aboardObjs = new Set(
+      contracts.flatMap((c) =>
+        c.objectives
+          .filter((o) => (o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined)
+          .map((o) => o.id)
+      )
+    )
+    const events = buildLoadEvents(loadSteps, source, aboardObjs)
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
     // cargo aboard is locked where it loaded; re-plans pack around it.
     // Extents follow the bay's floor axis, not a blanket y-up
