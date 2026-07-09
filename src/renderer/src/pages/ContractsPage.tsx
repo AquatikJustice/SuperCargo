@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
+import { MAX_BOX_OPTIONS } from '@shared/box'
 import { deriveContracts } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
@@ -165,7 +166,7 @@ export default function ContractsPage(): React.ReactElement {
                         <EditableText value={c.rank} onCommit={(v) => editContract(c.id, { rank: v })} placeholder="set rank" />
                       </DetailField>
                       <DetailField label="MAX BOX">
-                        <EditableNum value={c.maxBox} suffix=" SCU" onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
+                        <EditableBoxSize value={c.maxBox} onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
                       </DetailField>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
@@ -603,6 +604,44 @@ function EditableNum({
       {value ? fmt(value) : <span style={{ color: C.faint }}>set -</span>}
       {value && suffix ? <span style={{ color: C.dim, fontSize: 11 }}>{suffix}</span> : null}
     </span>
+  )
+}
+
+function EditableBoxSize({
+  value,
+  onCommit
+}: {
+  value: number
+  onCommit: (n: number) => void
+}): React.ReactElement {
+  return (
+    <select
+      value={value}
+      title="Max box size"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.stopPropagation()
+        const n = Number(e.target.value)
+        if (n !== value) onCommit(n)
+      }}
+      style={{
+        fontFamily: F.mono,
+        fontSize: 14,
+        color: C.text,
+        background: 'transparent',
+        border: 0,
+        borderBottom: `1px dashed rgba(255,255,255,0.22)`,
+        paddingBottom: 1,
+        cursor: 'pointer',
+        appearance: 'none'
+      }}
+    >
+      {MAX_BOX_OPTIONS.map((s) => (
+        <option key={s} value={s} style={{ background: '#0a0c0d' }}>
+          {s} SCU
+        </option>
+      ))}
+    </select>
   )
 }
 
