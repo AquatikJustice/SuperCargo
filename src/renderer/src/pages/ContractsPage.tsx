@@ -26,6 +26,7 @@ export default function ContractsPage(): React.ReactElement {
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const openCapture = useStore((s) => s.openCapture)
+  const rescanContract = useStore((s) => s.rescanContract)
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const editContract = useStore((s) => s.editContract)
   const editObjective = useStore((s) => s.editObjective)
@@ -259,6 +260,9 @@ export default function ContractsPage(): React.ReactElement {
 
                     <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
+                      {c.dataSource !== 'manual' && (
+                        <ActionBtn label="RESCAN" color={C.acc} onClick={() => rescanContract(c.id)} />
+                      )}
                       {c.dataSource === 'manual' ? (
                         // no mission id on a hand-added contract, so it can't auto-file (#21)
                         <>

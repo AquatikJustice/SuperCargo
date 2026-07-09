@@ -226,6 +226,7 @@ interface StoreState {
   setGroupBy: (g: 'destination' | 'contract') => void
   toggleBoxMath: () => void
   openCapture: (targetId?: string) => void
+  rescanContract: (id: string) => void
   closeCapture: () => void
   openCompact: () => void
   closeCompact: () => void
@@ -900,6 +901,13 @@ export const useStore = create<StoreState>((set, get) => {
     setGroupBy: (groupBy) => set({ groupBy }),
     toggleBoxMath: () => set((s) => ({ showBoxMath: !s.showBoxMath })),
     openCapture: (targetId) => set({ captureOpen: true, captureTargetId: targetId ?? null }),
+    rescanContract: (id) => {
+      if (!get().contracts.some((c) => c.id === id)) return
+      // same path a fresh accept takes: open the capture on this contract and fire
+      // the grab (the configured delay gives you time to bring its screen up in-game)
+      set({ captureOpen: true, captureTargetId: id, ocrResult: null, ocrStatus: 'recognizing' })
+      window.supercargo.requestOcrCapture(id)
+    },
     closeCapture: () => {
       // dismiss releases the held contract
       resolvePending()
