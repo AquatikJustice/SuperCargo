@@ -427,7 +427,7 @@ export const useStore = create<StoreState>((set, get) => {
         const added = Math.max(0, (plan?.stopKeys.length ?? 0) - notifyAdd.baseStops)
         notifyAdd = null
         const plur = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
-        set({ notice: `New contract added — ${plur(pickups, 'pickup')}, ${plur(deliveries, 'delivery', 'deliveries')}. ${plur(added, 'stop')} folded into your route.` })
+        set({ notice: `New contract: ${plur(pickups, 'pickup')}, ${plur(deliveries, 'delivery', 'deliveries')}, ${plur(added, 'stop')} added to your route.` })
       }
     }
     // compact only displays the route
@@ -704,7 +704,7 @@ export const useStore = create<StoreState>((set, get) => {
           .map((c) => toHistoryEntry(c, c.status as HistoryStatus, manifest.runId, c.acceptedAt))
         history = [...migrated, ...history]
         persistHistory(history)
-        // keep the rest of the doc (pins, walk, positions) — only the contract set moved
+        // keep the rest of the doc (pins, walk, positions); only the contract set moved
         void window.supercargo.saveManifest({
           ...manifest,
           contracts: active,
@@ -811,9 +811,8 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // once the objective set is curated, the game keeps re-logging objectives — cross-system
-        // ones come back as the bare "X System" and no longer match the resolved station, which used
-        // to pile up phantom duplicates. A settled contract ignores further log emits (RESCAN to rebuild)
+        // once curated, the game keeps re-logging objectives; cross-system ones come back as the
+        // bare "X System", miss the resolved station, and pile up as dupes. settled = ignore them
         if (c.objectivesSettled) return
         // key on scu too, so two deliveries of the same commodity to the same place both register (#27);
         // a re-emit of the exact same objective still dedups
