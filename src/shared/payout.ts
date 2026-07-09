@@ -21,6 +21,16 @@ export function partialPayout(reward: number, deliveredScu: number, totalScu: nu
   return snapPayout(reward * payoutFactor(deliveredScu / totalScu))
 }
 
+/** your slice of an evenly-split shared reward */
+export function sharedCut(reward: number, split: number): number {
+  return snapPayout(reward / Math.max(1, split))
+}
+
+/** earnings estimate: your cut scaled by completion; the log's actual wins over this */
+export function estimatePayout(reward: number, completionPct: number, split = 1): number {
+  return snapPayout((reward / Math.max(1, split)) * payoutFactor(completionPct))
+}
+
 /** scu needed to hit the 25% line, rounded up */
 export function repLineScu(totalScu: number): number {
   return Math.ceil(totalScu * 0.25)

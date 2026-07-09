@@ -3,7 +3,7 @@
 import type { DataSource, HaulingContract, HistoryEntry, HistoryStatus } from '@shared/types'
 import type { RoutePlan } from './route'
 import { boxBreakdown, boxCount, boxList, listBreakdown } from '@shared/box'
-import { payoutFactor, snapPayout } from '@shared/payout'
+import { estimatePayout } from '@shared/payout'
 import { splitDestination } from '../data/stations'
 import { stopColor } from '../theme'
 
@@ -461,6 +461,12 @@ export function deriveTotals(stops: Stop[], contracts: HaulingContract[]): Manif
   }
 }
 
+/** heads sharing an evenly-split reward; 1 = not shared */
+export function shareSplit(c: Pick<HaulingContract, 'sharedWith' | 'sharedWithMe'>): number {
+  if (c.sharedWith && c.sharedWith.length) return 1 + c.sharedWith.length
+  return c.sharedWithMe ? 2 : 1
+}
+
 export function toHistoryEntry(
   c: HaulingContract,
   status: HistoryStatus,
@@ -476,7 +482,8 @@ export function toHistoryEntry(
   )
   const completionPct =
     totalScu > 0 ? Math.min(1, deliveredScu / totalScu) : status === 'completed' ? 1 : 0
-  const payout = snapPayout(c.reward * payoutFactor(completionPct))
+  const split = shareSplit(c)
+  const payout = estimatePayout(c.reward, completionPct, split)
   return {
     id: c.id,
     ref: c.ref,
@@ -492,6 +499,7 @@ export function toHistoryEntry(
     status,
     completionPct,
     payout,
+    shareSplit: split > 1 ? split : undefined,
     acceptedAt: c.acceptedAt,
     endedAt,
     runId,

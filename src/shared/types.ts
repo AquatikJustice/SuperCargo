@@ -323,8 +323,10 @@ export interface HistoryEntry {
   status: HistoryStatus
   /** fraction turned in, 0..1 */
   completionPct: number
-  /** reward scaled by completionPct; earnings sum this */
+  /** your cut scaled by completionPct; earnings sum this */
   payout: number
+  /** heads splitting the reward if shared; re-derives payout on a reward edit */
+  shareSplit?: number
   /** actual aUEC from the game log when we saw it; wins over the estimate for earnings */
   actualPayout?: number
   acceptedAt: string
