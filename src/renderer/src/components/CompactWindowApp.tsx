@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F } from '../theme'
-import { buildLoadingSteps, filterDeferredSteps, withStartStep, type LoadingStep } from '../state/loading'
+import { buildLoadingSteps, filterDeferredSteps, type LoadingStep } from '../state/loading'
 import { offGridByObjective, objectiveStops } from '../state/manifest'
 
 const WHITE = '#eaf1f7'
@@ -16,7 +16,6 @@ export default function CompactWindowApp(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const looseBoxes = useStore((s) => s.looseBoxes)
-  const startLocation = useStore((s) => s.startLocation)
   const settings = useStore((s) => s.settings)
   const scale = settings.overlayScale || 1
   const opacity = settings.overlayOpacity ?? 0.85
@@ -41,39 +40,10 @@ export default function CompactWindowApp(): React.ReactElement {
     []
   )
 
-  // editing a box breakdown mid-walk must reach the overlay; turn-ins/pickups must not
-  // reindex it. box edits change boxes + scuAmount, turn-ins only touch delivered/turnedIn
-  const boxSig = useMemo(
-    () =>
-      contracts
-        .map(
-          (c) =>
-            `${c.maxBoxSize}:` +
-            c.objectives
-              .map((o) => `${o.id}=${o.scuAmount}/${o.boxes?.map((b) => `${b.scuSize}x${b.count}`).join('+') ?? ''}`)
-              .join(',')
-        )
-        .join('|'),
-    [contracts]
-  )
-  const sigRef = useRef(boxSig)
-
-  // freeze so turn-ins don't reindex; re-snapshot when the box breakdown changes
-  const [frozen, setFrozen] = useState<LoadingStep[] | null>(null)
-  useEffect(() => {
-    setFrozen((prev) => {
-      if (!driven) {
-        sigRef.current = boxSig
-        return null
-      }
-      if (!prev || sigRef.current !== boxSig) {
-        sigRef.current = boxSig
-        return withStartStep(liveSteps, startLocation)
-      }
-      return prev
-    })
-  }, [driven, liveSteps, startLocation, boxSig])
-  // must match the main window's walk exactly or the synced idx points at the wrong step
+  // mirror the main window's actual walk: its frozen steps persist + broadcast in the
+  // manifest, so we render THOSE (filtered the same way) instead of rebuilding our own,
+  // which drifts as the walk restructures and lands the synced index on the wrong step
+  const mainSteps = useStore((s) => s.loadingSteps)
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const grabbedObjectives = useStore((s) => s.grabbedObjectives)
   const tickedObj = useMemo(
@@ -81,9 +51,9 @@ export default function CompactWindowApp(): React.ReactElement {
     [contracts]
   )
   const steps = useMemo(() => {
-    if (!frozen) return liveSteps
-    return filterDeferredSteps(frozen, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
-  }, [frozen, liveSteps, deferredObjectives, tickedObj, grabbedObjectives])
+    if (!driven || !mainSteps) return liveSteps
+    return filterDeferredSteps(mainSteps, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
+  }, [driven, mainSteps, liveSteps, deferredObjectives, tickedObj, grabbedObjectives])
 
   const safeIdx = Math.min(idx, Math.max(0, steps.length - 1))
   const step = steps[safeIdx]

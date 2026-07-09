@@ -879,6 +879,9 @@ export const useStore = create<StoreState>((set, get) => {
           storAlls: doc.storAlls ?? {},
           dismissedMissions: doc.dismissed ?? [],
           loadedPins: doc.loadedPins ?? {},
+          // the overlay renders the main window's frozen walk, so take it verbatim
+          loadingSteps: doc.loadingSteps ?? null,
+          loadingBoxes: doc.loadingBoxes ?? null,
           layout: doc.layout ?? null
         })
         // mirror the main window's order instead of re-optimizing our own
@@ -913,7 +916,14 @@ export const useStore = create<StoreState>((set, get) => {
       set((s) => ({ loadingIdx: typeof v === 'function' ? v(s.loadingIdx) : v }))
       persist()
     },
-    setLoadingSteps: (v) => set((s) => ({ loadingSteps: typeof v === 'function' ? v(s.loadingSteps) : v })),
+    setLoadingSteps: (v) => {
+      const prev = get().loadingSteps
+      const next = typeof v === 'function' ? v(prev) : v
+      if (next === prev) return
+      set({ loadingSteps: next })
+      // broadcast the walk so the overlay mirrors it (main is the sole writer)
+      persist()
+    },
     setLoadingBoxes: (v) => set((s) => ({ loadingBoxes: typeof v === 'function' ? v(s.loadingBoxes) : v })),
     setGroupBy: (groupBy) => set({ groupBy }),
     toggleBoxMath: () => set((s) => ({ showBoxMath: !s.showBoxMath })),
