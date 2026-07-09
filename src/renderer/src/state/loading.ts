@@ -12,7 +12,6 @@ const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
 const tellLabel = (commodity: string, size: number, count: number): string =>
   `${count}× ${size} SCU ${commodity}`
 
-// distinctive tell per contract
 function distinctiveTells(contracts: HaulingContract[]): Map<string, string | null> {
   const live = activeContracts(contracts)
   const tupleOwners = new Map<string, Set<string>>()
@@ -157,7 +156,6 @@ interface ObjPool {
   boxes: Array<{ scuSize: number; count: number }>
 }
 
-// tell per contract from pool
 function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
   const tupleOwners = new Map<string, Set<string>>()
   const commodityOwners = new Map<string, Set<string>>()
@@ -197,8 +195,7 @@ function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
   return tells
 }
 
-// scu aboard after each step plus the run's high-water mark; feeds the live
-// load bar (fill = series[currentStep], tick = peak)
+// scu aboard per step plus the peak; feeds the load bar (fill=series[i], tick=peak)
 export function loadProfile(steps: LoadingStep[]): { series: number[]; peak: number } {
   const series: number[] = []
   let aboard = 0
@@ -270,10 +267,7 @@ export function buildLoadingSteps(
   return steps
 }
 
-// a mid-walk come-back pulls the whole pickup out of the frozen walk: its load
-// and drop steps vanish and the cargo waits for the next trip. ticked cargo is
-// aboard, so it never filters. a grabbed pickup loads at its node's first visit
-// instead of the planned return.
+// deferred pickups drop their load/drop steps (ticked cargo stays aboard); grabbed ones load at first visit, not the planned return
 export function filterDeferredSteps(
   steps: LoadingStep[],
   deferred: ReadonlySet<string>,
@@ -285,8 +279,7 @@ export function filterDeferredSteps(
   const movedFrom = new Map<number, Set<string>>()
   const movedTo = new Map<number, LoadingStep['lines']>()
   if (grabbed?.size) {
-    // grabs land on the last load step of the node's first visit, so they sit
-    // at or ahead of where the user stood when they grabbed
+    // grabs land on the node's last load step of its first visit, at or ahead of the user
     const target = new Map<string, number>()
     let i = 0
     while (i < steps.length) {
@@ -296,8 +289,7 @@ export function filterDeferredSteps(
       while (e < steps.length && steps[e].nodeKey === steps[i].nodeKey) {
         if (steps[e].kind === 'load') {
           lastLoad = e
-          // a visit with all loads ticked is behind the walker; grabbed cargo
-          // dropped there would be unreachable
+          // a visit with everything ticked is behind the walker; grabbed cargo would strand there
           if (!steps[e].loadIds.length || steps[e].loadIds.some((id) => !ticked(id))) open = true
         }
         e++
@@ -320,8 +312,7 @@ export function filterDeferredSteps(
   steps.forEach((s, i) => {
     const away = movedFrom.get(i)
     const lines = s.lines.filter((l) => !gone(l.objectiveId) && !away?.has(l.objectiveId))
-    // grabbed pickups join the visit as their own steps, one per destination;
-    // lumping them into another group's step loads two groups in one tick
+    // grabbed pickups get their own step per destination, not lumped into another group's step
     const emitGrabbed = (): void => {
       const incoming = movedTo.get(i)
       if (!incoming?.length) return

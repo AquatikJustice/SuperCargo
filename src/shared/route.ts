@@ -8,7 +8,7 @@ export interface RouteJob {
   pickup: number
   dest: number
   scu: number
-  /** box sizes for the pack check */
+  /** used for the pack check, not just the scu total */
   boxes?: number[]
 }
 
@@ -408,8 +408,7 @@ function materialize(
   return { stops, totalDistance: total, peakLoad: peak }
 }
 
-// walk stop by stop against the live hold, then re-check the whole pass with
-// the layout engine; pickups it can't house yet get pushed later in the run
+// walks live against the hold, re-checks with the layout engine; unhoused pickups get pushed later
 function planMultiTrip(input: RouteInput): RouteResult {
   const { dist } = input
   const cap = input.capacity
@@ -435,7 +434,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
   const walkOnce = (lateSet: ReadonlySet<number>): Walk => {
     const unfittable = [...baseUnfittable]
     const pending = new Set(byIdx.keys())
-    // seeded cargo starts the walk on the ship: no pickup visit, only its delivery
+    // seeded cargo starts aboard, no pickup visit needed
     for (const j of seeded) pending.delete(j.idx)
     const aboard: IJob[] = [...seeded]
     let load = seeded.reduce((a, j) => a + j.scu, 0)
@@ -457,7 +456,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       aboard.some((j) => j.dest === c) ||
       [...pending].some((i) => (byIdx.get(i) as IJob).pickup === c)
 
-    // deferred cargo (user's, or what the layout couldn't house) waits until everything else is delivered
+    // deferred cargo waits until everything else is delivered
     const deferred = new Set([...userDeferred, ...lateSet])
     const nonDeferredLeft = (): boolean =>
       [...pending].some((i) => !deferred.has(i)) || aboard.some((j) => !deferred.has(j.idx))
@@ -777,7 +776,7 @@ function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadE
     }
     return { load, drop }
   })
-  // cargo aboard before the walk begins loads as one pre-walk event, so the layout judge sees the ship as full as it really is
+  // preload counts as one event so the judge sees a truly full ship
   if (preload?.length) {
     const load: PackBox[] = []
     for (const j of preload)
@@ -789,8 +788,7 @@ function passEvents(stops: PlannedStop[], jobs: IJob[], preload?: IJob[]): LoadE
   return events
 }
 
-// can the layout engine house every box across the whole pass? a few declared
-// digs are fine; only a box with no home rejects the order
+// does every box across the pass find a home; a stray unplaced one fails it
 function singlePassPacks(
   stops: PlannedStop[],
   jobs: IJob[],
@@ -800,14 +798,12 @@ function singlePassPacks(
   return planHold(bays, passEvents(stops, jobs), { fixtures }).snaps.every((s) => s.unplaced.length === 0)
 }
 
-// a later fetch-only visit folds into an earlier visit of the same node when
-// the hold can take those boxes there. fewer stops beats distance.
+// folds a later fetch-only visit into an earlier one of the same node when it fits; fewer stops beats distance
 function pullForward(res: RouteResult, input: RouteInput): RouteResult {
   if (!res.feasible || !input.bays || res.stops.length < 2) return res
   const jobs = indexedJobs(input.jobs)
   const scuOf = new Map(jobs.map((j) => [j.idx, j.scu]))
-  // each probe is a full layout judge; cap it so a wave-heavy multitrip route
-  // can't turn a reroute into seconds. an accepted merge buys more probing.
+  // each probe runs the full layout judge, so cap it; a good merge buys more budget
   let judges = 0
   let budget = 7
   const judge = (stops: PlannedStop[]): { lost: number; conc: number } => {
@@ -824,8 +820,7 @@ function pullForward(res: RouteResult, input: RouteInput): RouteResult {
   let changed = true
   while (changed && judges < budget) {
     changed = false
-    // fetch-only revisits, cheapest cargo first; a merge that busts raw
-    // capacity on the legs between fails on arithmetic, no judge needed
+    // fetch-only revisits, cheapest first; skip the judge if raw capacity already busts
     const cands: Array<{ j: number; i: number; scu: number }> = []
     for (let j = stops.length - 1; j > 0; j--) {
       const s2 = stops[j]
@@ -888,8 +883,7 @@ export function planRoute(input: RouteInput): RouteResult {
     input = { ...input, capacity: Math.max(1, input.capacity - scu) }
   }
   const res = solveRoute(input)
-  // hand-ordered routes are the user's word; a seeded mid-run solve skips the
-  // merge pass since pullForward's judge and load math can't see cargo aboard
+  // manual order is final; mid-run solves skip the merge, pullForward can't see aboard cargo
   return res.method === 'manual' || input.aboard?.size ? res : pullForward(res, input)
 }
 
@@ -905,8 +899,7 @@ function solveRoute(input: RouteInput): RouteResult {
 
   if (input.fixedOrder && input.fixedOrder.length) return planManual(input)
 
-  // deferred cargo forces a later trip and aboard cargo needs the live walker;
-  // the single-pass optimizer can't express either
+  // deferred/aboard cargo needs the live walker, single-pass optimizer can't express it
   if ((input.deferred && input.deferred.size) || (input.aboard && input.aboard.size)) return planMultiTrip(input)
 
   // a single pass that fits is optimal

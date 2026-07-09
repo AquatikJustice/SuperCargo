@@ -130,8 +130,7 @@ export default function CaptureModal(): React.ReactElement | null {
     setContributed(false)
     const logged = target?.objectives ?? []
     if (logged.length > 0) {
-      // the log only knows the system for cross-system deliveries; take the real
-      // destination OCR read off the panel, matched by commodity + scu
+      // cross-system: log only has the system, pull real dest from ocr by commodity+scu
       setRows(
         logged.map((o) => {
           const row = rowFromContract(o)

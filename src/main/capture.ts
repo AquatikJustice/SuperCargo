@@ -4,8 +4,7 @@ import { desktopCapturer, screen, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
 import type { CropRect, DisplayInfo } from '@shared/types'
 
-// Electron's numeric display id gets reassigned across a reboot, so key on
-// position+resolution instead. Stable as long as the physical layout doesn't move.
+// numeric display id gets reassigned across a reboot, key on position+resolution instead
 function displayKey(d: Electron.Display): string {
   const b = d.bounds
   return `${b.x}_${b.y}_${b.width}x${b.height}`
@@ -24,7 +23,7 @@ export function listDisplays(): DisplayInfo[] {
 
 function resolveDisplay(displayId: string): Electron.Display {
   if (displayId) {
-    // stable key, but still honor a numeric id saved before this change
+    // falls back to old numeric ids saved before this change
     const found = screen
       .getAllDisplays()
       .find((d) => displayKey(d) === displayId || String(d.id) === displayId)
@@ -35,7 +34,7 @@ function resolveDisplay(displayId: string): Electron.Display {
 
 const GAME_WINDOW = /star\s*citizen/i
 
-// exclusive fullscreen hands back a black frame; treat that as a miss so we fall back to display capture
+// exclusive fullscreen returns a black frame, treat that as a miss
 function isMostlyBlack(img: NativeImage): boolean {
   const { width, height } = img.getSize()
   if (width < 4 || height < 4) return true
@@ -83,7 +82,6 @@ export async function captureDisplay(displayId: string): Promise<NativeImage | n
   })
   if (sources.length === 0) return null
 
-  // match source to display
   const match =
     sources.find((s) => s.display_id && s.display_id === String(display.id)) ?? sources[0]
   const img = match.thumbnail

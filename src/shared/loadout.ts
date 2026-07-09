@@ -21,8 +21,7 @@ export interface LooseSummary {
   scu: number
 }
 
-// roll off-grid boxes into a readable list: how many of each commodity, what
-// size, bound where. Feeds the riding-loose tally and the grab-your-cargo reminder.
+// tallies loose boxes by commodity/dest/size, for the loose summary + grab reminder
 export function looseSummary(boxes: PackBox[]): LooseSummary {
   const by = new Map<string, LooseGroup>()
   for (const b of boxes) {
@@ -37,7 +36,7 @@ export function looseSummary(boxes: PackBox[]): LooseSummary {
 }
 
 const DEFAULT_EXIT = { axis: 'z' as const, dir: -1 as const }
-export const BIG = 24 // containers this size or larger are the heavy ones to call out
+export const BIG = 24 // this size or up counts as a heavy box
 
 export interface SetAside {
   count: number
@@ -49,10 +48,7 @@ export interface SetAside {
   blocked: PackBox[]
 }
 
-// boxes you physically lift out of the way to unload in delivery order. Not the
-// trapped boxes (provePeel counts those) but the ones sitting in front of them.
-// "2 to shuffle" hides that you move fifteen 32-SCU cans to reach them; this is
-// the honest number.
+// movers you lift aside to unload, not the trapped boxes; the honest shuffle count
 export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): SetAside {
   const byGrid = new Map<string, Placement[]>()
   for (const p of placements) (byGrid.get(p.gridId) ?? byGrid.set(p.gridId, []).get(p.gridId)!).push(p)
@@ -94,10 +90,7 @@ export interface BucketDecision {
   digBoxes: PackBox[]
 }
 
-// what a pickup bucket needs the user to decide: won't fit (overload), buries
-// earlier-delivery cargo you'll dig out (digout), or nothing (just load it). The
-// dig-out cost is this bucket's own set-aside boxes, so the count matches why the
-// card showed up instead of a whole-hold tally dragging in far-off stops.
+// overload vs digout vs none; digout cost is this bucket's own set-aside, not a whole-hold tally
 export function bucketDecision(
   setAside: SetAside,
   unplaced: PackBox[],
@@ -113,17 +106,13 @@ const toOcc = (p: Placement, stopIdx: number): Occupied => ({
   gridId: p.gridId, x: p.x, y: p.y, z: p.z, w: p.w, l: p.l, h: p.h, stopIdx
 })
 
-// far edge of a placement from its bay's exit: the depth the next box behind it
-// must clear. Later-delivery cargo sits past this to peel out cleanly.
+// far edge from the bay exit; later cargo sits past this to peel out clean
 function farDepth(g: CargoGrid, p: Placement): number {
   const e = g.exit ?? DEFAULT_EXIT
   return e.axis === 'z' ? (e.dir === -1 ? p.z + p.l : g.l - p.z) : e.dir === -1 ? p.x + p.w : g.w - p.x
 }
 
-// fake occupancy sealing the shallow space in one placement's lane, from the exit
-// to the far edge of that box, full height. Forces later-delivery cargo behind it
-// so it peels clean, but only in this box's own lane. Other lanes stay usable, so
-// a late box can still fill genuinely-empty shallow space, not hit a false wall.
+// seals this box's own lane so later cargo stacks behind it; other lanes stay open
 function laneShadow(g: CargoGrid, p: Placement): Occupied | null {
   const e = g.exit ?? DEFAULT_EXIT
   const D = Math.min(farDepth(g, p), e.axis === 'z' ? g.l : g.w)
@@ -138,11 +127,7 @@ function laneShadow(g: CargoGrid, p: Placement): Occupied | null {
     : { ...base, x: g.w - D, z: p.z, w: D, l: p.l }
 }
 
-// Interval loadout: assign every box one permanent slot up front, in delivery
-// order. Two boxes contend for cells only if their aboard windows overlap, so a
-// delivered box's space is reclaimed for later cargo (no false over-capacity).
-// Each box lays behind the earlier-delivery cargo it shares the hold with (via a
-// per-bay depth floor), so it peels cleanly at every step and nothing has to move.
+// gives each box one slot for its whole aboard window; overlapping windows contend, dropped ones free space for later cargo
 export interface ScheduleOpts {
   /** box ids the user chose to overload off-grid */
   loose?: ReadonlySet<string>
@@ -168,17 +153,13 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   const dropOf = (id: string): number => dropAt.get(id) ?? events.length
   const overlap = (a: string, b: string): boolean =>
     loadOf(a) < dropOf(b) && loadOf(b) < dropOf(a)
-  // a holds b up only if aboard the whole time b is: loaded no later, gone no
-  // earlier. Same stop isn't enough (multi-pickup boxes share a stop but load at
-  // different steps), so a box on a later-loading neighbour would hang mid-air.
+  // a covers b only if loaded no later and dropped no earlier; same stop alone isn't enough
   const contains = (a: string, b: string): boolean => loadOf(a) <= loadOf(b) && dropOf(a) >= dropOf(b)
 
   const assigned = new Map<string, Placement>()
   if (pins) for (const [id, p] of pins) { const b = boxOf.get(id); if (b) assigned.set(id, { ...p, box: b }) }
 
-  // Superbucket units: boxes sharing a delivery stop and a load step, so they
-  // share an aboard window. The wall-packer lays a whole unit as one contiguous
-  // block; nothing floats inside a unit, and two stops never share one.
+  // Superbucket units share stop+load step; packer lays each as one contiguous block
   const units = new Map<string, PackBox[]>()
   for (const b of boxOf.values()) {
     if (loose?.has(b.id) || pins?.has(b.id)) continue
@@ -189,9 +170,7 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
     (a, b) => a[0].stopIdx - b[0].stopIdx || loadOf(a[0].id) - loadOf(b[0].id)
   )
 
-  // fill bays deliberately: grow a set of open bays, crack a new one only when the
-  // open ones can't seat a unit. Consolidates cargo into the fewest bays and leaves
-  // the rest genuinely empty, instead of grabbing the shallowest open bay every call.
+  // opens a new bay only when the current ones can't seat a unit; consolidates into fewest bays
   const seedFor = (bays: CargoGrid[], rep: string, stopIdx: number): Occupied[] => {
     const inBay = new Set(bays.map((g) => g.id))
     const concurrent = [...assigned.values()].filter((p) => inBay.has(p.gridId) && overlap(p.box.id, rep))
@@ -214,8 +193,7 @@ export function packSchedule(grids: CargoGrid[], events: LoadEvent[], opts: Sche
   for (const unit of ordered) {
     const rep = unit[0].id
     const stopIdx = unit[0].stopIdx
-    // keep a Superbucket in one bay when it fits: try each open bay alone (fill
-    // order), then a fresh bay. It spills across bays only when none holds it whole.
+    // try each open bay alone first, then a fresh one; spills only if none fits whole
     let placed: Placement[] | null = null
     for (const b of open) if ((placed = fits([b], rep, stopIdx, unit))) break
     if (!placed) {

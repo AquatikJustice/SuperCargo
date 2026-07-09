@@ -4,9 +4,7 @@ export interface ParsedTitle {
   pickup: string
 }
 
-// the game logs cross-system deliveries with just the system as the destination
-// (e.g. "Pyro System"); the real drop-off station is only on the contract screen,
-// so these need OCR. no haulable location is ever named "X System", so this is safe.
+// game logs cross-system drops as just "Pyro System", real station needs OCR
 export function isSystemDestination(dest: string): boolean {
   return /^[a-z][a-z0-9 ]*\ssystem$/i.test(dest.trim())
 }

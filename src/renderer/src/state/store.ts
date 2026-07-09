@@ -254,7 +254,6 @@ interface StoreState {
   ) => void
   /** undo a soft turn-in */
   unmarkTurnIn: (objectiveIds: string[]) => void
-  /** toggle a pickup checkoff */
   setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
   clearAllPickedUp: () => void
   dismissNotice: () => void
@@ -281,7 +280,6 @@ interface StoreState {
   reorderStops: (fromKey: string, toKey: string) => void
   setStartLocation: (loc: string) => void
   setBoxLoose: (key: string, loose: boolean, at?: string) => void
-  /** park an off-grid box at a spot in the virtual pane */
   setLooseSpot: (key: string, placement: ManualPlacement) => void
   addStorAll: (crate: StorAllCrate) => void
   moveStorAll: (id: string, crate: StorAllCrate) => void
@@ -299,7 +297,6 @@ interface StoreState {
   // history
   updateHistoryReward: (id: string, reward: number) => void
   clearHistory: () => void
-  /** remove every entry in run */
   deleteRun: (runId: string) => void
 
   checkForUpdates: () => Promise<void>
@@ -353,7 +350,6 @@ export const useStore = create<StoreState>((set, get) => {
     void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
   }
 
-  // active ship's grids
   const holdGrids = (): CargoGrid[] => {
     const { settings } = get()
     return gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
@@ -803,10 +799,9 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // settled: ignore re-logged objectives (cross-system ones dupe)
+        // once settled, ignore re-logged objectives (cross-system ones dupe)
         if (c.objectivesSettled) return
-        // key on scu too, so two deliveries of the same commodity to the same place both register (#27);
-        // a re-emit of the exact same objective still dedups
+        // key on scu too, so same commodity+dest can register twice (#27); exact re-emits still dedup
         const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}|${e.scuAmount}`
         const exists = c.objectives.some(
           (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}|${o.scuAmount}` === ek
@@ -816,8 +811,7 @@ export const useStore = create<StoreState>((set, get) => {
           ...c.objectives,
           makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, c.maxBoxSize)
         ]
-        // cross-system deliveries log only the system; hold for OCR to read the real
-        // station off the contract screen, same as the box-size capture
+        // cross-system deliveries log only the system name; OCR reads the real station off the contract screen
         const wantsOcr =
           get().settings.ocrAutoCapture && isSystemDestination(e.destination) && !c.pendingOcr
         const updated = [...contracts]
@@ -953,9 +947,7 @@ export const useStore = create<StoreState>((set, get) => {
         patch.installedModules !== undefined &&
         JSON.stringify(patch.installedModules) !== JSON.stringify(prev.installedModules)
       if (shipChanged || modulesChanged) {
-        // different hold, reset everything: close the walk, drop the frozen plan, re-solve for the
-        // new capacity. leaving loadingActive on re-froze the old ship's route before the reroute
-        // landed, peaking over the new hold's cap
+        // ship/module swap changes hold capacity; leaving loadingActive on re-froze the old route before reroute landed
         set({
           loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadingActive: false,
           loadedPins: {}, deferredObjectives: [], grabbedObjectives: [],
@@ -995,8 +987,7 @@ export const useStore = create<StoreState>((set, get) => {
     addObjectivesToContract: (contractId, objectives, maxBoxSize) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
-        // modal seeds existing objectives as editable rows, so the submitted set replaces rather
-        // than merges; carry delivery progress for rows that survive unchanged
+        // submitted set replaces existing objectives; carry delivery progress over for rows that survive
         const sig = (commodity: string, destination: string, scu: number): string =>
           `${commodity.trim().toLowerCase()}|${destination.trim().toLowerCase()}|${scu}`
         const prior = new Map<string, DeliveryObjective[]>()
@@ -1020,7 +1011,7 @@ export const useStore = create<StoreState>((set, get) => {
                 }
               : base
           })
-        // confirmed: release hold, freeze against re-emits
+        // box size confirmed now, release hold and freeze against re-emits
         return {
           ...c,
           maxBoxSize,
@@ -1500,7 +1491,7 @@ export const useStore = create<StoreState>((set, get) => {
       let touched = false
       const contracts = get().contracts.map((c) => {
         let next = c
-        // settled = curated set; skip its re-logs
+        // already curated, skip its re-logs
         const s = c.objectivesSettled ? undefined : byId.get(c.id)
         if (s) {
           const seen = new Set(c.objectives.map(key))
@@ -1531,8 +1522,7 @@ export const useStore = create<StoreState>((set, get) => {
       })
       if (touched) commit(contracts)
       if (objsChanged > 0) scheduleReroute()
-      // everything not already listed and not dismissed goes to the review queue. the log can't give
-      // us box size and re-emits accepts without objectives, so the user reviews each one before it lands
+      // log can't give box size + re-emits accepts without objectives; user reviews each one before it lands
       const { dismissedMissions } = get()
       const have = new Set(get().contracts.map((c) => c.id))
       const queued = scanned.filter(

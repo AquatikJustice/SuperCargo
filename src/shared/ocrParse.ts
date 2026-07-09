@@ -95,8 +95,7 @@ const BODY_CODE: Record<string, string> = {
   microtech: 'MIC',
   pyro: 'PYR'
 }
-// long lagrange address form, lenient for ocr noise.
-// lag digit as one char since L5 reads as LS (see lagDigit)
+// long lagrange address form, lenient for ocr noise; lag digit is one char since L5 reads as LS
 const RE_LAGRANGE_ADDRESS =
   /^(.+?)\s+at\s+(hurston|crusader|arccorp|micro\s?tech|pyro)['']?\s*s?\s+L\s?([1-5sSiIlLzZaA])\s+lagrange\s+point/i
 
@@ -137,23 +136,19 @@ function cleanFragment(s: string): string {
     .trim()
 }
 
-// cut at the first trailing ui/prose word.
-// "c?ontract" since ocr drops the leading C of "Contractor"
+// cut at the first trailing ui/prose word; "c?ontract" since ocr drops the leading C of "Contractor"
 const DEST_TAIL =
   /\b(?:rewar\w*|accept\w*|abandon\w*|share\w*|a?uec|scu|collect|deliver\w*|objective\w*|complete\w*|active|tracked|c?ontract\w*|mission\w*|location|for\s+(?:you|a|an|the)|is\s+(?:a|an|the))\b/i
 
-// drop a trailing "on <body>"/"above" suffix.
-// "on" scoped to a body so it can't eat a real "... on ..." location
+// drop a trailing "on <body>"/"above" suffix; scoped to a body so it can't eat a real location
 const DEST_BODY_SUFFIX =
   /\s+(?:on\s+(?:hurston|crusader|arccorp|micro\s?tech|pyro|magnus|terra|nyx|stanton)|above)\b.*$/i
 
-// mission flavor words; none appear in a real location name, so they mean the
-// destination capture ran into the details prose
+// mission flavor words that never appear in a real location name; means we ran into prose
 const DEST_PROSE =
   /\b(?:seems|like|currently|whatever|smaller|cargo|separated|delivered|spots?|encourage|contractors?|please|expect|greetings|thanks|prompt|anything|anywhere|folks|waiting|distributed)\b/i
 
-// cut at the suffix word so wrapped prose isn't appended.
-// trailing pad code (e.g. "Depot S4LD01") is kept
+// cut at the suffix word so wrapped prose isn't appended; keeps a trailing pad code like "Depot S4LD01"
 const STATION_SUFFIX =
   /\b(?:station|spaceport|outpost|depot|harbou?r|hub|gateway|complex|platform|plant|refinery|processing|workcenter|cent(?:er|re))\b/i
 const PAD_CODE = /^\s+[A-Z0-9][A-Z0-9-]{1,7}\b/
@@ -201,9 +196,7 @@ function snapBoxSize(n: number): number | undefined {
   return best
 }
 
-// the contract panel is two columns (details | objectives) and the engine
-// sometimes reads across them, fouling the parse. rebuild the text from word
-// boxes: split at the emptiest middle band, read each column top to bottom.
+// panel is two columns and ocr sometimes reads across them; rebuild by splitting at the emptiest band
 export function reorderColumns(words: OcrWord[]): string | null {
   if (words.length < 6) return null
   const maxX = Math.max(...words.map((w) => w.x1))
@@ -251,8 +244,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
     const commodity = cleanFragment(commodityRaw)
     const destination = normalizeDestination(trimDestinationTail(cleanFragment(destinationRaw)))
     if (!commodity || !destination || !Number.isFinite(scuAmount) || scuAmount <= 0) return
-    // drop over-captured prose: a real destination never spans another "to"/"from"
-    // nor carries mission flavor words, so those mean we ran past the real name
+    // a real destination never spans another to/from or carries flavor words
     if (/\b(?:to|from)\b/i.test(destination) || DEST_PROSE.test(destination)) return
     const key = `${commodity.toLowerCase()}|${destination.toLowerCase()}`
     if (seen.has(key)) return
@@ -290,8 +282,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
   collect(RE_DELIVERED_TO, 1, 2, 3)
   collect(RE_GENERIC, 1, 2, 3)
 
-  // group pickups by commodity; inlineText already broke before each "Collect"
-  // so the location capture stops at the next leg
+  // group pickups by commodity; inlineText already breaks before each "Collect"
   const pickupsByCommodity = new Map<string, string[]>()
   RE_COLLECT.lastIndex = 0
   let pm: RegExpExecArray | null
@@ -321,8 +312,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
   return { objectives: found, maxBoxSize, reward: parseReward(text) }
 }
 
-// collapse pickups that resolve to the same place; raw-string dedup misses these
-// when ocr reads the same line slightly differently across legs
+// collapse pickups that resolve to the same place; raw-string dedup misses ocr variance
 function dedupePickups(ps?: MatchResult[]): MatchResult[] | undefined {
   if (!ps || !ps.length) return ps
   const seen = new Set<string>()
@@ -391,8 +381,7 @@ function anchorIndex(locations: Location[]): AnchorIndex {
   return idx
 }
 
-// pin a location by a distinctive word; bigrams first, then tokens.
-// fuzzy only for long tokens so a near-hit isn't chance. null => defer
+// pin by a distinctive word, bigrams first then tokens; fuzzy only for long tokens, null => defer
 function anchorMatch(input: string, locations: Location[]): { name: string; score: number } | null {
   const idx = anchorIndex(locations)
   const toks = anchorTokens(input)
@@ -423,8 +412,7 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
   const bodyHint = bm ? bm[1].trim() : ''
   const core = bm ? input.slice(0, bm.index).trim() : input
 
-  // prefer operator+body; a loose name match can latch onto a facility
-  // named after the operator
+  // prefer operator+body; a loose name match can latch onto a facility named after the operator
   if (bodyHint) {
     const onBody = locations.filter((l) => l.body && similarity(l.body, bodyHint) >= 0.8)
     if (onBody.length) {

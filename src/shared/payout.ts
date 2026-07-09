@@ -12,12 +12,10 @@ export function payoutFactor(ratio: number): number {
 // payouts snap to multiples of 250; nearest-250 matched live samples 2026-06-21
 const PAYOUT_STEP = 250
 
-/** snap payout to nearest 250 */
 export function snapPayout(n: number): number {
   return Math.round(n / PAYOUT_STEP) * PAYOUT_STEP
 }
 
-/** estimated payout, snapped */
 export function partialPayout(reward: number, deliveredScu: number, totalScu: number): number {
   if (totalScu <= 0) return snapPayout(reward) // no objectives, treat as full
   return snapPayout(reward * payoutFactor(deliveredScu / totalScu))

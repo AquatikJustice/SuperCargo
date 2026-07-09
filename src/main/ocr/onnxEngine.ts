@@ -1,5 +1,4 @@
-// CRNN+CTC ONNX recognizer.
-// preprocessing must match scripts/train/dataset.py.
+// CRNN+CTC ONNX recognizer, preprocessing must match scripts/train/dataset.py
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'

@@ -29,7 +29,7 @@ function boxesFor(
   }))
 }
 
-// run the packer once and stamp each box's resting position onto it
+// one packer pass, stamps resting position onto each box
 function stampPositions(boxes: FrozenBox[], occupied: Occupied[], grids: CargoGrid[]): void {
   const fresh = occupied.length ? boxes.filter((b) => b.x == null) : boxes
   const { placements } = packInto(grids, occupied, fresh)
@@ -96,8 +96,7 @@ export function reconcileLayout(
     }
   }
   boxes.push(...fresh)
-  // slot late additions (and migrate any position-less legacy boxes) into the
-  // gaps, leaving already-placed cargo untouched
+  // slot late additions (and migrate position-less legacy boxes) into the gaps, untouched cargo stays put
   if (boxes.some((b) => b.x == null)) {
     stampPositions(boxes, occupiedFrom(boxes), grids)
   }

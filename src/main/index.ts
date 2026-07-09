@@ -42,8 +42,7 @@ function createWindow(): void {
     height: ws.height,
     x: ws.x,
     y: ws.y,
-    // below ~960 the fixed-column tables (contracts, history) crowd and wrap; the compact
-    // overlay is the skinny companion, this stays a full workspace
+    // below ~960 the contracts/history tables crowd and wrap; compact overlay is the skinny one
     minWidth: 960,
     minHeight: 560,
     show: false,
@@ -135,7 +134,7 @@ function positionCompact(): void {
   const margin = 10
   const scale = settings.overlayScale || 1
   const width = Math.round(COMPACT_W * scale)
-  // compactHeight is the renderer's already-scaled content height
+  // already scaled by the renderer, don't scale again
   const height = Math.max(120, Math.min(compactHeight, bounds.height - margin * 2))
   const corner = settings.overlayCorner || 'tr'
   const onLeft = corner === 'tl' || corner === 'bl'
@@ -148,7 +147,7 @@ function positionCompact(): void {
   })
 }
 
-// size, click-through, and placement from settings; safe to call anytime
+// safe to call anytime
 function applyOverlay(): void {
   if (!compactWindow || compactWindow.isDestroyed()) return
   const width = Math.round(COMPACT_W * (settings.overlayScale || 1))
@@ -276,7 +275,7 @@ function watchGridFacesDev(): void {
 
 let ocrBusy = false
 
-// the captured display, for deciding whether the main window is even in the shot
+// is main window actually on the display being captured
 function captureDisplayMatches(win: BrowserWindow): boolean {
   const id = settings.ocrDisplayId
   const target = id
@@ -285,8 +284,7 @@ function captureDisplayMatches(win: BrowserWindow): boolean {
   return screen.getDisplayMatching(win.getBounds()).id === target.id
 }
 
-// hide our own windows for the grab, then restore. the main window only needs hiding
-// when it's on the display being captured (single-monitor case).
+// hide own windows for the grab then restore; main only needs it on the captured display
 async function withWindowsHidden<T>(fn: () => Promise<T>): Promise<T> {
   const restore: Array<() => void> = []
 
@@ -327,7 +325,7 @@ async function withWindowsHidden<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-// threaded back so renderer merges
+// pushed back over ipc so the renderer can merge it in
 async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   if (ocrBusy) return
   ocrBusy = true
@@ -629,7 +627,7 @@ if (!gotLock) {
     registerHotkey()
     prunePending()
 
-    // stable id grouping uploads
+    // stable id, groups uploads by client
     if (!settings.telemetryClientId) {
       settings = { ...settings, telemetryClientId: randomUUID() }
       saveSettings(settings)

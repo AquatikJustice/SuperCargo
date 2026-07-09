@@ -25,7 +25,7 @@ interface JobInfo {
   pickupNode: number
   destNode: number
   scu: number
-  /** real box sizes loaded here */
+  /** actual sizes, not just the scu sum */
   boxes: number[]
   commodity: string
   contractId: string
@@ -84,7 +84,6 @@ export interface RoutePlan {
   trips: number
   /** scu aboard after first stop */
   startLoad: number
-  /** first stop name */
   startStop: string
   method: RouteResult['method']
   reason?: string
@@ -92,7 +91,6 @@ export interface RoutePlan {
   usedRealDistance: boolean
   /** scu aboard at trip 0's peak */
   trip1Scu: Record<string, number>
-  /** objectives that matched a job */
   matchedObjectives: string[]
 }
 
@@ -187,8 +185,7 @@ function sameLoc(a: Location | null, b: Location | null): boolean {
   return norm(a.name) === norm(b.name) && (a.system ?? '') === (b.system ?? '')
 }
 
-// split a bucket by what physically packs in one go, not raw SCU: a big chunk
-// can pass the sum check yet never tile the bays
+// splits by what physically packs in one go; a chunk can pass the scu sum yet never tile the bays
 function chunkToFit(
   boxes: number[],
   cap: number,
@@ -328,7 +325,7 @@ export function buildRouteModel(
   const jobInfo: JobInfo[] = []
   for (const c of activeContracts(contracts)) {
     for (const o of c.objectives) {
-      // turnedInScu set = already submitted in-game; skip it so a reroute doesn't re-add its done stations
+      // already submitted in-game, don't let a reroute re-add its stations
       if (o.delivered || o.turnedInScu !== undefined) continue
       const destNode = nodeFor(o.destination, true)
       // dedupe, repeats halve scu
@@ -436,8 +433,7 @@ export function computeRoutePlan(
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
 
-  // objectives whose cargo is already on the ship: no pickup visits, and a
-  // deferral can't apply to them
+  // already aboard: no pickup visit, and deferral doesn't apply
   const aboardJobs = aboard?.size
     ? new Set(model.jobInfo.flatMap((j, i) => (aboard.has(j.objectiveId) ? [i] : [])))
     : undefined

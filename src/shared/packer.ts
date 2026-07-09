@@ -1,5 +1,4 @@
-// x width, y up, z length, bay-local cells.
-// a delivery is a wall, ordered exit-inward by drop.
+// x width, y up, z length, bay-local cells; a delivery is a wall, ordered exit-inward by drop
 
 import type { CargoGrid } from './cargoGrids'
 import { BOX_DIMS, type BoxDims } from './boxGeometry'

@@ -31,8 +31,7 @@ export const F = {
 export const GLOW = '0 0 7px rgba(255,210,30,0.45)'
 export const GLOW_SOFT = '0 0 5px rgba(255,210,30,0.20)'
 
-// golden-angle stepping looked even but clustered in the eye (too much of the wheel reads as green).
-// hand-picked warm/cool alternating hues keep neighbouring stops apart; lightness drops a notch per wrap.
+// golden-angle stepping clustered too green; hand-picked hues alternate warm/cool instead
 const STOP_HUES: [number, number, number][] = [
   [0, 85, 66],   // red
   [212, 90, 64], // blue

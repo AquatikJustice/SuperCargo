@@ -69,8 +69,7 @@ function MainApp(): React.ReactElement {
         color: C.textBody,
         overflow: 'hidden',
         border: '2px solid rgba(255,210,30,0.6)',
-        // no glow box-shadow: a blurred shadow on the whole window re-rasterizes every
-        // resize frame and makes edge-dragging crawl (see global.css perf note)
+        // no glow box-shadow, re-rasterizes every resize frame and makes dragging crawl
         borderRadius: 18
       }}
     >

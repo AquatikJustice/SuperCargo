@@ -32,7 +32,7 @@ export interface DeliveryObjective {
   delivered: boolean
   /** undefined = full turn-in */
   deliveredScu?: number
-  /** soft turn-in marked in loading mode, editable until the game log confirms; undefined = not yet turned in */
+  /** soft turn-in from loading mode, editable until game log confirms; undefined = not yet turned in */
   turnedInScu?: number
   /** route node keys where this cargo has been collected, for the manifest pickup checklist */
   pickedUpAt?: string[]
@@ -64,8 +64,7 @@ export interface HaulingContract {
   sharedWithMe?: boolean
   /** player ids who joined a contract you own and shared out; kept for the count */
   sharedWith?: string[]
-  /** the objective set has been curated (OCR review or manual); the game keeps
-   *  re-logging objectives, so once true we stop appending them to avoid phantom dupes */
+  /** curated once (OCR review/manual); game re-logs objectives so we stop appending after, avoids phantom dupes */
   objectivesSettled?: boolean
 }
 
@@ -80,7 +79,7 @@ export interface WatcherStatus {
   error?: string
 }
 
-/** saved orbit camera for the 3D cargo grid: where the eye sits and what it looks at */
+/** saved orbit camera for the 3D cargo grid */
 export interface GridView {
   pos: [number, number, number]
   target: [number, number, number]
@@ -123,7 +122,7 @@ export interface AppSettings {
   contributeTrainingData: boolean
   telemetryClientId: string
 
-  /** anonymous usage snapshot on launch (unique-user count, engine, ships hauled, OCR accuracy, toggles); on by default */
+  /** anonymous usage snapshot on launch; on by default */
   shareUsageStats: boolean
   /** OCR read accuracy, tallied at review: fields OCR attempted vs fields the user had to correct */
   ocrFieldsTotal?: number
@@ -137,7 +136,7 @@ export interface AppSettings {
   /** 1 = 100% */
   uiZoom: number
 
-  /** overlay panel background opacity, 0.4..1 (higher blocks the game's re-tracked mission text) */
+  /** 0.4..1; higher blocks the game's re-tracked mission text */
   overlayOpacity: number
   /** overlay size multiplier, 1 = default */
   overlayScale: number
@@ -146,7 +145,7 @@ export interface AppSettings {
   /** overlay ignores the mouse so clicks fall through to the game */
   overlayClickThrough: boolean
 
-  /** orbit camera per ship, so the 3D grid view survives leaving the page and restarts */
+  /** orbit camera per ship, survives leaving the page and restarts */
   gridView?: Record<string, GridView>
 
   autoCheckUpdates: boolean
@@ -185,8 +184,7 @@ export interface CargoLayout {
   boxes: FrozenBox[]
 }
 
-/** a hand-placed box, keyed by objectiveId#slot so it survives manifest edits.
- *  coords are bay-local cells, like a Placement. */
+/** hand-placed box, keyed by objectiveId#slot so it survives manifest edits; coords are bay-local cells */
 export interface ManualPlacement {
   gridId: string
   x: number
@@ -195,8 +193,7 @@ export interface ManualPlacement {
   rotated: boolean
 }
 
-/** a box physically aboard: locked where it sat when its pickup was ticked.
- *  you can't restack what's already on the ship, so re-plans pack around these. */
+/** box physically aboard, locked where it sat when its pickup was ticked; re-plans pack around these */
 export interface LoadedPin extends ManualPlacement {
   pickupKey: string
   /** world extents at pin time; older pins rebuild them from box dims */
@@ -205,8 +202,7 @@ export interface LoadedPin extends ManualPlacement {
   h?: number
 }
 
-/** a Stor-All crate parked in the hold as personal storage; the planner
- *  treats its cells as gone. coords + extents are bay-local cells */
+/** Stor-All crate parked in the hold as personal storage; planner treats its cells as gone */
 export interface StorAllCrate {
   id: string
   size: number
@@ -294,16 +290,14 @@ export interface ManifestDoc {
   grabbed?: string[]
   /** parked Stor-All crates, keyed by ship */
   storAlls?: Record<string, StorAllCrate[]>
-  /** the frozen loading walk, so a restart resumes the exact plan instead of rebuilding
-   *  it from a route that has already dropped the pickups for cargo now aboard */
+  /** frozen loading walk, so restart resumes the exact plan (route would've dropped pickups for cargo now aboard) */
   loadingSteps?: LoadingStep[] | null
   loadingBoxes?: PackBox[] | null
 }
 
 export type HistoryStatus = 'completed' | 'abandoned' | 'failed'
 
-/** a finished contract's inputs, reset to their pre-delivery state, so re-running
- *  the planner reproduces the original route when debugging. */
+/** finished contract's inputs reset to pre-delivery state, so re-running the planner reproduces the route for debugging */
 export interface RunReplay {
   ship: string
   installedModules?: string[]
@@ -451,8 +445,7 @@ export type BayDir = 'x+' | 'x-' | 'y+' | 'y-' | 'z+' | 'z-'
 export interface BayMarkup {
   id: string
   faces?: Partial<Record<BayDir, BayFaceKind>>
-  /** which combined hold this bay belongs to; bays sharing a group pack as one room.
-   *  overrides the generated group; absent = use generated. */
+  /** which combined hold this bay belongs to, bays sharing a group pack as one room; absent = use generated */
   group?: number
   /** position/size override correcting the generated layout; absent = use generated. */
   x?: number
@@ -461,8 +454,7 @@ export interface BayMarkup {
   w?: number
   l?: number
   h?: number
-  /** visual-only euler spin (degrees, about x/y/z) applied around the bay center at render
-   *  time. lets you author off-axis layouts (e.g. Hull B's diamond). the packer ignores it. */
+  /** visual-only euler spin (degrees) about the bay center, for off-axis layouts like Hull B's diamond; packer ignores it */
   rot?: [number, number, number]
 }
 
@@ -471,12 +463,9 @@ export interface ShipMarkup {
   ship: string
   /** which signed axis points to the bow / to starboard (up is y+). */
   frame?: { fore: BayDir; starboard: BayDir }
-  /** off-grid stash pad beside the ship. absent = on at the built-in size; on:false = no pad
-   *  (ships you can't drop cargo next to). w/l/h in cells; absent = built-in defaults.
-   *  x/y/z authored in the markup tool override the auto-parked spot; absent = auto. */
+  /** off-grid stash pad beside the ship; absent = built-in size, on:false = no pad; x/y/z override auto-park spot */
   offGrid?: { on: boolean; w?: number; l?: number; h?: number; x?: number; y?: number; z?: number }
-  /** the bays are positioned around world 0, so render them at their authored
-   *  coords instead of auto-centering the bounding box. set by the markup tool. */
+  /** bays are positioned around world 0, render at authored coords instead of auto-centering */
   anchored?: boolean
   bays: BayMarkup[]
 }

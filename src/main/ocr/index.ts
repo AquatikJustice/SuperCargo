@@ -51,8 +51,7 @@ export async function runOcr(
   const engine = engineFor(settings.ocrEngine || 'tesseract')
   const base: OcrResult = { ok: false, engine: engine.id, ms: 0, confidence: 0, rawText: '', objectives: [] }
 
-  // window capture excludes overlapping windows, so it needs no hiding; fall back to the
-  // whole display (with the caller hiding our windows) when the game window isn't found
+  // window capture excludes overlapping windows so it needs no hiding; falls back to display capture otherwise
   let full: NativeImage | null =
     settings.ocrCaptureTarget === 'display' ? null : await captureGameWindow()
   if (!full) full = await aroundCapture(() => captureDisplay(settings.ocrDisplayId))
