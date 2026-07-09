@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Text, RoundedBox, Edges } from '@react-three/drei'
 import sairaFont from '@fontsource/saira/files/saira-latin-600-normal.woff?url'
 import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff?url'
@@ -125,6 +125,20 @@ function bayRot(grid: CargoGrid): [number, number, number] | undefined {
   return r ? [(r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180] : undefined
 }
 
+interface View {
+  camera: THREE.Camera
+  scene: THREE.Scene
+  size: { width: number; height: number }
+  raycaster: THREE.Raycaster
+}
+
+// hands the live camera/scene out to the dom-level marquee overlay
+function ViewCapture({ into }: { into: React.MutableRefObject<View | null> }): null {
+  const { camera, scene, size, raycaster } = useThree()
+  into.current = { camera, scene, size, raycaster }
+  return null
+}
+
 type Ax = 0 | 1 | 2
 const axOf = (c: string): Ax => (c === 'x' ? 0 : c === 'y' ? 1 : 2)
 const sizeOf = (g: CargoGrid): [number, number, number] => [g.w, g.h, g.l]
@@ -202,6 +216,7 @@ function Box({
   label,
   draggable,
   selected,
+  selKey,
   offGrid,
   blocked,
   onStart,
@@ -216,6 +231,8 @@ function Box({
   label?: string
   draggable?: boolean
   selected?: boolean
+  /** marquee tags the mesh with this so a screen-rect can find it */
+  selKey?: string
   offGrid?: boolean
   blocked?: boolean
   onStart?: (e: ThreeEvent) => void
@@ -263,6 +280,7 @@ function Box({
         castShadow
         receiveShadow
         position={[cx, cy, cz]}
+        userData={{ selKey }}
         onPointerOver={(e) => {
           e.stopPropagation()
           onHover(
@@ -1206,6 +1224,13 @@ export default function CargoGridPage(): React.ReactElement {
   // dragging a selected box carries the whole set, offsets frozen at grab
   const [group, setGroup] = useState<GroupMember[] | null>(null)
   const [sel, setSel] = useState<Set<string>>(() => new Set())
+  const viewRef = useRef<View | null>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const marqueeDown = useRef(false)
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null)
+  // press point, so a click that misses every box can clear the selection but a drag-to-orbit can't
+  const downPt = useRef<{ x: number; y: number } | null>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
   // ship-coord cursor; held box follows
   const [dragPos, setDragPos] = useState<{ x: number; z: number } | null>(null)
@@ -1826,6 +1851,88 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(null)
   }
 
+  // shift arms the marquee; orbit yields while it's held
+  useEffect(() => {
+    if (!loading) return
+    const flip = (v: boolean) => (e: KeyboardEvent): void => {
+      if (e.key === 'Shift') setShiftHeld(v)
+    }
+    const down = flip(true)
+    const up = flip(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      setShiftHeld(false)
+    }
+  }, [loading])
+
+  const localPt = (e: React.PointerEvent): { x: number; y: number } => {
+    const r = wrap.current!.getBoundingClientRect()
+    return { x: e.clientX - r.left, y: e.clientY - r.top }
+  }
+  const onMarqueeDown = (e: React.PointerEvent): void => {
+    if (e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const p = localPt(e)
+    marqueeStart.current = p
+    marqueeDown.current = true
+    setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
+  }
+  const onMarqueeMove = (e: React.PointerEvent): void => {
+    if (!marqueeDown.current) return
+    const p = localPt(e)
+    setMarquee((m) => (m ? { ...m, x1: p.x, y1: p.y } : m))
+  }
+  const onMarqueeUp = (e: React.PointerEvent): void => {
+    if (!marqueeDown.current) return
+    marqueeDown.current = false
+    const start = marqueeStart.current
+    setMarquee(null)
+    if (!start) return
+    const p = localPt(e)
+    // a still click toggles one box, a drag sweeps a region
+    if (Math.hypot(p.x - start.x, p.y - start.y) < 4) toggleAt(p.x, p.y)
+    else selectIn(start.x, start.y, p.x, p.y)
+  }
+
+  const selectIn = (ax: number, ay: number, bx: number, by: number): void => {
+    const view = viewRef.current
+    if (!view) return
+    const { camera, scene, size } = view
+    const minX = Math.min(ax, bx)
+    const maxX = Math.max(ax, bx)
+    const minY = Math.min(ay, by)
+    const maxY = Math.max(ay, by)
+    const v = new THREE.Vector3()
+    const hits: string[] = []
+    scene.traverse((o) => {
+      const key = o.userData?.selKey as string | undefined
+      if (!key) return
+      o.getWorldPosition(v).project(camera)
+      if (v.z > 1) return
+      const sx = (v.x * 0.5 + 0.5) * size.width
+      const sy = (-v.y * 0.5 + 0.5) * size.height
+      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) hits.push(key)
+    })
+    if (hits.length) setSel((s) => new Set([...s, ...hits]))
+  }
+  const toggleAt = (x: number, y: number): void => {
+    const view = viewRef.current
+    if (!view) return
+    const { camera, scene, size, raycaster } = view
+    raycaster.setFromCamera(new THREE.Vector2((x / size.width) * 2 - 1, -(y / size.height) * 2 + 1), camera)
+    const hit = raycaster.intersectObjects(scene.children, true).find((h) => h.object.userData?.selKey)
+    if (!hit) return
+    const key = hit.object.userData.selKey as string
+    setSel((s) => {
+      const n = new Set(s)
+      if (!n.delete(key)) n.add(key)
+      return n
+    })
+  }
+
   // pointer down on a template, crate rides the cursor and lands on release
   const spawnCrate = (size: number): void => {
     setHover(null)
@@ -2152,8 +2259,34 @@ export default function CargoGridPage(): React.ReactElement {
         <div style={{ ...(portrait && loading ? { order: 1, flex: 'none', height: '42%', minHeight: 220 } : { flex: 1 }), minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div
           ref={wrap}
+          onPointerDown={(e) => {
+            downPt.current = { x: e.clientX, y: e.clientY }
+          }}
           style={{ position: 'relative', flex: 1, minHeight: portrait ? 170 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
         >
+        {loading && (shiftHeld || marquee) && (
+          <div
+            onPointerDown={onMarqueeDown}
+            onPointerMove={onMarqueeMove}
+            onPointerUp={onMarqueeUp}
+            style={{ position: 'absolute', inset: 0, zIndex: 3, cursor: 'crosshair' }}
+          >
+            {marquee && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: Math.min(marquee.x0, marquee.x1),
+                  top: Math.min(marquee.y0, marquee.y1),
+                  width: Math.abs(marquee.x1 - marquee.x0),
+                  height: Math.abs(marquee.y1 - marquee.y0),
+                  border: `1px solid ${C.acc}`,
+                  background: 'rgba(255,210,30,0.10)',
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
+          </div>
+        )}
         {loading && (
           <Btn
             onClick={() => setShelfOpen((v) => !v)}
@@ -2210,9 +2343,10 @@ export default function CargoGridPage(): React.ReactElement {
           <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 4, pointerEvents: 'none', background: 'rgba(8,12,16,0.82)', border: `1px solid ${C.lineFaint}`, borderRadius: 6, padding: '8px 11px', fontFamily: F.mono, fontSize: 10.5, lineHeight: 1.7, color: C.dim, display: 'flex', flexDirection: 'column' }}>
             {[
               ['Drag', 'move a box'],
-              ['R', 'rotate'],
-              ['Ctrl click', 'select more'],
-              ['Right click', 'remove a crate']
+              ['Shift drag', 'select multiple at once'],
+              ['Ctrl click', 'select multiple'],
+              ['R', 'rotate box'],
+              ['Right click', 'remove placed Stor All']
             ].map(([key, what]) => (
               <div key={key}>
                 <b style={{ color: C.body, fontWeight: 600 }}>{key}</b> to {what}
@@ -2276,7 +2410,18 @@ export default function CargoGridPage(): React.ReactElement {
             </div>
           </div>
         )}
-        <Canvas key={activeShip} shadows camera={{ position: initialView?.pos ?? [camDist, camDist * 0.8, camDist], fov: 45 }}>
+        <Canvas
+          key={activeShip}
+          shadows
+          camera={{ position: initialView?.pos ?? [camDist, camDist * 0.8, camDist], fov: 45 }}
+          onPointerMissed={(e) => {
+            const d = downPt.current
+            if (!d || e.shiftKey || e.ctrlKey || e.metaKey) return
+            // a still click on empty space clears; a drag to orbit moved too far
+            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) setSel((s) => (s.size ? new Set() : s))
+          }}
+        >
+          <ViewCapture into={viewRef} />
           <ambientLight intensity={0.35} />
           <hemisphereLight args={['#b9d2e6', '#0a0f14', 0.5]} />
           <directionalLight
@@ -2421,6 +2566,7 @@ export default function CargoGridPage(): React.ReactElement {
                 mode={mode}
                 draggable={!!mkey}
                 selected={!!mkey && sel.has(mkey)}
+                selKey={mkey}
                 blocked={blockedKeys.has(boxKey(pl.box))}
                 onStart={(e) => {
                   if (mkey) startDrag(mkey, pl, g, e)
@@ -2548,7 +2694,7 @@ export default function CargoGridPage(): React.ReactElement {
                 </group>
               )
             })()}
-          <OrbitControls ref={controlsRef} makeDefault enablePan enabled={!drag} target={initialView?.target ?? [0, 0, 0]} onEnd={saveView} />
+          <OrbitControls ref={controlsRef} makeDefault enablePan enabled={!drag && !shiftHeld} target={initialView?.target ?? [0, 0, 0]} onEnd={saveView} />
         </Canvas>
 
         {hover && (

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS } from '@shared/box'
-import { deriveContracts } from '../state/manifest'
+import { sharedCut } from '@shared/payout'
+import { deriveContracts, shareSplit } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 import TurnInModal from '../components/TurnInModal'
@@ -93,6 +94,8 @@ export default function ContractsPage(): React.ReactElement {
 
           {derived.map((c) => {
             const isOpen = expanded === c.id
+            const split = shareSplit(c)
+            const shownReward = split > 1 ? sharedCut(c.reward, split) : c.reward
             return (
               <div key={c.id} style={{ borderBottom: `1px solid ${C.lineFaint}` }}>
                 <HoverDiv
@@ -137,9 +140,16 @@ export default function ContractsPage(): React.ReactElement {
                     </div>
                   </div>
                   <span style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>{c.pickup || '-'}</span>
-                  <span style={{ fontFamily: F.mono, fontSize: 14, color: C.text, textShadow: GLOW, textAlign: 'right' }}>
-                    {c.reward ? fmt(c.reward) : '-'}
-                    {c.reward ? <span style={{ fontSize: 11, color: C.dim }}> aUEC</span> : null}
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                    <span style={{ fontFamily: F.mono, fontSize: 14, color: C.text, textShadow: GLOW }}>
+                      {c.reward ? fmt(shownReward) : '-'}
+                      {c.reward ? <span style={{ fontSize: 11, color: C.dim }}> aUEC</span> : null}
+                    </span>
+                    {c.reward && split > 1 ? (
+                      <span style={{ fontFamily: F.display, fontSize: 9, letterSpacing: '0.16em', color: C.dim }} title={`Your even split of ${fmt(c.reward)}`}>
+                        SHARED CUT
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body, textAlign: 'right' }}>{c.objCount}</span>
                   <span style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>

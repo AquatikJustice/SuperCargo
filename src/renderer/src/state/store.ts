@@ -28,7 +28,7 @@ import { fixtureMap } from '@shared/hold'
 import { calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
 import { newRunId } from '@shared/run'
-import { payoutFactor, snapPayout } from '@shared/payout'
+import { estimatePayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules } from '@shared/shipModules'
@@ -1106,7 +1106,7 @@ export const useStore = create<StoreState>((set, get) => {
       // editing the reward is an explicit override; drop the logged payout and re-derive from completion %
       const history = get().history.map((h) =>
         h.id === id
-          ? { ...h, reward, actualPayout: undefined, payout: snapPayout(reward * payoutFactor(h.completionPct ?? 1)) }
+          ? { ...h, reward, actualPayout: undefined, payout: estimatePayout(reward, h.completionPct ?? 1, h.shareSplit) }
           : h
       )
       set({ history })
