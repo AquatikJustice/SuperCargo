@@ -761,7 +761,7 @@ export default function CargoGridPage(): React.ReactElement {
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
-    // cargo aboard whose pickup the walk dropped (resume/re-solve) loads at step 0, not never
+    // aboard cargo loads at step 0 (its pickup was dropped)
     const aboardObjs = new Set(
       contracts.flatMap((c) =>
         c.objectives
@@ -1046,7 +1046,7 @@ export default function CargoGridPage(): React.ReactElement {
     scu: number
     boxes: BoxAllocation[]
   } | null>(null)
-  // bumped after a box-breakdown edit so the tail re-packs with fresh contracts
+  // bumped by a box edit to trigger a re-pack
   const [repackNonce, setRepackNonce] = useState(0)
   const blockKind: 'overload' | 'digout' | null =
     currentDecision?.kind === 'overload'
@@ -1657,9 +1657,7 @@ export default function CargoGridPage(): React.ReactElement {
       n++
     }
     setFrozenSteps(combined)
-    // a breakdown edit changes the box set, so rebuild boxes from fresh contracts;
-    // unchanged objectives keep their ids (and pins), the edited one gets new boxes.
-    // otherwise keep the frozen boxes and just re-seat them in the new drop order
+    // rebox: rebuild from contracts (box set changed); else re-seat in the new drop order
     const nextBoxes = rebox ? applyDropSeq(packBoxes(contracts, order, true) as PackBox[]) : frozenBoxes
     if (nextBoxes)
       setFrozenBoxes(
@@ -1693,11 +1691,10 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
-  // a box-breakdown edit lands in the store first; re-pack once contracts are fresh
+  // re-pack after the edit lands in the store
   useEffect(() => {
     if (!repackNonce || !loading) return
-    // the edit can leave the step with overflow that needs a re-split; clear the once-per-step
-    // negotiation budget so it re-negotiates now instead of waiting for a step out-and-back
+    // clear the once-per-step budget so the edit's overflow re-negotiates now
     negotiatedStep.current = -1
     resolveTail(undefined, true, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2786,7 +2783,7 @@ function LoadingPanel({
   while (steps[visitEnd + 1]?.nodeKey === step.nodeKey && steps[visitEnd + 1]?.trip === step.trip) visitEnd++
   const here = steps.slice(visitStart, visitEnd + 1)
 
-  // a stop is one location visit; a trip can revisit the same place, so key on both
+  // key on node+trip: a trip can revisit a place
   let stopTotal = 0
   let stopNum = 0
   let prevVisit: string | null = null

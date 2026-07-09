@@ -366,8 +366,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (!contracts.length) layout = null
     else if (layout?.locked) layout = reconcileLayout(contracts, layout, holdGrids())
     set({ contracts, order: nextOrd, layout })
-    // an emptied manifest ends the walk; a stale frozen walk would otherwise strand
-    // phantom stops on the grid and the overlay that mirrors it
+    // empty manifest ends the walk, else stale stops linger on the grid + overlay
     if (!contracts.length && get().loadingSteps) {
       set({ loadingActive: false, loadingSteps: null, loadingBoxes: null, loadingIdx: 0, loadedPins: {} })
     }
@@ -378,9 +377,7 @@ export const useStore = create<StoreState>((set, get) => {
   const isCompactWindow =
     typeof window !== 'undefined' && window.location.hash.replace('#', '') === 'compact'
   let rerouteTimer: ReturnType<typeof setTimeout> | null = null
-  // a contract just joined the manifest; the next solve reports how it folded in.
-  // baseStops = route size before it joined, so the stop delta stays right even if
-  // the toast has to wait for the objectives (log accepts arrive empty, objectives follow)
+  // stop baseline from before it joined (objectives arrive later)
   let notifyAdd: { id: string; baseStops: number } | null = null
   const announce = (id: string): void => {
     notifyAdd = { id, baseStops: get().route?.stopKeys.length ?? 0 }
@@ -396,13 +393,12 @@ export const useStore = create<StoreState>((set, get) => {
     const bays = loadableGrids(settings.activeShip, installed)
     const crates = storAlls[settings.activeShip]
     const active = contracts.filter((c) => !c.pendingOcr)
-    // cargo picked up but not yet handed over rides along; a re-solve must plan
-    // only its delivery, never send you back for a pickup you've already done
+    // aboard cargo: plan its delivery, never re-pickup
     const aboard = new Set<string>()
     for (const c of active)
       for (const o of c.objectives)
         if ((o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined) aboard.add(o.id)
-    // manual keeps order, auto re-solves; a seed (restore) pins order either way
+    // seed (restore) pins order; else manual keeps, auto re-solves
     const plan = computeRoutePlan(
       active,
       locations,
@@ -418,8 +414,7 @@ export const useStore = create<StoreState>((set, get) => {
     set({ route: plan })
     if (notifyAdd && !isCompactWindow) {
       const c = contracts.find((x) => x.id === notifyAdd!.id)
-      // objectives ride in on their own log events after the accept; wait for them
-      // rather than announce "0 pickups, 0 deliveries"
+      // objectives arrive after the accept; wait, don't announce 0/0
       if (!c) {
         notifyAdd = null
       } else if (c.objectives.length) {
@@ -455,8 +450,7 @@ export const useStore = create<StoreState>((set, get) => {
     }, 250)
   }
 
-  // sharing markers land around the accept; the contract owns the state, so events
-  // that beat the accept wait in pendingShare until it arrives
+  // share events that beat the accept wait here for the contract
   const pendingShare = new Map<string, ShareEvent[]>()
   const applyShare = (c: HaulingContract, e: ShareEvent): HaulingContract => {
     if (e.kind === 'shared') return c.sharedWithMe ? c : { ...c, sharedWithMe: true }
@@ -604,7 +598,7 @@ export const useStore = create<StoreState>((set, get) => {
     contract.objectives = item.objectives.map((o) =>
       makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, contract.maxBoxSize)
     )
-    // a non-pending commit takes the scanned set as final; a pending one settles after OCR review
+    // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
     set({ isRouteAuto: true })
@@ -688,8 +682,7 @@ export const useStore = create<StoreState>((set, get) => {
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
         .map((c) => (c.pendingOcr ? { ...c, pendingOcr: false } : c))
-        // legacy manifests predate the settled flag; a fully-resolved contract (no bare
-        // "X System" dests left) is curated, so freeze it against log re-emit dupes
+        // settle already-resolved legacy contracts (no bare "X System" dest left)
         .map((c) =>
           c.objectivesSettled == null && c.objectives.length > 0 && !c.objectives.some((o) => isSystemDestination(o.destination))
             ? { ...c, objectivesSettled: true }
@@ -704,7 +697,7 @@ export const useStore = create<StoreState>((set, get) => {
           .map((c) => toHistoryEntry(c, c.status as HistoryStatus, manifest.runId, c.acceptedAt))
         history = [...migrated, ...history]
         persistHistory(history)
-        // keep the rest of the doc (pins, walk, positions); only the contract set moved
+        // keep the rest; only contracts moved
         void window.supercargo.saveManifest({
           ...manifest,
           contracts: active,
@@ -733,8 +726,7 @@ export const useStore = create<StoreState>((set, get) => {
         storAlls: manifest.storAlls ?? {},
         dismissedMissions: manifest.dismissed ?? [],
         loadedPins: manifest.loadedPins ?? {},
-        // resume walkthrough only with cargo, and resume the exact frozen plan so
-        // cargo already aboard keeps its load steps instead of being rebuilt away
+        // restore the exact frozen plan so aboard cargo keeps its load steps
         loadingActive: active.length ? (manifest.loadingActive ?? false) : false,
         loadingIdx: manifest.loadingIdx ?? 0,
         loadingSteps: active.length ? (manifest.loadingSteps ?? null) : null,
@@ -751,7 +743,7 @@ export const useStore = create<StoreState>((set, get) => {
         gridFacesSyncedAt: faceRoster?.syncedAt ?? '',
         ready: true
       })
-      // restart is not a wrench: rebuild the plan in the saved order, don't re-optimize
+      // rebuild in the saved order, don't re-optimize
       void doReroute(get().stopOrder)
 
       // bind once; a remount calls init again
@@ -811,8 +803,7 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
-        // once curated, the game keeps re-logging objectives; cross-system ones come back as the
-        // bare "X System", miss the resolved station, and pile up as dupes. settled = ignore them
+        // settled: ignore re-logged objectives (cross-system ones dupe)
         if (c.objectivesSettled) return
         // key on scu too, so two deliveries of the same commodity to the same place both register (#27);
         // a re-emit of the exact same objective still dedups
@@ -883,12 +874,12 @@ export const useStore = create<StoreState>((set, get) => {
           storAlls: doc.storAlls ?? {},
           dismissedMissions: doc.dismissed ?? [],
           loadedPins: doc.loadedPins ?? {},
-          // the overlay renders the main window's frozen walk, so take it verbatim
+          // overlay renders the main walk verbatim
           loadingSteps: doc.loadingSteps ?? null,
           loadingBoxes: doc.loadingBoxes ?? null,
           layout: doc.layout ?? null
         })
-        // mirror the main window's order instead of re-optimizing our own
+        // mirror main's order, don't re-optimize
         scheduleReroute(doc.stopOrder ?? [])
       }))
       track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
@@ -925,7 +916,7 @@ export const useStore = create<StoreState>((set, get) => {
       const next = typeof v === 'function' ? v(prev) : v
       if (next === prev) return
       set({ loadingSteps: next })
-      // broadcast the walk so the overlay mirrors it (main is the sole writer)
+      // broadcast so the overlay mirrors it
       persist()
     },
     setLoadingBoxes: (v) => set((s) => ({ loadingBoxes: typeof v === 'function' ? v(s.loadingBoxes) : v })),
@@ -934,8 +925,7 @@ export const useStore = create<StoreState>((set, get) => {
     openCapture: (targetId) => set({ captureOpen: true, captureTargetId: targetId ?? null }),
     rescanContract: (id) => {
       if (!get().contracts.some((c) => c.id === id)) return
-      // same path a fresh accept takes: open the capture on this contract and fire
-      // the grab (the configured delay gives you time to bring its screen up in-game)
+      // like a fresh accept: open capture, fire the grab
       set({ captureOpen: true, captureTargetId: id, ocrResult: null, ocrStatus: 'recognizing' })
       window.supercargo.requestOcrCapture(id)
     },
@@ -1030,7 +1020,7 @@ export const useStore = create<StoreState>((set, get) => {
                 }
               : base
           })
-        // box size confirmed, release hold, and freeze the set against further log re-emits
+        // confirmed: release hold, freeze against re-emits
         return {
           ...c,
           maxBoxSize,
@@ -1213,7 +1203,7 @@ export const useStore = create<StoreState>((set, get) => {
         )
         if (keep.length !== Object.keys(pins).length) set({ loadedPins: Object.fromEntries(keep) })
       } else {
-        // you're now standing where you just loaded; strip the trip suffix off the key
+        // you're where you loaded; drop the trip suffix
         const nk = pickupKey.includes('#') ? pickupKey.slice(0, pickupKey.lastIndexOf('#')) : pickupKey
         if (nk && nk !== get().currentLocation) set({ currentLocation: nk })
       }
@@ -1407,7 +1397,7 @@ export const useStore = create<StoreState>((set, get) => {
 
     setStartLocation: (loc) => {
       if (loc === get().startLocation) return
-      // an explicit start overrides wherever the last action left us
+      // explicit start overrides last position
       set({ startLocation: loc, currentLocation: '', isRouteAuto: true })
       persist()
       scheduleReroute()
@@ -1505,12 +1495,12 @@ export const useStore = create<StoreState>((set, get) => {
       const shareById = new Map(shares.map((s) => [s.missionId, s]))
       const arrEq = (a: string[] | undefined, b: string[] | undefined): boolean =>
         (a?.length ?? 0) === (b?.length ?? 0) && (a ?? []).every((x) => b?.includes(x))
-      // backfill objectives the live watcher missed, and rebuild sharing state, on contracts we have
+      // backfill missed objectives + rebuild sharing on held contracts
       let objsChanged = 0
       let touched = false
       const contracts = get().contracts.map((c) => {
         let next = c
-        // a settled contract has a curated objective set; the game keeps re-logging it, so skip
+        // settled = curated set; skip its re-logs
         const s = c.objectivesSettled ? undefined : byId.get(c.id)
         if (s) {
           const seen = new Set(c.objectives.map(key))

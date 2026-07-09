@@ -21,7 +21,7 @@ const PATTERN_END_MISSION =
 const PATTERN_COMPLETE =
   /Added notification "Contract Complete:\s*.*?"\s*\[[^\]]*\].*?MissionId: \[([^\]]+)\]/
 const PATTERN_AWARD = /Added notification "Awarded\s+([\d,]+)\s+aUEC/
-// shared TO you: names the owner by id only. joined/left: someone on a contract you own
+// shared = owner id only; joined/left = players on your contract
 const PATTERN_SHARED = /<MissionShared>.*ownerId\[([^\]]+)\].*missionId\[([^\]]+)\]/
 const PATTERN_JOINED = /<PlayerJoined>.*mission_id\s+([0-9a-f-]+)\s+-\s+player_id\s+(\d+)/
 const PATTERN_LEFT = /<PlayerLeft>.*mission_id\s+([0-9a-f-]+)\s+-\s+player_id\s+(\d+)/

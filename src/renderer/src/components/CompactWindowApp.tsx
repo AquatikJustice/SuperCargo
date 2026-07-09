@@ -40,9 +40,7 @@ export default function CompactWindowApp(): React.ReactElement {
     []
   )
 
-  // mirror the main window's actual walk: its frozen steps persist + broadcast in the
-  // manifest, so we render THOSE (filtered the same way) instead of rebuilding our own,
-  // which drifts as the walk restructures and lands the synced index on the wrong step
+  // render the main walk (synced via manifest), not our own rebuild, or the index drifts
   const mainSteps = useStore((s) => s.loadingSteps)
   const deferredObjectives = useStore((s) => s.deferredObjectives)
   const grabbedObjectives = useStore((s) => s.grabbedObjectives)

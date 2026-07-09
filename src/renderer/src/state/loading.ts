@@ -396,9 +396,7 @@ export function buildLoadEvents(
   }
   const events: LoadEvent[] = []
   let pendingDrop: string[] = []
-  // resuming mid-trip: cargo aboard whose pickup step the walk no longer holds (the route
-  // drops pickups for aboard cargo) would never load and would vanish from the grid, so
-  // load it at step 0 and let it ride to its drop
+  // aboard cargo whose pickup step is gone (resume): load it at step 0 so it doesn't vanish
   const willLoad = new Set(loadSteps.flatMap((s) => (s.kind === 'load' ? s.loadIds : [])))
   const preload: PackBox[] = []
   if (aboardObjs) {
