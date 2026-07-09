@@ -16,7 +16,7 @@ import type {
   LocationRoster,
   CommodityRoster,
   GridFacesRoster,
-  ScannedContract,
+  SessionScan,
   DisplayInfo,
   OcrEngineInfo,
   OcrResult,
@@ -58,7 +58,7 @@ const api = {
 
   getWatcherStatus: (): Promise<WatcherStatus> => ipcRenderer.invoke(IPC.watcherStatus),
   restartWatcher: (): Promise<boolean> => ipcRenderer.invoke(IPC.watcherRestart),
-  scanSession: (): Promise<ScannedContract[]> => ipcRenderer.invoke(IPC.scanSession),
+  scanSession: (): Promise<SessionScan> => ipcRenderer.invoke(IPC.scanSession),
 
   windowControl: (action: 'minimize' | 'maximize' | 'close'): Promise<void> =>
     ipcRenderer.invoke(IPC.windowControl, action),

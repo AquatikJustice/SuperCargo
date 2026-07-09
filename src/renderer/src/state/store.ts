@@ -599,6 +599,8 @@ export const useStore = create<StoreState>((set, get) => {
     contract.objectives = item.objectives.map((o) =>
       makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, contract.maxBoxSize)
     )
+    // a non-pending commit takes the scanned set as final; a pending one settles after OCR review
+    if (!opts.pendingOcr) contract.objectivesSettled = true
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
     set({ isRouteAuto: true })
     if (!opts.pendingOcr) announce(contract.id)
@@ -681,6 +683,13 @@ export const useStore = create<StoreState>((set, get) => {
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
         .map((c) => (c.pendingOcr ? { ...c, pendingOcr: false } : c))
+        // legacy manifests predate the settled flag; a fully-resolved contract (no bare
+        // "X System" dests left) is curated, so freeze it against log re-emit dupes
+        .map((c) =>
+          c.objectivesSettled == null && c.objectives.length > 0 && !c.objectives.some((o) => isSystemDestination(o.destination))
+            ? { ...c, objectivesSettled: true }
+            : c
+        )
       const ended = manifest.contracts.filter((c) => c.status !== 'active')
       let history = historyDoc.entries
       if (ended.length) {
@@ -793,6 +802,10 @@ export const useStore = create<StoreState>((set, get) => {
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
         const c = contracts[idx]
+        // once the objective set is curated, the game keeps re-logging objectives — cross-system
+        // ones come back as the bare "X System" and no longer match the resolved station, which used
+        // to pile up phantom duplicates. A settled contract ignores further log emits (RESCAN to rebuild)
+        if (c.objectivesSettled) return
         // key on scu too, so two deliveries of the same commodity to the same place both register (#27);
         // a re-emit of the exact same objective still dedups
         const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}|${e.scuAmount}`
@@ -999,12 +1012,13 @@ export const useStore = create<StoreState>((set, get) => {
                 }
               : base
           })
-        // box size confirmed, release hold
+        // box size confirmed, release hold, and freeze the set against further log re-emits
         return {
           ...c,
           maxBoxSize,
           boxSizeConfirmed: true,
           pendingOcr: false,
+          objectivesSettled: true,
           objectives: rebuilt
         }
       })
@@ -1465,34 +1479,50 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     scanSession: async () => {
-      const scanned = await window.supercargo.scanSession()
-      if (!scanned.length) return 0
+      const { contracts: scanned, shares } = await window.supercargo.scanSession()
+      if (!scanned.length && !shares.length) return 0
       const key = (o: { commodity: string; destination: string }): string =>
         `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}`
       const byId = new Map(scanned.map((s) => [s.accepted.missionId, s]))
-      // backfill objectives the live watcher missed on contracts we already have
-      let changed = 0
+      const shareById = new Map(shares.map((s) => [s.missionId, s]))
+      const arrEq = (a: string[] | undefined, b: string[] | undefined): boolean =>
+        (a?.length ?? 0) === (b?.length ?? 0) && (a ?? []).every((x) => b?.includes(x))
+      // backfill objectives the live watcher missed, and rebuild sharing state, on contracts we have
+      let objsChanged = 0
+      let touched = false
       const contracts = get().contracts.map((c) => {
-        const s = byId.get(c.id)
-        if (!s) return c
-        const seen = new Set(c.objectives.map(key))
-        const missing = s.objectives.filter((o) => !seen.has(key(o)))
-        if (!missing.length) return c
-        changed += missing.length
-        return {
-          ...c,
-          objectives: [
-            ...c.objectives,
-            ...missing.map((o) =>
-              makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, c.maxBoxSize)
-            )
-          ]
+        let next = c
+        // a settled contract has a curated objective set; the game keeps re-logging it, so skip
+        const s = c.objectivesSettled ? undefined : byId.get(c.id)
+        if (s) {
+          const seen = new Set(c.objectives.map(key))
+          const missing = s.objectives.filter((o) => !seen.has(key(o)))
+          if (missing.length) {
+            objsChanged += missing.length
+            next = {
+              ...next,
+              objectives: [
+                ...next.objectives,
+                ...missing.map((o) =>
+                  makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, c.maxBoxSize)
+                )
+              ]
+            }
+          }
         }
+        const sh = shareById.get(c.id)
+        if (sh) {
+          const sw = sh.sharedWith.length ? sh.sharedWith : undefined
+          const swm = sh.sharedWithMe || undefined
+          if (!arrEq(next.sharedWith, sw) || !!next.sharedWithMe !== !!swm) {
+            next = { ...next, sharedWith: sw, sharedWithMe: swm }
+          }
+        }
+        if (next !== c) touched = true
+        return next
       })
-      if (changed > 0) {
-        commit(contracts)
-        scheduleReroute()
-      }
+      if (touched) commit(contracts)
+      if (objsChanged > 0) scheduleReroute()
       // everything not already listed and not dismissed goes to the review queue. the log can't give
       // us box size and re-emits accepts without objectives, so the user reviews each one before it lands
       const { dismissedMissions } = get()

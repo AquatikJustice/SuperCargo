@@ -63,6 +63,9 @@ export interface HaulingContract {
   sharedWithMe?: boolean
   /** player ids who joined a contract you own and shared out; kept for the count */
   sharedWith?: string[]
+  /** the objective set has been curated (OCR review or manual); the game keeps
+   *  re-logging objectives, so once true we stop appending them to avoid phantom dupes */
+  objectivesSettled?: boolean
 }
 
 /** per-channel Game.log path */
@@ -440,6 +443,18 @@ export interface GridFacesRoster {
 export interface ScannedContract {
   accepted: ContractAcceptedEvent
   objectives: ObjectiveEvent[]
+}
+
+/** sharing state for one mission, rebuilt from a whole-log scan */
+export interface ScanShare {
+  missionId: string
+  sharedWithMe: boolean
+  sharedWith: string[]
+}
+
+export interface SessionScan {
+  contracts: ScannedContract[]
+  shares: ScanShare[]
 }
 
 export interface DisplayInfo {

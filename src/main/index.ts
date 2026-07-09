@@ -9,7 +9,7 @@ import { LogWatcher } from './logWatcher'
 import { initUpdater, checkForUpdates, quitAndInstall } from './updater'
 import { loadCachedRoster, loadCachedLocations, loadCachedCommodities, loadCachedGridFaces, workingTreeData } from './uex'
 import { seedCacheIfNeeded, refreshFromRepo } from './dataSync'
-import { scanActiveContracts } from './scanLog'
+import { scanSessionLog } from './scanLog'
 import { randomUUID } from 'node:crypto'
 import { listDisplays } from './capture'
 import { engineInfo, capturePreview, runOcr, saveSample } from './ocr'
@@ -516,11 +516,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.uexGetGridFaces, () => loadCachedGridFaces())
 
   ipcMain.handle(IPC.scanSession, () => {
-    if (!settings.gameLogPath) return []
-    return scanActiveContracts(settings.gameLogPath).map((c) => ({
-      ...c,
-      accepted: contractData.enrichAccepted(c.accepted)
-    }))
+    if (!settings.gameLogPath) return { contracts: [], shares: [] }
+    const { contracts, shares } = scanSessionLog(settings.gameLogPath)
+    return {
+      contracts: contracts.map((c) => ({ ...c, accepted: contractData.enrichAccepted(c.accepted) })),
+      shares
+    }
   })
 
   ipcMain.handle(IPC.contractDataStatus, () => contractData.status())
