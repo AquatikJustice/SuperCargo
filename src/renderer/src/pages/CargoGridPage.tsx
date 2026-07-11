@@ -10,7 +10,7 @@ import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
 import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, withStartStep, type LoadingStep } from '../state/loading'
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
-import { gridsFor, shipFrame, shipAnchored, isSecureBay, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
+import { gridsFor, shipFrame, shipAnchored, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
@@ -646,8 +646,6 @@ export default function CargoGridPage(): React.ReactElement {
   const anchored = useMemo(() => shipAnchored(activeShip), [activeShip, gridFacesSyncedAt])
   // stash pad size, null when the ship has it off
   const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesSyncedAt])
-  // secure vaults can't haul
-  const shownGrids = useMemo(() => grids.filter((g) => !isSecureBay(g)), [grids])
 
   const liveSteps = useMemo(
     () => (route ? buildLoadingSteps(contracts, route, order) : []),
@@ -968,9 +966,9 @@ export default function CargoGridPage(): React.ReactElement {
 
   // bounds include the off-grid pane; shipHalf/shipCenter stay ship-only for the floor labels
   const { origin, span, half, floorY, shipHalf, shipCenter, offGrid: offGridBay } = useMemo(() => {
-    if (!shownGrids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], floorY: -5, shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
+    if (!grids.length) return { origin: [0, 0, 0] as [number, number, number], span: 10, half: [5, 5, 5] as [number, number, number], floorY: -5, shipHalf: [5, 5, 5] as [number, number, number], shipCenter: [0, 0, 0] as [number, number, number], offGrid: null }
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-    for (const g of shownGrids) {
+    for (const g of grids) {
       minX = Math.min(minX, g.x || 0); maxX = Math.max(maxX, (g.x || 0) + g.w)
       minY = Math.min(minY, g.y || 0); maxY = Math.max(maxY, (g.y || 0) + g.h)
       minZ = Math.min(minZ, g.z || 0); maxZ = Math.max(maxZ, (g.z || 0) + g.l)
@@ -1001,7 +999,7 @@ export default function CargoGridPage(): React.ReactElement {
       shipCenter: [(shipMinX + shipMaxX) / 2 - o[0], (shipMinY + shipMaxY) / 2 - o[1], (shipMinZ + shipMaxZ) / 2 - o[2]] as [number, number, number],
       offGrid: off
     }
-  }, [shownGrids, offPad, anchored])
+  }, [grids, offPad, anchored])
 
   // parked boxes keep their spot, rest auto-shelve; a spot that no longer fits settles onto whatever's under it
   const loosePlacements = useMemo<Placement[]>(() => {
@@ -2444,10 +2442,10 @@ export default function CargoGridPage(): React.ReactElement {
             <planeGeometry args={[span * 5, span * 5]} />
             <shadowMaterial transparent opacity={0.32} />
           </mesh>
-          {shownGrids.map((g) => (
+          {grids.map((g) => (
             <GridShell key={g.id} grid={g} origin={origin} />
           ))}
-          {shownGrids.map((g) => {
+          {grids.map((g) => {
             // spun/re-floored bays get a solid floor plate so clicks don't pass through the wireframe
             if (!g.rot && (g.floor ?? 'y-') === 'y-') return null
             const floor = g.floor ?? 'y-'

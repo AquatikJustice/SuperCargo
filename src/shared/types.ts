@@ -460,6 +460,8 @@ export interface BayMarkup {
   h?: number
   /** visual-only euler spin (degrees) about the bay center, for off-axis layouts like Hull B's diamond; packer ignores it */
   rot?: [number, number, number]
+  /** bay exists but the app must never show or fill it (Ironclad secure vaults); markup tool still shows it */
+  hidden?: boolean
 }
 
 /** authored markup for one ship: orientation + per-bay faces and layout fixes. */

@@ -33,6 +33,8 @@ export interface CargoGrid {
   faces?: Partial<Record<BayDir, BayFaceKind>>
   /** visual-only euler spin (degrees, about x/y/z) for off-axis layouts; packer ignores it. */
   rot?: [number, number, number]
+  /** authored via markup; gridsFor drops these so the app never sees them, only the markup tool does */
+  hidden?: boolean
   source: 'sccargo' | 'datamine' | 'override' | 'curated'
 }
 
@@ -148,7 +150,7 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 
 // authored markup (per-bay faces + layout fixes), synced like the uex lists
 // (markup tool -> data/uex/grid-faces.json); no markup until roster loads, packer falls back to dense pack
-type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot'>>
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot' | 'hidden'>>
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
 let OFF_GRIDS: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
@@ -164,7 +166,7 @@ export function setGridFaces(ships: ShipMarkup[]): void {
   const anchored: Record<string, boolean> = {}
   for (const s of ships) {
     const bays: Record<string, BayInfo> = {}
-    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot }
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot, hidden: b.hidden }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
     if (s.offGrid) offGrids[s.ship] = s.offGrid
@@ -242,6 +244,7 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const bays = MARKUP[ship]
   return rec.grids
     .filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+    .filter((g) => !bays?.[g.id]?.hidden)
     .map((g) => {
       const m = bays && bays[g.id]
       if (!m) return g
@@ -266,11 +269,6 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
 /** grids the packer may fill, gridsFor minus reference-only (secure/lift) bays */
 export function loadableGrids(ship: string, installed?: string[]): CargoGrid[] {
   return gridsFor(ship, installed).filter((g) => g.autoLoad !== false)
-}
-
-/** the small locked secure-storage vaults (Ironclad), not the lift pads; both are autoLoad:false but only these hide from the view */
-export function isSecureBay(g: CargoGrid): boolean {
-  return g.autoLoad === false && (/secure/i.test(g.id) || /secure/i.test(g.name))
 }
 
 // what actually fits on the run: auto-load bays only, no elevators or secure
