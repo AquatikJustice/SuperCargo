@@ -317,22 +317,9 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
             zIndex: 70
           }}
         >
-          <Typeahead
-            value={shipName}
-            options={shipNames}
-            freeText={false}
-            maxResults={12}
-            autoFocus
-            clearOnFocus
-            search
-            warn={needsGrid}
-            warnTitle="Cargo grid not mapped for loading yet"
-            onSelect={(name) => void updateSettings({ activeShip: name })}
-            placeholder="Search ships..."
-          />
-
+          {/* modules sit ABOVE the search: the results list drops over anything below it */}
           {modules.length > 0 && (
-            <div style={{ marginTop: 14, borderTop: `1px solid ${C.lineStrong}`, paddingTop: 12 }}>
+            <div style={{ marginBottom: 14, borderBottom: `1px solid ${C.lineStrong}`, paddingBottom: 12 }}>
               <div style={{ ...labelStyle, fontSize: 10, marginBottom: 9 }}>CARGO MODULES FITTED</div>
               {modules.map((m) => {
                 const on = installed.includes(m.id)
@@ -365,6 +352,20 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
               </div>
             </div>
           )}
+
+          <Typeahead
+            value={shipName}
+            options={shipNames}
+            freeText={false}
+            maxResults={12}
+            autoFocus
+            clearOnFocus
+            search
+            warn={needsGrid}
+            warnTitle="Cargo grid not mapped for loading yet"
+            onSelect={(name) => void updateSettings({ activeShip: name })}
+            placeholder="Search ships..."
+          />
         </div>
       )}
 
