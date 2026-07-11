@@ -2232,6 +2232,12 @@ export default function CargoGridPage(): React.ReactElement {
                 if (c && o)
                   setEditBoxes({ contractId: c.id, objectiveId: o.id, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
               }}
+              onRepack={() => {
+                // manual escape hatch for a desynced layout: re-plan this step in place
+                negotiatedStep.current = loadIdx
+                resolveTail(undefined, true)
+                lastSolvedSig.current = compositionSig()
+              }}
               onExit={exitLoading}
               onRestart={() => {
                 // wipe every pickup, turn-in, pin, stash and decision for a fresh walk
@@ -2787,6 +2793,7 @@ function LoadingPanel({
   onLoaded,
   onBack,
   onEditBoxes,
+  onRepack,
   onExit,
   onRestart
 }: {
@@ -2818,6 +2825,7 @@ function LoadingPanel({
   onLoaded: () => void
   onBack: () => void
   onEditBoxes: (line: LoadingStep['lines'][number]) => void
+  onRepack: () => void
   onExit: () => void
   onRestart: () => void
 }): React.ReactElement {
@@ -2932,6 +2940,14 @@ function LoadingPanel({
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
         </span>
+        <Btn
+          onClick={onRepack}
+          title="Boxes missing or doubled up? Re-plan this step without moving"
+          style={{ marginLeft: 'auto', border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', padding: '5px 10px', cursor: 'pointer' }}
+          hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
+        >
+          REPACK
+        </Btn>
       </div>
 
       <div style={{ padding: '0 16px 10px', flex: 'none' }}>
