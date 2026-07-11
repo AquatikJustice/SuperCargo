@@ -26,7 +26,7 @@ import type {
   BoxSizeReport
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
-import { calculateBoxes } from '@shared/box'
+import { boxBreakdown, calculateBoxes } from '@shared/box'
 import { contractRef } from '@shared/contract'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
@@ -152,8 +152,11 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
   }
 }
 
-function reportBoxChange(c: HaulingContract, kind: 'breakdown' | 'maxBox', edited?: BoxSizeReport['edited']): void {
-  window.supercargo.reportBoxSizes({
+// one report per contract, at the end of its life, and only if something was corrected
+function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
+  const edited = c.originalMaxBoxSize != null || c.objectives.some((o) => o.originalBoxes)
+  if (!edited) return
+  const report: BoxSizeReport = {
     missionId: c.id,
     title: c.title,
     generator: c.generator,
@@ -163,16 +166,19 @@ function reportBoxChange(c: HaulingContract, kind: 'breakdown' | 'maxBox', edite
     pickup: c.pickup,
     dataSource: c.dataSource,
     maxBoxSize: c.maxBoxSize,
+    originalMaxBoxSize: c.originalMaxBoxSize,
     boxSizeConfirmed: !!c.boxSizeConfirmed,
-    kind,
-    edited,
+    status,
     objectives: c.objectives.map((o) => ({
       commodity: o.commodity,
       destination: o.destination,
       scuAmount: o.scuAmount,
-      boxes: o.boxes
+      boxes: o.boxes,
+      originalBoxes: o.originalBoxes,
+      delivered: o.delivered
     }))
-  })
+  }
+  window.supercargo.reportBoxSizes(report)
 }
 
 interface StoreState {
@@ -530,6 +536,7 @@ export const useStore = create<StoreState>((set, get) => {
 
   // newest first, deduped by id
   const archive = (contract: HaulingContract, status: HistoryStatus): void => {
+    reportBoxOutcome(contract, status)
     const s = get()
     const entry = toHistoryEntry(contract, status, s.runId, new Date().toISOString())
     // snapshot inputs for replay
@@ -1328,6 +1335,7 @@ export const useStore = create<StoreState>((set, get) => {
         if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
         if (patch.maxBoxSize !== undefined) {
           const mbs = snapMaxBox(patch.maxBoxSize)
+          if (mbs !== c.maxBoxSize) next.originalMaxBoxSize = c.originalMaxBoxSize ?? c.maxBoxSize
           next.maxBoxSize = mbs
           next.boxSizeConfirmed = true
           // a hand-set size beats any per-commodity override
@@ -1337,10 +1345,6 @@ export const useStore = create<StoreState>((set, get) => {
         return next
       })
       commit(contracts)
-      if (patch.maxBoxSize !== undefined) {
-        const c = contracts.find((c) => c.id === id)
-        if (c) reportBoxChange(c, 'maxBox')
-      }
       scheduleReroute()
     },
 
@@ -1392,28 +1396,23 @@ export const useStore = create<StoreState>((set, get) => {
       const clean = boxes.filter((b) => b.count > 0 && b.scuSize > 0)
       const total = clean.reduce((a, b) => a + b.count * b.scuSize, 0)
       if (total <= 0) return
-      const before = get()
-        .contracts.find((c) => c.id === contractId)
-        ?.objectives.find((o) => o.id === objectiveId)
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
         return {
           ...c,
-          objectives: c.objectives.map((o) =>
-            o.id === objectiveId ? { ...o, boxes: clean, scuAmount: total } : o
-          )
+          objectives: c.objectives.map((o) => {
+            if (o.id !== objectiveId) return o
+            const changed = boxBreakdown(clean) !== boxBreakdown(o.boxes)
+            return {
+              ...o,
+              boxes: clean,
+              scuAmount: total,
+              originalBoxes: changed ? o.originalBoxes ?? o.boxes : o.originalBoxes
+            }
+          })
         }
       })
       commit(contracts)
-      const c = contracts.find((c) => c.id === contractId)
-      if (c && before)
-        reportBoxChange(c, 'breakdown', {
-          commodity: before.commodity,
-          destination: before.destination,
-          scuAmount: total,
-          before: before.boxes,
-          after: clean
-        })
       // old pins point at the pre-edit box positions; drop them so this cargo re-seats fresh
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))

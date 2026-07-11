@@ -29,6 +29,8 @@ export interface DeliveryObjective {
   pickups?: string[]
   destinationFull?: string
   boxes: BoxAllocation[]
+  /** pre-edit breakdown, stamped on first hand edit; absent = never corrected */
+  originalBoxes?: BoxAllocation[]
   delivered: boolean
   /** undefined = full turn-in */
   deliveredScu?: number
@@ -72,6 +74,8 @@ export interface HaulingContract {
   contractName?: string
   /** per-commodity max box size (lowercased name), from contract overrides */
   commodityBoxSizes?: Record<string, number>
+  /** pre-edit max box, stamped on first hand edit */
+  originalMaxBoxSize?: number
 }
 
 /** per-channel Game.log path */
@@ -377,6 +381,7 @@ export interface ContractOverride {
   commodities?: Record<string, number>
 }
 
+/** sent once, when a contract with hand-corrected box sizes ends */
 export interface BoxSizeReport {
   missionId: string
   title: string
@@ -387,22 +392,19 @@ export interface BoxSizeReport {
   pickup?: string
   dataSource: DataSource
   maxBoxSize: number
+  /** present = MAX BOX was hand-corrected from this */
+  originalMaxBoxSize?: number
   boxSizeConfirmed: boolean
-  kind: 'breakdown' | 'maxBox'
-  /** the objective that was edited, with before/after boxes */
-  edited?: {
-    commodity: string
-    destination: string
-    scuAmount: number
-    before: BoxAllocation[]
-    after: BoxAllocation[]
-  }
-  /** full objective set at edit time */
+  /** how the contract ended; untouched objectives on a completed run count as confirmed defaults */
+  status: HistoryStatus
   objectives: {
     commodity: string
     destination: string
     scuAmount: number
     boxes: BoxAllocation[]
+    /** present = breakdown was hand-corrected from this */
+    originalBoxes?: BoxAllocation[]
+    delivered: boolean
   }[]
 }
 
