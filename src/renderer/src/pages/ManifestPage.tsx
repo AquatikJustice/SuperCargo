@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import type { BoxAllocation } from '@shared/types'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, fmtDistance } from '../theme'
 import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, offGridByObjective, type Stop, type StopItem, type PickupItem, type OffGridTally } from '../state/manifest'
@@ -9,6 +10,7 @@ import { Btn } from '../components/ui'
 import LoadBar from '../components/LoadBar'
 import Typeahead from '../components/Typeahead'
 import TurnInModal from '../components/TurnInModal'
+import BoxEditModal from '../components/BoxEditModal'
 
 const ITEM_GRID = '118px 1fr minmax(160px, 1fr) 70px 104px'
 
@@ -28,8 +30,16 @@ export default function ManifestPage(): React.ReactElement {
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const looseBoxes = useStore((s) => s.looseBoxes)
+  const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
 
   const [turnIn, setTurnIn] = useState<{ stop: Stop; item: StopItem } | null>(null)
+  const [editBoxes, setEditBoxes] = useState<{ contractId: string; objectiveId: string; commodity: string; scu: number; boxes: BoxAllocation[] } | null>(null)
+
+  const openBoxEdit = (contractId: string, objectiveId: string): void => {
+    const c = contracts.find((c) => c.id === contractId)
+    const o = c?.objectives.find((o) => o.id === objectiveId)
+    if (c && o) setEditBoxes({ contractId, objectiveId, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
+  }
 
   const offGrid = useMemo(() => offGridByObjective(contracts, looseBoxes), [contracts, looseBoxes])
 
@@ -99,9 +109,9 @@ export default function ManifestPage(): React.ReactElement {
       />
 
       {groupBy === 'destination' ? (
-        <ByDestination stops={stops} showBoxMath={showBoxMath} holdScu={capMax} offGrid={offGrid} onTurnIn={(stop, item) => setTurnIn({ stop, item })} />
+        <ByDestination stops={stops} showBoxMath={showBoxMath} holdScu={capMax} offGrid={offGrid} onTurnIn={(stop, item) => setTurnIn({ stop, item })} onEditBoxes={openBoxEdit} />
       ) : (
-        <ByContract contracts={derivedContracts} showBoxMath={showBoxMath} />
+        <ByContract contracts={derivedContracts} showBoxMath={showBoxMath} onEditBoxes={openBoxEdit} />
       )}
 
       {turnIn && (
@@ -128,6 +138,19 @@ export default function ManifestPage(): React.ReactElement {
             setTurnIn(null)
           }}
           onClose={() => setTurnIn(null)}
+        />
+      )}
+
+      {editBoxes && (
+        <BoxEditModal
+          commodity={editBoxes.commodity}
+          scu={editBoxes.scu}
+          boxes={editBoxes.boxes}
+          onClose={() => setEditBoxes(null)}
+          onSave={(boxes) => {
+            setObjectiveBoxes(editBoxes.contractId, editBoxes.objectiveId, boxes)
+            setEditBoxes(null)
+          }}
         />
       )}
     </div>
@@ -302,13 +325,15 @@ function ByDestination({
   showBoxMath,
   holdScu,
   offGrid,
-  onTurnIn
+  onTurnIn,
+  onEditBoxes
 }: {
   stops: Stop[]
   showBoxMath: boolean
   holdScu: number
   offGrid: Map<string, OffGridTally>
   onTurnIn: (stop: Stop, item: StopItem) => void
+  onEditBoxes: (contractId: string, objectiveId: string) => void
 }): React.ReactElement {
   const reorderStops = useStore((s) => s.reorderStops)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -418,7 +443,17 @@ function ByDestination({
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: off ? C.amber : '#b6bec0' }}>
                   <span style={{ color: C.faint }}>· </span>
-                  {off ? `${off.breakdown} off grid` : item.boxStr || '-'}
+                  {off ? (
+                    `${off.breakdown} off grid`
+                  ) : (
+                    <span
+                      onClick={() => onEditBoxes(item.contractId, item.objectiveId)}
+                      title="Click to edit the box sizes"
+                      style={{ cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.22)' }}
+                    >
+                      {item.boxStr || '-'}
+                    </span>
+                  )}
                 </div>
               ) : (
                 <div />
@@ -442,7 +477,7 @@ function ByDestination({
             )
           })}
           {stop.pickups && stop.pickups.length > 0 && (
-            <PickupSection items={stop.pickups} showBoxMath={showBoxMath} label={!stop.pickupOnly} />
+            <PickupSection items={stop.pickups} showBoxMath={showBoxMath} label={!stop.pickupOnly} onEditBoxes={onEditBoxes} />
           )}
         </div>
       ))}
@@ -450,7 +485,7 @@ function ByDestination({
   )
 }
 
-function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; showBoxMath: boolean; label: boolean }): React.ReactElement {
+function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: PickupItem[]; showBoxMath: boolean; label: boolean; onEditBoxes: (contractId: string, objectiveId: string) => void }): React.ReactElement {
   const setPickedUp = useStore((s) => s.setPickedUp)
   return (
     <div style={{ marginTop: 6 }}>
@@ -485,7 +520,13 @@ function PickupSection({ items, showBoxMath, label }: { items: PickupItem[]; sho
             {showBoxMath ? (
               <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
                 <span style={{ color: C.faint }}>· </span>
-                {it.boxStr || '-'}
+                <span
+                  onClick={() => onEditBoxes(it.contractId, it.objectiveId)}
+                  title="Click to edit the box sizes"
+                  style={{ cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.22)' }}
+                >
+                  {it.boxStr || '-'}
+                </span>
               </div>
             ) : (
               <div />
@@ -603,10 +644,12 @@ function ElevatorBadge({ external }: { external?: boolean }): React.ReactElement
 
 function ByContract({
   contracts,
-  showBoxMath
+  showBoxMath,
+  onEditBoxes
 }: {
   contracts: ReturnType<typeof deriveContracts>
   showBoxMath: boolean
+  onEditBoxes: (contractId: string, objectiveId: string) => void
 }): React.ReactElement {
   return (
     <div>
@@ -644,7 +687,13 @@ function ByContract({
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
                   <span style={{ color: C.faint }}>· </span>
-                  {o.boxStr || '-'}
+                  <span
+                    onClick={() => onEditBoxes(c.id, o.objectiveId)}
+                    title="Click to edit the box sizes"
+                    style={{ cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.22)' }}
+                  >
+                    {o.boxStr || '-'}
+                  </span>
                 </div>
               ) : (
                 <div />

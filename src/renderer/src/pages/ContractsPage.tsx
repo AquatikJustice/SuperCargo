@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import type { BoxAllocation } from '@shared/types'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS } from '@shared/box'
 import { sharedCut } from '@shared/payout'
+import { contractParty } from '@shared/contract'
 import { deriveContracts, shareSplit } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 import TurnInModal from '../components/TurnInModal'
+import BoxEditModal from '../components/BoxEditModal'
 import Typeahead from '../components/Typeahead'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
@@ -30,6 +33,7 @@ export default function ContractsPage(): React.ReactElement {
   const openCapture = useStore((s) => s.openCapture)
   const rescanContract = useStore((s) => s.rescanContract)
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
+  const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   const editContract = useStore((s) => s.editContract)
   const editObjective = useStore((s) => s.editObjective)
   const deleteObjective = useStore((s) => s.deleteObjective)
@@ -41,7 +45,14 @@ export default function ContractsPage(): React.ReactElement {
   const commodityNames = useMemo(() => commodities.map((c) => c.name), [commodities])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
   const [editTurnIn, setEditTurnIn] = useState<TurnInTarget | null>(null)
+  const [editBoxes, setEditBoxes] = useState<BoxEditTarget | null>(null)
   const [confirmFile, setConfirmFile] = useState<string | null>(null)
+
+  const openBoxEdit = (contractId: string, objectiveId: string): void => {
+    const c = contracts.find((c) => c.id === contractId)
+    const o = c?.objectives.find((o) => o.id === objectiveId)
+    if (c && o) setEditBoxes({ contractId, objectiveId, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
+  }
 
   return (
     <div style={{ padding: PAGE_PADDING }}>
@@ -175,6 +186,11 @@ export default function ContractsPage(): React.ReactElement {
                       <DetailField label="RANK">
                         <EditableText value={c.rank} onCommit={(v) => editContract(c.id, { rank: v })} placeholder="set rank" />
                       </DetailField>
+                      <DetailField label="CONTRACTOR">
+                        <span style={{ fontFamily: F.body, fontSize: 14, color: c.generator ? C.textBody : C.faint }} title={c.generator}>
+                          {contractParty(c.generator) || '-'}
+                        </span>
+                      </DetailField>
                       <DetailField label="MAX BOX">
                         <EditableBoxSize value={c.maxBox} onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
                       </DetailField>
@@ -225,7 +241,13 @@ export default function ContractsPage(): React.ReactElement {
                             placeholder="destination"
                             textStyle={{ fontSize: 13, color: isTurnedIn ? tiColor : C.dim }}
                           />
-                          <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : '#b6bec0' }}>{o.boxStr || '-'}</span>
+                          <span
+                            onClick={() => openBoxEdit(c.id, o.objectiveId)}
+                            title="Click to edit the box sizes"
+                            style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : '#b6bec0', cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.22)', alignSelf: 'center', width: 'fit-content' }}
+                          >
+                            {o.boxStr || '-'}
+                          </span>
                           <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
                           <Btn
                             onClick={() => setEditTurnIn({ contractId: c.id, objectiveId: o.objectiveId, commodity: o.commodity, destination: o.destination, scu: o.scu, boxStr: o.boxStr, ref: c.ref, turnedInScu: ti })}
@@ -357,8 +379,29 @@ export default function ContractsPage(): React.ReactElement {
           onClose={() => setEditTurnIn(null)}
         />
       )}
+
+      {editBoxes && (
+        <BoxEditModal
+          commodity={editBoxes.commodity}
+          scu={editBoxes.scu}
+          boxes={editBoxes.boxes}
+          onClose={() => setEditBoxes(null)}
+          onSave={(boxes) => {
+            setObjectiveBoxes(editBoxes.contractId, editBoxes.objectiveId, boxes)
+            setEditBoxes(null)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+type BoxEditTarget = {
+  contractId: string
+  objectiveId: string
+  commodity: string
+  scu: number
+  boxes: BoxAllocation[]
 }
 
 type TurnInTarget = {

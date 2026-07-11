@@ -99,6 +99,7 @@ export interface DerivedContract {
   dataSource: DataSource
   sharedWithMe: boolean
   sharedWith: string[]
+  generator?: string
 }
 
 // hidden while capture modal open
@@ -408,7 +409,8 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       reputation: c.reputation,
       dataSource: c.dataSource,
       sharedWithMe: !!c.sharedWithMe,
-      sharedWith: c.sharedWith ?? []
+      sharedWith: c.sharedWith ?? [],
+      generator: c.generator
     }
   })
 }

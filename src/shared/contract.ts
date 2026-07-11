@@ -58,6 +58,22 @@ export function isHaulingGenerator(generator: string): boolean {
   return /haul/i.test(generator)
 }
 
+// in-game names where the humanized generator isn't right
+const PARTY_NAMES: Record<string, string> = {
+  covalex_hauling: 'Covalex'
+}
+
+export function contractParty(generator?: string): string {
+  if (!generator) return ''
+  const known = PARTY_NAMES[generator.toLowerCase()]
+  if (known) return known
+  return generator
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function contractRef(index: number): string {
   return 'C' + String(index + 1).padStart(2, '0')
 }
