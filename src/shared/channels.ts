@@ -45,6 +45,7 @@ export const IPC = {
   dataRefresh: 'data:refresh',
 
   telemetryStatus: 'telemetry:status',
+  telemetryBoxReport: 'telemetry:boxReport',
 
   updaterCheck: 'updater:check',
   updaterQuitAndInstall: 'updater:quitAndInstall',

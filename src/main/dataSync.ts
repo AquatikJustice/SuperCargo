@@ -13,7 +13,8 @@ const SPECS = [
   { repo: 'ships.json', cache: 'uex-vehicles.json', key: 'ships' },
   { repo: 'locations.json', cache: 'uex-locations.json', key: 'locations' },
   { repo: 'commodities.json', cache: 'uex-commodities.json', key: 'commodities' },
-  { repo: 'grid-faces.json', cache: 'uex-grid-faces.json', key: 'gridFaces' }
+  { repo: 'grid-faces.json', cache: 'uex-grid-faces.json', key: 'gridFaces' },
+  { repo: 'contract-overrides.json', cache: 'uex-contract-overrides.json', key: 'contractOverrides' }
 ] as const
 
 function cachePath(file: string): string {

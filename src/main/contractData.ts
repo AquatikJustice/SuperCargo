@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { cleanTitle } from '@shared/contract'
 import { normalize, bestMatch } from '@shared/fuzzy'
-import type { AppSettings, ContractAcceptedEvent, ContractDataStatus } from '@shared/types'
+import type { AppSettings, ContractAcceptedEvent, ContractDataStatus, ContractOverride } from '@shared/types'
 
 export interface ContractInfo {
   title: string
@@ -24,6 +24,31 @@ function snapBoxSize(n: number): number | undefined {
 let byTitle = new Map<string, ContractInfo>()
 let knownNorms: string[] = []
 let sources: string[] = []
+let overrides: ContractOverride[] = []
+
+export function setOverrides(list: ContractOverride[]): void {
+  overrides = list
+}
+
+function lookupOverride(e: ContractAcceptedEvent): ContractOverride | null {
+  const name = e.contractName.toLowerCase()
+  const norm = normalize(cleanTitle(e.title))
+  for (const ov of overrides) {
+    if (ov.contractName && name && ov.contractName.toLowerCase() === name) return ov
+    if (ov.title && norm && normalize(ov.title) === norm) return ov
+  }
+  return null
+}
+
+function normalizedCommodities(ov: ContractOverride): Record<string, number> | undefined {
+  if (!ov.commodities) return undefined
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(ov.commodities)) {
+    const size = snapBoxSize(v)
+    if (size) out[k.trim().toLowerCase()] = size
+  }
+  return Object.keys(out).length ? out : undefined
+}
 
 function candidatePaths(gameLogPath: string, override: string): string[] {
   const out: string[] = []
@@ -169,12 +194,24 @@ export function lookupByTitle(rawTitle: string): ContractInfo | null {
 }
 
 export function enrichAccepted(e: ContractAcceptedEvent): ContractAcceptedEvent {
+  let out = e
   const info = lookupByTitle(e.title)
-  if (!info) return e
-  return {
-    ...e,
-    blueprints: info.blueprints.length ? info.blueprints : e.blueprints,
-    reputation: info.reputation ?? e.reputation,
-    maxBoxSize: info.maxBoxSize ?? e.maxBoxSize
+  if (info) {
+    out = {
+      ...out,
+      blueprints: info.blueprints.length ? info.blueprints : out.blueprints,
+      reputation: info.reputation ?? out.reputation,
+      maxBoxSize: info.maxBoxSize ?? out.maxBoxSize
+    }
   }
+  // community-verified sizes beat the localization guess
+  const ov = lookupOverride(e)
+  if (ov) {
+    out = {
+      ...out,
+      maxBoxSize: snapBoxSize(ov.maxBoxSize ?? NaN) ?? out.maxBoxSize,
+      commodityBoxSizes: normalizedCommodities(ov) ?? out.commodityBoxSizes
+    }
+  }
+  return out
 }

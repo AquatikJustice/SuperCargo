@@ -66,6 +66,12 @@ export interface HaulingContract {
   sharedWith?: string[]
   /** curated once (OCR review/manual); game re-logs objectives so we stop appending after, avoids phantom dupes */
   objectivesSettled?: boolean
+  /** log generator name, e.g. "Covalex_Hauling" */
+  generator?: string
+  /** mission template, e.g. "HaulCargo_SingleToMulti3_..." */
+  contractName?: string
+  /** per-commodity max box size (lowercased name), from contract overrides */
+  commodityBoxSizes?: Record<string, number>
 }
 
 /** per-channel Game.log path */
@@ -356,6 +362,48 @@ export interface ContractAcceptedEvent {
   blueprints?: string[]
   reputation?: number
   maxBoxSize?: number
+  /** per-commodity max box size (lowercased name), from contract overrides */
+  commodityBoxSizes?: Record<string, number>
+}
+
+/** community-sourced fix for a contract whose real box sizes differ from the defaults */
+export interface ContractOverride {
+  /** mission template, exact case-insensitive match */
+  contractName?: string
+  /** fallback match on normalized title */
+  title?: string
+  maxBoxSize?: number
+  /** commodity name -> max box size */
+  commodities?: Record<string, number>
+}
+
+export interface BoxSizeReport {
+  missionId: string
+  title: string
+  generator?: string
+  contractName?: string
+  rank?: string
+  haulType?: string
+  pickup?: string
+  dataSource: DataSource
+  maxBoxSize: number
+  boxSizeConfirmed: boolean
+  kind: 'breakdown' | 'maxBox'
+  /** the objective that was edited, with before/after boxes */
+  edited?: {
+    commodity: string
+    destination: string
+    scuAmount: number
+    before: BoxAllocation[]
+    after: BoxAllocation[]
+  }
+  /** full objective set at edit time */
+  objectives: {
+    commodity: string
+    destination: string
+    scuAmount: number
+    boxes: BoxAllocation[]
+  }[]
 }
 
 export interface ObjectiveEvent {

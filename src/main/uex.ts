@@ -11,7 +11,8 @@ import type {
   Commodity,
   CommodityRoster,
   ShipMarkup,
-  GridFacesRoster
+  GridFacesRoster,
+  ContractOverride
 } from '@shared/types'
 import { withExtraLocations, isContractCommodity, isRosterShip } from '@shared/uexMap'
 
@@ -19,6 +20,7 @@ const VEHICLES_FILE = 'uex-vehicles.json'
 const LOCATIONS_FILE = 'uex-locations.json'
 const COMMODITIES_FILE = 'uex-commodities.json'
 const GRIDFACES_FILE = 'uex-grid-faces.json'
+const OVERRIDES_FILE = 'uex-contract-overrides.json'
 
 function cachePath(file: string): string {
   return path.join(app.getPath('userData'), file)
@@ -79,6 +81,17 @@ export function loadCachedCommodities(): CommodityRoster | null {
     /* no cache yet */
   }
   return null
+}
+
+export function loadCachedContractOverrides(): ContractOverride[] {
+  const file = workingTreeData('contract-overrides.json') ?? cachePath(OVERRIDES_FILE)
+  try {
+    const j = JSON.parse(fs.readFileSync(file, 'utf8')) as { contractOverrides?: ContractOverride[] }
+    if (Array.isArray(j.contractOverrides)) return j.contractOverrides
+  } catch {
+    /* no cache yet */
+  }
+  return []
 }
 
 export function loadCachedGridFaces(): GridFacesRoster | null {

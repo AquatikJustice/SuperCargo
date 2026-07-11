@@ -2,12 +2,12 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, BoxSizeReport } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
 import { initUpdater, checkForUpdates, quitAndInstall } from './updater'
-import { loadCachedRoster, loadCachedLocations, loadCachedCommodities, loadCachedGridFaces, workingTreeData } from './uex'
+import { loadCachedRoster, loadCachedLocations, loadCachedCommodities, loadCachedGridFaces, loadCachedContractOverrides, workingTreeData } from './uex'
 import { seedCacheIfNeeded, refreshFromRepo } from './dataSync'
 import { scanSessionLog } from './scanLog'
 import { randomUUID } from 'node:crypto'
@@ -17,6 +17,7 @@ import { prunePending } from './ocr/samples'
 import * as contractData from './contractData'
 import * as telemetry from './telemetry'
 import * as usageStats from './usageStats'
+import * as boxReports from './boxReports'
 import appIcon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | null = null
@@ -538,11 +539,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.dataRefresh, async () => {
     seedCacheIfNeeded()
     const res = await refreshFromRepo()
+    contractData.setOverrides(loadCachedContractOverrides())
     pushRosters()
     return res
   })
 
   ipcMain.handle(IPC.telemetryStatus, () => telemetry.status())
+
+  ipcMain.on(IPC.telemetryBoxReport, (_e, r: BoxSizeReport) => {
+    boxReports.report(settings, app.getVersion(), r)
+  })
 
   ipcMain.handle(IPC.watcherStatus, () =>
     watcher ? watcher.status() : {
@@ -659,10 +665,14 @@ if (!gotLock) {
 
     // seed bundled, refresh in background
     seedCacheIfNeeded()
+    contractData.setOverrides(loadCachedContractOverrides())
     pushRosters()
     watchGridFacesDev()
     void refreshFromRepo().then((res) => {
-      if (res.changed) pushRosters()
+      if (res.changed) {
+        contractData.setOverrides(loadCachedContractOverrides())
+        pushRosters()
+      }
     })
 
     initUpdater(() => mainWindow)

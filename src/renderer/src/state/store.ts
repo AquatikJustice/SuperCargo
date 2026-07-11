@@ -22,7 +22,8 @@ import type {
   LoadedPin,
   ManualPlacement,
   ScannedContract,
-  StorAllCrate
+  StorAllCrate,
+  BoxSizeReport
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { calculateBoxes } from '@shared/box'
@@ -121,6 +122,11 @@ function contractNeedsOcr(c: HaulingContract): boolean {
   return !c.boxSizeConfirmed || c.objectives.some((o) => isSystemDestination(o.destination))
 }
 
+// commodity-level override wins over the contract-wide size
+function objectiveBoxSize(c: HaulingContract, commodity: string): number {
+  return c.commodityBoxSizes?.[commodity.trim().toLowerCase()] ?? c.maxBoxSize
+}
+
 function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingContract {
   return {
     id: e.missionId,
@@ -131,7 +137,7 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     reward: 0,
     // 16 default, fixed via ocr/manual
     maxBoxSize: e.maxBoxSize ?? 16,
-    boxSizeConfirmed: e.maxBoxSize != null,
+    boxSizeConfirmed: e.maxBoxSize != null || e.commodityBoxSizes != null,
     acceptedAt: e.acceptedAt,
     status: 'active',
     objectives: [],
@@ -139,8 +145,34 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     ref: contractRef(refIndex),
     blueprint: e.blueprint,
     blueprints: e.blueprints,
-    reputation: e.reputation
+    reputation: e.reputation,
+    generator: e.generator || undefined,
+    contractName: e.contractName || undefined,
+    commodityBoxSizes: e.commodityBoxSizes
   }
+}
+
+function reportBoxChange(c: HaulingContract, kind: 'breakdown' | 'maxBox', edited?: BoxSizeReport['edited']): void {
+  window.supercargo.reportBoxSizes({
+    missionId: c.id,
+    title: c.title,
+    generator: c.generator,
+    contractName: c.contractName,
+    rank: c.rank,
+    haulType: c.haulType,
+    pickup: c.pickup,
+    dataSource: c.dataSource,
+    maxBoxSize: c.maxBoxSize,
+    boxSizeConfirmed: !!c.boxSizeConfirmed,
+    kind,
+    edited,
+    objectives: c.objectives.map((o) => ({
+      commodity: o.commodity,
+      destination: o.destination,
+      scuAmount: o.scuAmount,
+      boxes: o.boxes
+    }))
+  })
 }
 
 interface StoreState {
@@ -605,7 +637,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
     contract.objectives = item.objectives.map((o) =>
-      makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, contract.maxBoxSize)
+      makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
     )
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
@@ -821,7 +853,7 @@ export const useStore = create<StoreState>((set, get) => {
         if (exists) return
         const objectives = [
           ...c.objectives,
-          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, c.maxBoxSize)
+          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, objectiveBoxSize(c, e.commodity))
         ]
         // cross-system deliveries log only the system name; OCR reads the real station off the contract screen
         const wantsOcr =
@@ -1298,11 +1330,17 @@ export const useStore = create<StoreState>((set, get) => {
           const mbs = snapMaxBox(patch.maxBoxSize)
           next.maxBoxSize = mbs
           next.boxSizeConfirmed = true
+          // a hand-set size beats any per-commodity override
+          next.commodityBoxSizes = undefined
           next.objectives = next.objectives.map((o) => ({ ...o, boxes: calculateBoxes(o.scuAmount, mbs) }))
         }
         return next
       })
       commit(contracts)
+      if (patch.maxBoxSize !== undefined) {
+        const c = contracts.find((c) => c.id === id)
+        if (c) reportBoxChange(c, 'maxBox')
+      }
       scheduleReroute()
     },
 
@@ -1342,7 +1380,7 @@ export const useStore = create<StoreState>((set, get) => {
         const objectives = c.objectives.map((o) => {
           if (o.id !== objectiveId || o.scuAmount === scuAmount) return o
           changed = true
-          return { ...o, scuAmount, boxes: calculateBoxes(scuAmount, c.maxBoxSize) }
+          return { ...o, scuAmount, boxes: calculateBoxes(scuAmount, objectiveBoxSize(c, o.commodity)) }
         })
         return changed ? { ...c, objectives } : c
       })
@@ -1354,6 +1392,9 @@ export const useStore = create<StoreState>((set, get) => {
       const clean = boxes.filter((b) => b.count > 0 && b.scuSize > 0)
       const total = clean.reduce((a, b) => a + b.count * b.scuSize, 0)
       if (total <= 0) return
+      const before = get()
+        .contracts.find((c) => c.id === contractId)
+        ?.objectives.find((o) => o.id === objectiveId)
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId) return c
         return {
@@ -1364,6 +1405,15 @@ export const useStore = create<StoreState>((set, get) => {
         }
       })
       commit(contracts)
+      const c = contracts.find((c) => c.id === contractId)
+      if (c && before)
+        reportBoxChange(c, 'breakdown', {
+          commodity: before.commodity,
+          destination: before.destination,
+          scuAmount: total,
+          before: before.boxes,
+          after: clean
+        })
       // old pins point at the pre-edit box positions; drop them so this cargo re-seats fresh
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))

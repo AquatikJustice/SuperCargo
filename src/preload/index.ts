@@ -22,7 +22,8 @@ import type {
   OcrResult,
   OcrEditTally,
   ContractDataStatus,
-  DataSyncResult
+  DataSyncResult,
+  BoxSizeReport
 } from '@shared/types'
 
 type Unsubscribe = () => void
@@ -112,6 +113,8 @@ const api = {
 
   getTelemetryStatus: (): Promise<{ uploaded: number; queued: number }> =>
     ipcRenderer.invoke(IPC.telemetryStatus),
+  reportBoxSizes: (report: BoxSizeReport): void =>
+    ipcRenderer.send(IPC.telemetryBoxReport, report),
 
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.appVersion),
   checkForUpdates: (): Promise<boolean> => ipcRenderer.invoke(IPC.updaterCheck),

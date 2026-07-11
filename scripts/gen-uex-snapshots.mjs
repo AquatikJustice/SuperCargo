@@ -395,6 +395,15 @@ async function main() {
   } catch (e) {
     console.warn('  grid-faces hash skipped:', e.message)
   }
+  try {
+    const coPath = path.join(OUT_DIR, 'contract-overrides.json')
+    if (fs.existsSync(coPath)) {
+      hashes.contractOverrides = crypto.createHash('sha256').update(fs.readFileSync(coPath)).digest('hex')
+      console.log('  contract-overrides.json  (authored, hash preserved)')
+    }
+  } catch (e) {
+    console.warn('  contract-overrides hash skipped:', e.message)
+  }
   fs.writeFileSync(path.join(OUT_DIR, 'hashes.json'), JSON.stringify(hashes, null, 2) + '\n')
   console.log(`wrote ${OUT_DIR}`)
   console.log('hashes:', hashes)
