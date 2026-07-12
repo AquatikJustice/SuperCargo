@@ -1017,6 +1017,15 @@ export const SHIPS: Ship[] = [
     ]
   },
   {
+    "name": "RSI Aurora Mk II",
+    "scu": 8,
+    "uexId": 0,
+    "containerSizes": [
+      1,
+      2
+    ]
+  },
+  {
     "name": "RSI Constellation Andromeda",
     "scu": 96,
     "uexId": 45,

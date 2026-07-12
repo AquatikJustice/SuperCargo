@@ -33,6 +33,8 @@ export interface CargoGrid {
   faces?: Partial<Record<BayDir, BayFaceKind>>
   /** visual-only euler spin (degrees, about x/y/z) for off-axis layouts; packer ignores it. */
   rot?: [number, number, number]
+  /** authored via markup; gridsFor drops these so the app never sees them, only the markup tool does */
+  hidden?: boolean
   source: 'sccargo' | 'datamine' | 'override' | 'curated'
 }
 
@@ -133,6 +135,7 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
   "RSI Aurora Mk I LX": {"ship":"RSI Aurora Mk I LX","baseScu":3,"totalScu":3,"loadableScu":3,"layout":"sccargo","grids":[{"id":"rsi-aurora-es-cargo-inventory-main","name":"RSI Aurora ES Cargo Inventory Main","x":0,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo"}]},
   "RSI Aurora Mk I MR": {"ship":"RSI Aurora Mk I MR","baseScu":3,"totalScu":3,"loadableScu":3,"layout":"sccargo","grids":[{"id":"rsi-aurora-es-cargo-inventory-main","name":"RSI Aurora ES Cargo Inventory Main","x":0,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo"}]},
   "RSI Aurora Mk I SE": {"ship":"RSI Aurora Mk I SE","baseScu":6,"totalScu":6,"loadableScu":6,"layout":"sccargo","grids":[{"id":"rsi-aurora-cl-cargo-inventory-main","name":"RSI Aurora CL Cargo Inventory Main","x":0,"y":0,"z":0,"w":1,"l":6,"h":1,"scu":6,"group":0,"source":"sccargo"}]},
+  "RSI Aurora Mk II": {"ship":"RSI Aurora Mk II","baseScu":2,"totalScu":8,"loadableScu":8,"layout":"sccargo","grids":[{"id":"rack-1","name":"Rack 1","x":1,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo","moduleId":"aurora-mkii-cargo"},{"id":"rack-2","name":"Rack 2","x":2,"y":0,"z":0,"w":1,"l":3,"h":1,"scu":3,"group":0,"source":"sccargo","moduleId":"aurora-mkii-cargo"},{"id":"side-1","name":"Side 1","x":0,"y":0,"z":6,"w":1,"l":1,"h":1,"scu":1,"group":1,"source":"sccargo"},{"id":"side-2","name":"Side 2","x":3,"y":0,"z":6,"w":1,"l":1,"h":1,"scu":1,"group":1,"source":"sccargo"}]},
   "RSI Constellation Andromeda": {"ship":"RSI Constellation Andromeda","baseScu":96,"totalScu":96,"loadableScu":96,"layout":"sccargo","grids":[{"id":"main","name":"Main","x":0,"y":0,"z":0,"w":4,"l":8,"h":3,"scu":96,"group":0,"source":"sccargo"}]},
   "RSI Constellation Aquila": {"ship":"RSI Constellation Aquila","baseScu":96,"totalScu":96,"loadableScu":96,"layout":"sccargo","grids":[{"id":"main","name":"Main","x":0,"y":0,"z":0,"w":4,"l":8,"h":3,"scu":96,"group":0,"source":"sccargo"}]},
   "RSI Constellation Phoenix": {"ship":"RSI Constellation Phoenix","baseScu":80,"totalScu":80,"loadableScu":80,"layout":"sccargo","grids":[{"id":"main","name":"Main","x":0,"y":0,"z":0,"w":5,"l":8,"h":2,"scu":80,"group":0,"source":"sccargo"}]},
@@ -148,7 +151,7 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 
 // authored markup (per-bay faces + layout fixes), synced like the uex lists
 // (markup tool -> data/uex/grid-faces.json); no markup until roster loads, packer falls back to dense pack
-type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot'>>
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot' | 'hidden'>>
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
 let OFF_GRIDS: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
@@ -164,7 +167,7 @@ export function setGridFaces(ships: ShipMarkup[]): void {
   const anchored: Record<string, boolean> = {}
   for (const s of ships) {
     const bays: Record<string, BayInfo> = {}
-    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot }
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot, hidden: b.hidden }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
     if (s.offGrid) offGrids[s.ship] = s.offGrid
@@ -242,6 +245,7 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const bays = MARKUP[ship]
   return rec.grids
     .filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+    .filter((g) => !bays?.[g.id]?.hidden)
     .map((g) => {
       const m = bays && bays[g.id]
       if (!m) return g
@@ -266,11 +270,6 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
 /** grids the packer may fill, gridsFor minus reference-only (secure/lift) bays */
 export function loadableGrids(ship: string, installed?: string[]): CargoGrid[] {
   return gridsFor(ship, installed).filter((g) => g.autoLoad !== false)
-}
-
-/** the small locked secure-storage vaults (Ironclad), not the lift pads; both are autoLoad:false but only these hide from the view */
-export function isSecureBay(g: CargoGrid): boolean {
-  return g.autoLoad === false && (/secure/i.test(g.id) || /secure/i.test(g.name))
 }
 
 // what actually fits on the run: auto-load bays only, no elevators or secure

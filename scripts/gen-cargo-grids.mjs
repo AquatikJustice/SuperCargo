@@ -71,7 +71,7 @@ const ALIAS = {
   'RSI Aurora Mk I LN': ['RSI', 'Aurora LN (Mk I)'],
   'RSI Aurora Mk I LX': ['RSI', 'Aurora LX (Mk I)'],
   'RSI Aurora Mk I MR': ['RSI', 'Aurora MR (Mk I)'],
-  'RSI Aurora Mk II': ['RSI', 'Aurora (Mk II)'], // rack module added below
+  'RSI Aurora Mk II': ['RSI', 'Aurora (Mk II) [Cargo]'], // group 0 = rack module (MODULE_OF)
   'MISC Starfarer': ['MISC', 'Starfarer Gemini'],
   'RSI Constellation Phoenix Emerald': ['RSI', 'Constellation Phoenix'],
   'Anvil C8X Pisces Expedition': ['Anvil', 'C8X Pisces'],
@@ -102,7 +102,8 @@ const REFERENCE_ONLY_GROUPS = { 'Drake Ironclad': [1] }
 
 const MODULE_OF = {
   'Aegis Retaliator': (_gi, groupScu) =>
-    groupScu === 36 ? 'aegis-retaliator-stern' : 'aegis-retaliator-bow'
+    groupScu === 36 ? 'aegis-retaliator-stern' : 'aegis-retaliator-bow',
+  'RSI Aurora Mk II': (gi) => (gi === 0 ? 'aurora-mkii-cargo' : undefined)
 }
 
 // lift pads sc-cargo lacks, reference-only
@@ -125,23 +126,7 @@ const ADD_GRIDS = {
 }
 
 // curated module bays absent from every source
-const MODULE_GRIDS = {
-  'RSI Aurora Mk II': [
-    {
-      id: 'rack',
-      name: 'Cargo Rack',
-      x: 0,
-      y: 0,
-      z: 4,
-      w: 1,
-      l: 3,
-      h: 2,
-      scu: 6,
-      moduleId: 'aurora-mkii-cargo',
-      source: 'curated'
-    }
-  ]
-}
+const MODULE_GRIDS = {}
 
 function makeNamePicker(dmGrids) {
   const pool = (dmGrids || []).map((g) => ({ key: dimKey(g.w, g.l, g.h), name: g.name, used: false }))
