@@ -72,6 +72,18 @@ const EXTRA_LOCATIONS: Location[] = [
     z: 132065.861482,
     system: 'pyro',
     body: 'Pyro III'
+  },
+  // game logs the pickup as the landing zone; coords borrowed from its spaceport
+  {
+    name: 'Orison',
+    code: '',
+    maxContainerSize: 0,
+    uexId: 0,
+    hasElevator: true,
+    x: -18956880483.059193,
+    y: -2665823193.5330234,
+    z: 5282237.225567,
+    system: 'stanton'
   }
 ]
 
