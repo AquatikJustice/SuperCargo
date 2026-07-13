@@ -197,14 +197,31 @@ function tellsForPool(pool: ObjPool[]): Map<string, string | null> {
 
 // scu aboard per step plus the peak; feeds the load bar (fill=series[i], tick=peak)
 export function loadProfile(steps: LoadingStep[]): { series: number[]; peak: number } {
+  // a stateful route plans no pickup for cargo already aboard, so anything
+  // dropped before the plan ever loads it started the trip on the ship
+  const loaded = new Map<string, number>()
+  let start = 0
+  for (const s of steps) {
+    for (const l of s.lines) {
+      const cur = loaded.get(l.objectiveId) ?? 0
+      if (s.kind === 'load') {
+        loaded.set(l.objectiveId, cur + l.scu)
+      } else if (l.scu > cur) {
+        start += l.scu - cur
+        loaded.set(l.objectiveId, 0)
+      } else {
+        loaded.set(l.objectiveId, cur - l.scu)
+      }
+    }
+  }
   const series: number[] = []
-  let aboard = 0
+  let aboard = start
   for (const s of steps) {
     const moved = s.lines.reduce((a, l) => a + l.scu, 0)
     aboard += s.kind === 'load' ? moved : -moved
     series.push(aboard)
   }
-  return { series, peak: series.length ? Math.max(0, ...series) : 0 }
+  return { series, peak: series.length ? Math.max(start, ...series) : start }
 }
 
 export function buildLoadingSteps(
