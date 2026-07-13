@@ -9,7 +9,11 @@ export interface ParsedTitle {
 // CIG bug: multi-pickup single-drop hauls spawn ALL cargo at the last listed pickup
 export function collapseLastPickup(o: DeliveryObjective): DeliveryObjective {
   if (!o.pickups || o.pickups.length < 2) return o
-  return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [o.pickups[o.pickups.length - 1]] }
+  // ocr sometimes leaks the destination into the pickup list; collapsing onto it would kill the route job
+  const dest = o.destination.trim().toLowerCase()
+  const real = o.pickups.filter((p) => p.trim().toLowerCase() !== dest)
+  const last = real.length ? real[real.length - 1] : o.pickups[o.pickups.length - 1]
+  return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [last] }
 }
 
 export function restorePickups(o: DeliveryObjective): DeliveryObjective {
