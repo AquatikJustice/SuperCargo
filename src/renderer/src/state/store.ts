@@ -27,7 +27,7 @@ import type {
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
-import { contractRef, collapseLastPickup, restorePickups } from '@shared/contract'
+import { contractRef, applyPickupBug, restorePickups } from '@shared/contract'
 import { backfillDestinations } from '@shared/markerResolve'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
@@ -666,7 +666,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
     contract.objectives = item.objectives.map((o) => {
       const obj = makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
-      return contract.lastPickupOnly ? collapseLastPickup(obj) : obj
+      return contract.lastPickupOnly ? applyPickupBug(obj) : obj
     })
     contract.objectives = applyMarkerBackfill([contract], get().locations)[0].objectives
     // non-pending scan = final set; pending settles after OCR
@@ -1097,7 +1097,7 @@ export const useStore = create<StoreState>((set, get) => {
           .map((o) => {
             const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
             const base = makeObjective(o, maxBoxSize)
-            const shaped = c.lastPickupOnly ? collapseLastPickup(base) : base
+            const shaped = c.lastPickupOnly ? applyPickupBug(base) : base
             return kept
               ? {
                   ...shaped,
@@ -1356,11 +1356,22 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     editContract: (id, patch) => {
+      const repointed: string[] = []
       const contracts = get().contracts.map((c) => {
         if (c.id !== id) return c
         const next = { ...c }
         if (patch.title !== undefined) next.title = patch.title.trim()
-        if (patch.pickup !== undefined) next.pickup = patch.pickup.trim()
+        if (patch.pickup !== undefined) {
+          next.pickup = patch.pickup.trim()
+          // while collapsed the route reads o.pickups, so a hand-set pickup must land there too
+          if (c.lastPickupOnly && next.pickup) {
+            next.objectives = next.objectives.map((o) => {
+              if (!o.pickups?.length || o.pickups[0] === next.pickup) return o
+              repointed.push(o.id)
+              return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [next.pickup] }
+            })
+          }
+        }
         if (patch.rank !== undefined) next.rank = patch.rank.trim()
         if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
         if (patch.maxBoxSize !== undefined) {
@@ -1375,6 +1386,14 @@ export const useStore = create<StoreState>((set, get) => {
         return next
       })
       commit(contracts)
+      if (repointed.length) {
+        const pins = get().loadedPins
+        const kept = Object.fromEntries(
+          Object.entries(pins).filter(([k]) => !repointed.some((oid) => k.startsWith(oid + '#')))
+        )
+        if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
+        set({ isRouteAuto: true })
+      }
       scheduleReroute()
     },
 
@@ -1455,7 +1474,7 @@ export const useStore = create<StoreState>((set, get) => {
       const contracts = get().contracts.map((c) => {
         if (c.id !== contractId || !!c.lastPickupOnly === on) return c
         const objectives = c.objectives.map((o) => {
-          const next = on ? collapseLastPickup(o) : restorePickups(o)
+          const next = on ? applyPickupBug(o) : restorePickups(o)
           if (next !== o) affected.push(o.id)
           return next
         })

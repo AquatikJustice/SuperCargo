@@ -292,7 +292,8 @@ export function parseOcrText(rawText: string): ParsedOcr {
     if (!commodity || !pickup) continue
     const key = commodity.toLowerCase()
     const arr = pickupsByCommodity.get(key) ?? []
-    if (!arr.some((p) => p.toLowerCase() === pickup.toLowerCase())) arr.push(pickup)
+    // repeats stay: a duplicated name is how the screen papers over a broken pickup slot
+    arr.push(pickup)
     pickupsByCommodity.set(key, arr)
   }
   for (const o of found) {
@@ -317,19 +318,18 @@ export function parseOcrText(rawText: string): ParsedOcr {
   return { objectives: found, maxBoxSize, reward: parseReward(text) }
 }
 
-// collapse pickups that resolve to the same place; raw-string dedup misses ocr variance
-function dedupePickups(ps?: MatchResult[]): MatchResult[] | undefined {
-  if (!ps || !ps.length) return ps
-  const seen = new Set<string>()
-  const out: MatchResult[] = []
-  for (const p of ps) {
-    const key = (p.match ?? p.input).trim().toLowerCase()
-    if (key && !seen.has(key)) {
-      seen.add(key)
-      out.push(p)
-    }
-  }
-  return out
+// gate names exist once per system pair ("Stanton Gateway (Nyx)" / "(Pyro)"); the screen never
+// prints the tag, so a bare match can land in the wrong system. prefer the destination's system
+function preferSameSystem(p: MatchResult, destName: string | null, locations: Location[]): MatchResult {
+  if (!p.match || !destName) return p
+  const dest = locations.find((l) => l.name === destName)
+  if (!dest?.system) return p
+  const base = p.match.replace(/\s*\([^)]*\)\s*$/, '')
+  if (base === p.match) return p
+  const sibling = locations.find(
+    (l) => l.system === dest.system && l.name.toLowerCase().startsWith(base.toLowerCase() + ' (')
+  )
+  return sibling && sibling.name !== p.match ? { ...p, match: sibling.name } : p
 }
 
 // trailing "on <body>", captured so operator+body picks the facility
@@ -462,10 +462,13 @@ export function matchObjectives(
   locations: Location[]
 ): OcrObjective[] {
   const commodityNames = commodities.map((c) => c.name)
-  return raw.map((o) => ({
-    commodity: bestMatch(o.commodity, commodityNames),
-    scuAmount: o.scuAmount,
-    destination: resolveLocation(o.destination, locations),
-    pickups: dedupePickups(o.pickups?.map((p) => resolveLocation(p, locations)))
-  }))
+  return raw.map((o) => {
+    const destination = resolveLocation(o.destination, locations)
+    return {
+      commodity: bestMatch(o.commodity, commodityNames),
+      scuAmount: o.scuAmount,
+      destination,
+      pickups: o.pickups?.map((p) => preferSameSystem(resolveLocation(p, locations), destination.match, locations))
+    }
+  })
 }
