@@ -20,6 +20,15 @@ export interface BoxAllocation {
   count: number
 }
 
+/** a contract dropoff marker's coords, pulled from the CreateMarker log line */
+export interface MarkerDropoff {
+  /** dropoff index within the mission (dropoff_<uuid>_N) */
+  index: number
+  x: number
+  y: number
+  z: number
+}
+
 export interface DeliveryObjective {
   id: string
   commodity: string
@@ -82,6 +91,8 @@ export interface HaulingContract {
   lastPickupOnly?: boolean
   /** user flipped the pickup-bug toggle by hand; feeds override authoring */
   lastPickupOnlyManual?: boolean
+  /** dropoff marker coords from the log, for recovering a destination the game left unresolved */
+  markerDropoffs?: MarkerDropoff[]
 }
 
 /** per-channel Game.log path */
@@ -376,6 +387,7 @@ export interface ContractAcceptedEvent {
   commodityBoxSizes?: Record<string, number>
   /** bugged multi-pickup class: everything spawns at the last pickup; from contract overrides */
   lastPickupOnly?: boolean
+  markerDropoffs?: MarkerDropoff[]
 }
 
 /** community-sourced fix for a contract whose real box sizes differ from the defaults */

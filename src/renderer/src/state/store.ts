@@ -28,6 +28,7 @@ import type {
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
 import { contractRef, collapseLastPickup, restorePickups } from '@shared/contract'
+import { backfillDestinations } from '@shared/markerResolve'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
@@ -149,7 +150,8 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     generator: e.generator || undefined,
     contractName: e.contractName || undefined,
     commodityBoxSizes: e.commodityBoxSizes,
-    lastPickupOnly: e.lastPickupOnly || undefined
+    lastPickupOnly: e.lastPickupOnly || undefined,
+    markerDropoffs: e.markerDropoffs
   }
 }
 
@@ -182,6 +184,20 @@ function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
     lastPickupOnlyManual: c.lastPickupOnlyManual
   }
   window.supercargo.reportBoxSizes(report)
+}
+
+// recover destinations the game logged as a bare system (or left blank) from the dropoff marker coords
+function applyMarkerBackfill(contracts: HaulingContract[], locations: Location[]): HaulingContract[] {
+  if (!locations.length) return contracts
+  let changed = false
+  const next = contracts.map((c) => {
+    if (!c.markerDropoffs?.length || !c.objectives.length) return c
+    const fills = backfillDestinations(c.objectives.map((o) => o.destination), c.markerDropoffs, locations)
+    if (fills.every((f) => f === null)) return c
+    changed = true
+    return { ...c, objectives: c.objectives.map((o, i) => (fills[i] ? { ...o, destination: fills[i] as string } : o)) }
+  })
+  return changed ? next : contracts
 }
 
 interface StoreState {
@@ -652,6 +668,7 @@ export const useStore = create<StoreState>((set, get) => {
       const obj = makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
       return contract.lastPickupOnly ? collapseLastPickup(obj) : obj
     })
+    contract.objectives = applyMarkerBackfill([contract], get().locations)[0].objectives
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
@@ -809,6 +826,10 @@ export const useStore = create<StoreState>((set, get) => {
       }))
       track(window.supercargo.onLocations((r) => {
         set({ locations: r.locations, locationsSyncedAt: r.syncedAt })
+        // markers may have arrived before the roster; recover any bare-system drops now
+        const cur = get().contracts
+        const bf = applyMarkerBackfill(cur, r.locations)
+        if (bf !== cur) commit(bf)
         scheduleReroute() // new coords, new route
       }))
       track(window.supercargo.onCommodities((r) => {
@@ -868,11 +889,13 @@ export const useStore = create<StoreState>((set, get) => {
           ...c.objectives,
           makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, objectiveBoxSize(c, e.commodity))
         ]
+        // a bare-system drop can often be recovered from the dropoff marker coords, no screenshot needed
+        const withCoords = applyMarkerBackfill([{ ...c, objectives }], get().locations)[0]
+        const newDest = withCoords.objectives[withCoords.objectives.length - 1].destination
         // cross-system deliveries log only the system name; OCR reads the real station off the contract screen
-        const wantsOcr =
-          get().settings.ocrAutoCapture && isSystemDestination(e.destination) && !c.pendingOcr
+        const wantsOcr = get().settings.ocrAutoCapture && isSystemDestination(newDest) && !c.pendingOcr
         const updated = [...contracts]
-        updated[idx] = { ...c, objectives, pendingOcr: c.pendingOcr || wantsOcr }
+        updated[idx] = { ...withCoords, pendingOcr: c.pendingOcr || wantsOcr }
         commit(updated)
         scheduleReroute()
         if (wantsOcr) {
