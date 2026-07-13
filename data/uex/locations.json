@@ -1195,6 +1195,17 @@
       "system": "pyro"
     },
     {
+      "name": "Orison",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": -18956880483.059193,
+      "y": -2665823193.5330234,
+      "z": 5282237.225567,
+      "system": "stanton"
+    },
+    {
       "name": "Ostler's Claim",
       "code": "",
       "maxContainerSize": 0,
