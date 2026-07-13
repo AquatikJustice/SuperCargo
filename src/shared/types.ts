@@ -20,6 +20,15 @@ export interface BoxAllocation {
   count: number
 }
 
+/** a contract dropoff marker's coords, pulled from the CreateMarker log line */
+export interface MarkerDropoff {
+  /** dropoff index within the mission (dropoff_<uuid>_N) */
+  index: number
+  x: number
+  y: number
+  z: number
+}
+
 export interface DeliveryObjective {
   id: string
   commodity: string
@@ -66,6 +75,8 @@ export interface HaulingContract {
   sharedWith?: string[]
   /** curated once (OCR review/manual); game re-logs objectives so we stop appending after, avoids phantom dupes */
   objectivesSettled?: boolean
+  /** dropoff marker coords from the log, for recovering a destination the game left unresolved */
+  markerDropoffs?: MarkerDropoff[]
 }
 
 /** per-channel Game.log path */
@@ -356,6 +367,7 @@ export interface ContractAcceptedEvent {
   blueprints?: string[]
   reputation?: number
   maxBoxSize?: number
+  markerDropoffs?: MarkerDropoff[]
 }
 
 export interface ObjectiveEvent {

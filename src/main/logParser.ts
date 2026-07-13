@@ -4,13 +4,16 @@ import type {
   ObjectiveEvent,
   ContractEndedEvent,
   CompletionType,
-  ShareEvent
+  ShareEvent,
+  MarkerDropoff
 } from '@shared/types'
 
 const PATTERN_TIMESTAMP = /^<([0-9T:\-.Z]+)>/
 const PATTERN_MARKER =
   /CreateMarker.*missionId \[([^\]]+)\].*generator name \[([^\]]+)\].*contract \[([^\]]+)\]/
 const PATTERN_MARKER_DEF_ID = /contractDefinitionId\[([^\]]+)\]/
+const PATTERN_MARKER_OBJ = /objectiveId \[(dropoff|pickup)_[0-9a-f-]+_(\d+)\]/i
+const PATTERN_MARKER_POS = /position \[x:\s*(-?[\d.]+),\s*y:\s*(-?[\d.]+),\s*z:\s*(-?[\d.]+)\]/
 const PATTERN_ACCEPTED =
   /Added notification "Contract Accepted:\s*(.*?)"\s*\[[^\]]*\].*?MissionId: \[([^\]]+)\]/
 const PATTERN_OBJECTIVE =
@@ -46,6 +49,8 @@ export interface MarkerEntry {
   generator: string
   contractName: string
   defId?: string
+  /** one CreateMarker line per objective, so these accumulate across lines */
+  dropoffs: MarkerDropoff[]
 }
 
 // mutates the markers map
@@ -56,8 +61,18 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
     const [, missionId, generator, contractName] = match
     const defMatch = PATTERN_MARKER_DEF_ID.exec(line)
     const defId = defMatch ? defMatch[1] : undefined
-    if (!markers.has(missionId)) {
-      markers.set(missionId, { generator, contractName, defId })
+    let entry = markers.get(missionId)
+    if (!entry) {
+      entry = { generator, contractName, defId, dropoffs: [] }
+      markers.set(missionId, entry)
+    }
+    const objMatch = PATTERN_MARKER_OBJ.exec(line)
+    const posMatch = PATTERN_MARKER_POS.exec(line)
+    if (objMatch && posMatch && objMatch[1].toLowerCase() === 'dropoff') {
+      const index = parseInt(objMatch[2], 10)
+      if (!entry.dropoffs.some((d) => d.index === index)) {
+        entry.dropoffs.push({ index, x: parseFloat(posMatch[1]), y: parseFloat(posMatch[2]), z: parseFloat(posMatch[3]) })
+      }
     }
     return { kind: 'marker', missionId, generator, contractName, defId }
   }
@@ -77,7 +92,8 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
       haulType,
       pickup,
       acceptedAt: ts,
-      blueprint: hasBlueprintMarker(rawTitle)
+      blueprint: hasBlueprintMarker(rawTitle),
+      markerDropoffs: marker?.dropoffs.length ? [...marker.dropoffs].sort((a, b) => a.index - b.index) : undefined
     }
     // no marker yet, use title
     const isHauling = generator ? isHaulingGenerator(generator) : /haul/i.test(rawTitle)
