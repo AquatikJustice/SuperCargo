@@ -27,7 +27,7 @@ import type {
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
-import { contractRef } from '@shared/contract'
+import { contractRef, collapseLastPickup, restorePickups } from '@shared/contract'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
@@ -148,13 +148,14 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     reputation: e.reputation,
     generator: e.generator || undefined,
     contractName: e.contractName || undefined,
-    commodityBoxSizes: e.commodityBoxSizes
+    commodityBoxSizes: e.commodityBoxSizes,
+    lastPickupOnly: e.lastPickupOnly || undefined
   }
 }
 
 // one report per contract, at the end of its life, and only if something was corrected
 function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
-  const edited = c.originalMaxBoxSize != null || c.objectives.some((o) => o.originalBoxes)
+  const edited = c.originalMaxBoxSize != null || c.objectives.some((o) => o.originalBoxes) || c.lastPickupOnlyManual
   if (!edited) return
   const report: BoxSizeReport = {
     missionId: c.id,
@@ -176,7 +177,9 @@ function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
       boxes: o.boxes,
       originalBoxes: o.originalBoxes,
       delivered: o.delivered
-    }))
+    })),
+    lastPickupOnly: c.lastPickupOnly,
+    lastPickupOnlyManual: c.lastPickupOnlyManual
   }
   window.supercargo.reportBoxSizes(report)
 }
@@ -311,6 +314,8 @@ interface StoreState {
     patch: { commodity?: string; destination?: string }
   ) => void
   deleteObjective: (contractId: string, objectiveId: string) => void
+  /** game bug: all cargo at the last listed pickup; on = collapse multi-pickups, off = restore */
+  setLastPickupOnly: (contractId: string, on: boolean) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
   setContractReward: (contractId: string, reward: number) => void
   setObjectivesDelivered: (
@@ -643,9 +648,10 @@ export const useStore = create<StoreState>((set, get) => {
     const contract = makeLogContract(item.accepted, contracts.length)
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
-    contract.objectives = item.objectives.map((o) =>
-      makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
-    )
+    contract.objectives = item.objectives.map((o) => {
+      const obj = makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
+      return contract.lastPickupOnly ? collapseLastPickup(obj) : obj
+    })
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
@@ -1068,16 +1074,17 @@ export const useStore = create<StoreState>((set, get) => {
           .map((o) => {
             const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
             const base = makeObjective(o, maxBoxSize)
+            const shaped = c.lastPickupOnly ? collapseLastPickup(base) : base
             return kept
               ? {
-                  ...base,
+                  ...shaped,
                   id: kept.id,
                   delivered: kept.delivered,
                   deliveredScu: kept.deliveredScu,
                   turnedInScu: kept.turnedInScu,
                   pickedUpAt: kept.pickedUpAt
                 }
-              : base
+              : shaped
           })
         // reflect the side-panel pickup, not the title, when the read is unanimous
         const objPickups = rebuilt.flatMap((o) => o.pickups ?? [])
@@ -1417,6 +1424,28 @@ export const useStore = create<StoreState>((set, get) => {
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))
       if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
+      scheduleReroute()
+    },
+
+    setLastPickupOnly: (contractId, on) => {
+      const affected: string[] = []
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== contractId || !!c.lastPickupOnly === on) return c
+        const objectives = c.objectives.map((o) => {
+          const next = on ? collapseLastPickup(o) : restorePickups(o)
+          if (next !== o) affected.push(o.id)
+          return next
+        })
+        return { ...c, lastPickupOnly: on || undefined, lastPickupOnlyManual: true, objectives }
+      })
+      commit(contracts)
+      // pins made under the old pickup layout would re-seat cargo at dead stops
+      const pins = get().loadedPins
+      const kept = Object.fromEntries(
+        Object.entries(pins).filter(([k]) => !affected.some((id) => k.startsWith(id + '#')))
+      )
+      if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
+      set({ isRouteAuto: true })
       scheduleReroute()
     },
 

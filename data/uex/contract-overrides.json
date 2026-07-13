@@ -1,4 +1,13 @@
 {
   "source": "community box-size reports",
-  "contractOverrides": []
+  "contractOverrides": [
+    {
+      "contractNameIncludes": "CargoHauling_Multi2ToSingle",
+      "lastPickupOnly": true
+    },
+    {
+      "contractNameIncludes": "CargoHauling_Multi3ToSingle",
+      "lastPickupOnly": true
+    }
+  ]
 }

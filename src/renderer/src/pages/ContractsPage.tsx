@@ -35,6 +35,7 @@ export default function ContractsPage(): React.ReactElement {
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   const editContract = useStore((s) => s.editContract)
+  const setLastPickupOnly = useStore((s) => s.setLastPickupOnly)
   const editObjective = useStore((s) => s.editObjective)
   const deleteObjective = useStore((s) => s.deleteObjective)
   const locations = useStore((s) => s.locations)
@@ -137,6 +138,7 @@ export default function ContractsPage(): React.ReactElement {
                           {c.title}
                         </span>
                         {c.blueprint && <BlueprintBadge />}
+                        {c.lastPickupOnly && <PickupBugBadge />}
                         {c.sharedWithMe ? (
                           <ShareBadge label="SHARED WITH YOU" />
                         ) : c.sharedWith.length ? (
@@ -194,6 +196,33 @@ export default function ContractsPage(): React.ReactElement {
                       <DetailField label="MAX BOX">
                         <EditableBoxSize value={c.maxBox} onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
                       </DetailField>
+                      {(c.multiPickup || c.lastPickupOnly) && (
+                        <DetailField label="PICKUP BUG">
+                          <Btn
+                            onClick={() => setLastPickupOnly(c.id, !c.lastPickupOnly)}
+                            title={
+                              c.lastPickupOnly
+                                ? 'Game bug workaround active: all boxes planned at the final listed pickup. Click if this contract actually splits cargo across pickups.'
+                                : 'Known game bug: some multi-pickup contracts spawn everything at the final listed pickup. Click if the other pickups turned out empty.'
+                            }
+                            style={{
+                              alignSelf: 'flex-start',
+                              border: `1px solid ${c.lastPickupOnly ? C.amber : C.lineStrong}`,
+                              background: c.lastPickupOnly ? 'rgba(232,177,58,0.10)' : 'transparent',
+                              color: c.lastPickupOnly ? C.amber : C.dim,
+                              fontFamily: F.display,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: '0.1em',
+                              padding: '4px 9px',
+                              cursor: 'pointer'
+                            }}
+                            hoverStyle={{ border: `1px solid ${C.amber}`, color: C.amber }}
+                          >
+                            {c.lastPickupOnly ? 'ALL AT FINAL PICKUP' : 'NORMAL PICKUPS'}
+                          </Btn>
+                        </DetailField>
+                      )}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
                       {[
@@ -722,6 +751,30 @@ function BlueprintBadge(): React.ReactElement {
         <circle cx="12" cy="12" r="3" />
       </svg>
       BP
+    </span>
+  )
+}
+
+function PickupBugBadge(): React.ReactElement {
+  return (
+    <span
+      title="Game bug workaround: all boxes planned at the final listed pickup"
+      style={{
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        border: `1px solid ${C.amber}`,
+        background: 'rgba(232,177,58,0.10)',
+        color: C.amber,
+        fontFamily: F.display,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: '0.14em',
+        padding: '2px 7px'
+      }}
+    >
+      PICKUP BUG
     </span>
   )
 }

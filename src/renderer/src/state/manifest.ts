@@ -100,6 +100,10 @@ export interface DerivedContract {
   sharedWithMe: boolean
   sharedWith: string[]
   generator?: string
+  /** pickup-bug collapse active on the contract */
+  lastPickupOnly: boolean
+  /** any objective has (or had) 2+ pickups, so the collapse toggle applies */
+  multiPickup: boolean
 }
 
 // hidden while capture modal open
@@ -410,7 +414,9 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       dataSource: c.dataSource,
       sharedWithMe: !!c.sharedWithMe,
       sharedWith: c.sharedWith ?? [],
-      generator: c.generator
+      generator: c.generator,
+      lastPickupOnly: !!c.lastPickupOnly,
+      multiPickup: c.objectives.some((o) => (o.pickups?.length ?? 0) > 1 || (o.originalPickups?.length ?? 0) > 1)
     }
   })
 }

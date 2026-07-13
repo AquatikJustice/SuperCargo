@@ -27,6 +27,8 @@ export interface DeliveryObjective {
   destination: string
   /** empty = use contract pickup */
   pickups?: string[]
+  /** full pickup list before the last-pickup-only collapse; present = collapsed */
+  originalPickups?: string[]
   destinationFull?: string
   boxes: BoxAllocation[]
   /** pre-edit breakdown, stamped on first hand edit; absent = never corrected */
@@ -76,6 +78,10 @@ export interface HaulingContract {
   commodityBoxSizes?: Record<string, number>
   /** pre-edit max box, stamped on first hand edit */
   originalMaxBoxSize?: number
+  /** all cargo at the last listed pickup (game bug); objectives stay collapsed while set */
+  lastPickupOnly?: boolean
+  /** user flipped the pickup-bug toggle by hand; feeds override authoring */
+  lastPickupOnlyManual?: boolean
 }
 
 /** per-channel Game.log path */
@@ -368,17 +374,23 @@ export interface ContractAcceptedEvent {
   maxBoxSize?: number
   /** per-commodity max box size (lowercased name), from contract overrides */
   commodityBoxSizes?: Record<string, number>
+  /** bugged multi-pickup class: everything spawns at the last pickup; from contract overrides */
+  lastPickupOnly?: boolean
 }
 
 /** community-sourced fix for a contract whose real box sizes differ from the defaults */
 export interface ContractOverride {
   /** mission template, exact case-insensitive match */
   contractName?: string
+  /** mission template substring, case-insensitive; tags a whole family (e.g. "ToSingle") */
+  contractNameIncludes?: string
   /** fallback match on normalized title */
   title?: string
   maxBoxSize?: number
   /** commodity name -> max box size */
   commodities?: Record<string, number>
+  /** all cargo at the last listed pickup (game bug); collapse the others */
+  lastPickupOnly?: boolean
 }
 
 /** sent once, when a contract with hand-corrected box sizes ends */
@@ -406,6 +418,10 @@ export interface BoxSizeReport {
     originalBoxes?: BoxAllocation[]
     delivered: boolean
   }[]
+  /** pickup-bug collapse in effect when the contract ended */
+  lastPickupOnly?: boolean
+  /** collapse was toggled by hand, not by an override; authoring signal */
+  lastPickupOnlyManual?: boolean
 }
 
 export interface ObjectiveEvent {

@@ -1,7 +1,21 @@
+import type { DeliveryObjective } from './types'
+
 export interface ParsedTitle {
   rank: string
   haulType: string
   pickup: string
+}
+
+// CIG bug: multi-pickup single-drop hauls spawn ALL cargo at the last listed pickup
+export function collapseLastPickup(o: DeliveryObjective): DeliveryObjective {
+  if (!o.pickups || o.pickups.length < 2) return o
+  return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [o.pickups[o.pickups.length - 1]] }
+}
+
+export function restorePickups(o: DeliveryObjective): DeliveryObjective {
+  if (!o.originalPickups) return o
+  const { originalPickups, ...rest } = o
+  return { ...rest, pickups: originalPickups }
 }
 
 // game logs cross-system drops as just "Pyro System", real station needs OCR

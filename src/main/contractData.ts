@@ -213,5 +213,13 @@ export function enrichAccepted(e: ContractAcceptedEvent): ContractAcceptedEvent 
       commodityBoxSizes: normalizedCommodities(ov) ?? out.commodityBoxSizes
     }
   }
+  // pickup-bug class is name-driven; substring entries tag whole template families
+  const name = e.contractName.toLowerCase()
+  const bugged =
+    ov?.lastPickupOnly ||
+    overrides.some(
+      (x) => x.lastPickupOnly && x.contractNameIncludes && name.includes(x.contractNameIncludes.toLowerCase())
+    )
+  if (bugged) out = { ...out, lastPickupOnly: true }
   return out
 }
