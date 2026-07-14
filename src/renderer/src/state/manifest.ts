@@ -353,10 +353,28 @@ export function deriveRouteStops(
       })
     }
     if (!items.length && !pickups.length) continue
+    const firstDrop = items[0] ? byObjective.get(items[0].objectiveId)?.o.destination : undefined
+    // the solver keeps the depot and a same-station delivery as separate nodes; one physical visit, one card
+    const prev = out[out.length - 1]
+    if (prev && normLoc(prev.destination) === normLoc(step.label)) {
+      prev.items.push(...items)
+      prev.pickups?.push(...pickups)
+      if (prev.pickupOnly && items.length) {
+        prev.pickupOnly = false
+        deliveryNo++
+        prev.n = String(deliveryNo).padStart(2, '0')
+        prev.color = colorOf(firstDrop ?? step.label)
+      }
+      prev.totSCU += items.reduce((a, i) => a + i.scu, 0)
+      prev.totBoxes += items.reduce((a, i) => a + i.boxCount, 0)
+      prev.totContracts = new Set(prev.items.map((i) => i.contractId)).size
+      // keep the real node key so the merged card stays draggable
+      if (prev.nodeKey === 'depot' && step.nodeKey !== 'depot') prev.nodeKey = step.nodeKey
+      continue
+    }
     const pickupOnly = items.length === 0
     if (!pickupOnly) deliveryNo++
     const split = splitDestination(step.label)
-    const firstDrop = items[0] ? byObjective.get(items[0].objectiveId)?.o.destination : undefined
     out.push({
       destination: step.label,
       idx: out.length,
@@ -372,7 +390,8 @@ export function deriveRouteStops(
       totContracts: new Set(items.map((i) => i.contractId)).size,
       pickups,
       pickupOnly,
-      start: step.nodeKey === 'depot'
+      // only the true first stop is pinned; a return to the start is an ordinary draggable visit
+      start: out.length === 0 && step.nodeKey === 'depot'
     })
   }
   return out
