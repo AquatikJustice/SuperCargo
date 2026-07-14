@@ -510,14 +510,24 @@ export const useStore = create<StoreState>((set, get) => {
   // share events that beat the accept wait here for the contract
   const pendingShare = new Map<string, ShareEvent[]>()
   const applyShare = (c: HaulingContract, e: ShareEvent): HaulingContract => {
-    if (e.kind === 'shared') return c.sharedWithMe ? c : { ...c, sharedWithMe: true }
-    const ids = new Set(c.sharedWith ?? [])
+    // a fresh share push means the sharer is (back) on it
+    if (e.kind === 'shared') {
+      return c.sharedWithMe && !c.sharerLeft ? c : { ...c, sharedWithMe: true, sharerLeft: undefined }
+    }
+    let out = c
+    // someone ELSE left a contract shared to us: the mission survives, the split doesn't
+    if (e.kind === 'left' && e.isLocal === false && c.sharedWithMe && !c.sharerLeft) {
+      out = { ...out, sharerLeft: true }
+    }
+    const ids = new Set(out.sharedWith ?? [])
     const before = ids.size
     if (e.kind === 'joined') ids.add(e.actorId)
     else ids.delete(e.actorId)
-    if (ids.size === before) return c
-    const next = [...ids]
-    return { ...c, sharedWith: next.length ? next : undefined }
+    if (ids.size !== before) {
+      const next = [...ids]
+      out = { ...out, sharedWith: next.length ? next : undefined }
+    }
+    return out
   }
   const onShare = (e: ShareEvent): void => {
     const contracts = get().contracts
@@ -1673,9 +1683,11 @@ export const useStore = create<StoreState>((set, get) => {
         const sh = shareById.get(c.id)
         if (sh) {
           const sw = sh.sharedWith.length ? sh.sharedWith : undefined
-          const swm = sh.sharedWithMe || undefined
-          if (!arrEq(next.sharedWith, sw) || !!next.sharedWithMe !== !!swm) {
-            next = { ...next, sharedWith: sw, sharedWithMe: swm }
+          // additive only: accepted shares don't re-push after a relog, so the log's silence proves nothing
+          const swm = (sh.sharedWithMe || next.sharedWithMe) || undefined
+          const sl = ((sh.ownerLeft && swm) || next.sharerLeft) || undefined
+          if (!arrEq(next.sharedWith, sw) || !!next.sharedWithMe !== !!swm || !!next.sharerLeft !== !!sl) {
+            next = { ...next, sharedWith: sw, sharedWithMe: swm, sharerLeft: sl }
           }
         }
         if (next !== c) touched = true

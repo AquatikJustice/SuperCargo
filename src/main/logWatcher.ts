@@ -36,6 +36,7 @@ export class LogWatcher extends EventEmitter {
   private markers = new Map<string, MarkerEntry>()
   private lastCompleteId = ''
   private connected = false
+  private localGeid = ''
 
   constructor(path: string, channel: string | null) {
     super()
@@ -128,7 +129,8 @@ export class LogWatcher extends EventEmitter {
       this.lastIno = st.ino || null
       this.buffer = ''
       if (this.firstOpen) {
-        // skip existing content
+        // skip existing content, but the login identity sits at the top and left-events need it
+        this.primeIdentity(st.size)
         this.position = st.size
         this.lastSize = st.size
         this.firstOpen = false
@@ -167,6 +169,24 @@ export class LogWatcher extends EventEmitter {
     }
   }
 
+  // the tail starts at EOF, so the login block is never replayed; grab the geid from the head once
+  private primeIdentity(size: number): void {
+    if (this.fd === null) return
+    try {
+      const head = Buffer.alloc(Math.min(size, 262144))
+      const read = fs.readSync(this.fd, head, 0, head.length, 0)
+      for (const raw of head.subarray(0, read).toString('utf8').split(/\r?\n/)) {
+        const parsed = parseLine(raw, this.markers)
+        if (parsed?.kind === 'identity') {
+          this.localGeid = parsed.geid
+          return
+        }
+      }
+    } catch {
+      /* left-events fall back to undefined isLocal */
+    }
+  }
+
   private processLine(line: string): void {
     const parsed = parseLine(line, this.markers)
     if (!parsed) return
@@ -189,9 +209,18 @@ export class LogWatcher extends EventEmitter {
           this.lastCompleteId = ''
         }
         break
-      case 'share':
-        this.emit('share', parsed.event)
+      case 'identity':
+        this.localGeid = parsed.geid
         break
+      case 'share': {
+        const e = parsed.event
+        if (e.kind === 'left' && this.localGeid) {
+          this.emit('share', { ...e, isLocal: e.actorId === this.localGeid })
+        } else {
+          this.emit('share', e)
+        }
+        break
+      }
     }
   }
 }

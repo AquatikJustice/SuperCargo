@@ -24,12 +24,15 @@ const PATTERN_END_MISSION =
 const PATTERN_COMPLETE =
   /Added notification "Contract Complete:\s*.*?"\s*\[[^\]]*\].*?MissionId: \[([^\]]+)\]/
 const PATTERN_AWARD = /Added notification "Awarded\s+([\d,]+)\s+aUEC/
+// who am I; PlayerLeft carries a geid and only the local one means the contract is gone
+const PATTERN_IDENTITY = /<AccountLoginCharacterStatus_Character>.*?\bgeid (\d+)\b.*?\bname (\S+)/
 // shared = owner id only; joined/left = players on your contract
 const PATTERN_SHARED = /<MissionShared>.*ownerId\[([^\]]+)\].*missionId\[([^\]]+)\]/
 const PATTERN_JOINED = /<PlayerJoined>.*mission_id\s+([0-9a-f-]+)\s+-\s+player_id\s+(\d+)/
 const PATTERN_LEFT = /<PlayerLeft>.*mission_id\s+([0-9a-f-]+)\s+-\s+player_id\s+(\d+)/
 
 export type ParsedLine =
+  | { kind: 'identity'; geid: string; handle: string }
   | { kind: 'marker'; missionId: string; generator: string; contractName: string; defId?: string }
   | { kind: 'accepted'; event: ContractAcceptedEvent; isHauling: boolean }
   | { kind: 'objective'; event: ObjectiveEvent }
@@ -56,6 +59,10 @@ export interface MarkerEntry {
 // mutates the markers map
 export function parseLine(line: string, markers: Map<string, MarkerEntry>): ParsedLine {
   let match: RegExpExecArray | null
+
+  if ((match = PATTERN_IDENTITY.exec(line))) {
+    return { kind: 'identity', geid: match[1], handle: match[2] }
+  }
 
   if ((match = PATTERN_MARKER.exec(line))) {
     const [, missionId, generator, contractName] = match

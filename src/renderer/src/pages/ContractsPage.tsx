@@ -140,7 +140,7 @@ export default function ContractsPage(): React.ReactElement {
                         {c.blueprint && <BlueprintBadge />}
                         {c.lastPickupOnly && <PickupBugBadge />}
                         {c.sharedWithMe ? (
-                          <ShareBadge label="SHARED WITH YOU" />
+                          <ShareBadge label={c.sharerLeft ? 'SHARED · SHARER LEFT' : 'SHARED WITH YOU'} />
                         ) : c.sharedWith.length ? (
                           <ShareBadge label={`SHARED · ${c.sharedWith.length} joined`} />
                         ) : null}

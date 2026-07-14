@@ -99,6 +99,8 @@ export interface DerivedContract {
   dataSource: DataSource
   sharedWithMe: boolean
   sharedWith: string[]
+  /** the sharer left; still shared-with-me but the reward no longer splits */
+  sharerLeft: boolean
   generator?: string
   /** pickup-bug collapse active on the contract */
   lastPickupOnly: boolean
@@ -414,6 +416,7 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       dataSource: c.dataSource,
       sharedWithMe: !!c.sharedWithMe,
       sharedWith: c.sharedWith ?? [],
+      sharerLeft: !!c.sharerLeft,
       generator: c.generator,
       lastPickupOnly: !!c.lastPickupOnly,
       multiPickup: c.objectives.some((o) => (o.pickups?.length ?? 0) > 1 || (o.originalPickups?.length ?? 0) > 1)
@@ -470,9 +473,9 @@ export function deriveTotals(stops: Stop[], contracts: HaulingContract[]): Manif
 }
 
 /** heads sharing an evenly-split reward; 1 = not shared */
-export function shareSplit(c: Pick<HaulingContract, 'sharedWith' | 'sharedWithMe'>): number {
+export function shareSplit(c: Pick<HaulingContract, 'sharedWith' | 'sharedWithMe' | 'sharerLeft'>): number {
   if (c.sharedWith && c.sharedWith.length) return 1 + c.sharedWith.length
-  return c.sharedWithMe ? 2 : 1
+  return c.sharedWithMe && !c.sharerLeft ? 2 : 1
 }
 
 export function toHistoryEntry(

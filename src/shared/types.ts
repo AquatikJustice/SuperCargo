@@ -79,6 +79,8 @@ export interface HaulingContract {
   sharedWith?: string[]
   /** curated once (OCR review/manual); game re-logs objectives so we stop appending after, avoids phantom dupes */
   objectivesSettled?: boolean
+  /** the player who shared this contract left it; mission survives and the reward stops splitting */
+  sharerLeft?: boolean
   /** log generator name, e.g. "Covalex_Hauling" */
   generator?: string
   /** mission template, e.g. "HaulCargo_SingleToMulti3_..." */
@@ -461,6 +463,8 @@ export interface ShareEvent {
   kind: 'shared' | 'joined' | 'left'
   /** owner id (shared) or the other player's id (joined/left); log gives no name */
   actorId: string
+  /** left only: actor is the local player; undefined when the local geid wasn't seen */
+  isLocal?: boolean
 }
 
 export interface UexSyncResult {
@@ -569,6 +573,8 @@ export interface ScanShare {
   missionId: string
   sharedWithMe: boolean
   sharedWith: string[]
+  /** the sharer dropped off this mission; your cut is no longer split */
+  ownerLeft?: boolean
 }
 
 export interface SessionScan {
