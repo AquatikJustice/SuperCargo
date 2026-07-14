@@ -20,6 +20,8 @@ export interface StopItem {
   turnedInScu?: number
   /** loads elsewhere than contract pickup */
   pickups?: string[]
+  /** cargo collected, turn-in unlocked */
+  pickedUp?: boolean
 }
 
 export interface PickupItem {
@@ -79,6 +81,8 @@ export interface DerivedContractObjective {
   turnedInScu?: number
   /** loads elsewhere than contract pickup */
   pickups?: string[]
+  /** cargo collected, turn-in unlocked */
+  pickedUp: boolean
 }
 
 export interface DerivedContract {
@@ -149,7 +153,8 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
           boxCount: boxCount(o.boxes),
           delivered: o.delivered,
           turnedInScu: o.turnedInScu,
-          pickups: o.pickups
+          pickups: o.pickups,
+          pickedUp: (o.pickedUpAt?.length ?? 0) > 0
         })
       }
     }
@@ -329,7 +334,8 @@ export function deriveRouteStops(
         boxCount: boxes.length,
         delivered: f.o.delivered,
         turnedInScu: f.o.turnedInScu,
-        pickups: f.o.pickups
+        pickups: f.o.pickups,
+        pickedUp: (f.o.pickedUpAt?.length ?? 0) > 0
       })
     }
     const pickups: PickupItem[] = []
@@ -465,7 +471,8 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
         delivered: o.delivered,
         deliveredScu: o.deliveredScu,
         turnedInScu: o.turnedInScu,
-        pickups: o.pickups
+        pickups: o.pickups,
+        pickedUp: (o.pickedUpAt?.length ?? 0) > 0
       }
     })
     return {

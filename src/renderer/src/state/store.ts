@@ -315,6 +315,7 @@ interface StoreState {
   unmarkTurnIn: (objectiveIds: string[]) => void
   setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
   clearAllPickedUp: () => void
+  resetRoute: () => void
   dismissNotice: () => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
   /** override the box breakdown the game actually gave you; sums to the new scu */
@@ -1310,9 +1311,9 @@ export const useStore = create<StoreState>((set, get) => {
         )
         if (keep.length !== Object.keys(pins).length) set({ loadedPins: Object.fromEntries(keep) })
       } else {
-        // you're where you loaded; drop the trip suffix
+        // you're where you loaded; drop the trip suffix ('manual' = no routed stop, position unknown)
         const nk = pickupKey.includes('#') ? pickupKey.slice(0, pickupKey.lastIndexOf('#')) : pickupKey
-        if (nk && nk !== get().currentLocation) set({ currentLocation: nk })
+        if (nk && nk !== 'manual' && nk !== get().currentLocation) set({ currentLocation: nk })
       }
       commit(updated)
       // un-ticked cargo the plan thought aboard needs its pickup routed again
@@ -1352,6 +1353,36 @@ export const useStore = create<StoreState>((set, get) => {
           : c
       )
       if (updated.some((c, i) => c !== get().contracts[i])) commit(updated)
+    },
+
+    resetRoute: () => {
+      // back to just-accepted: no walk, no progress marks, auto order from the start point
+      const updated = get().contracts.map((c) =>
+        c.objectives.some((o) => o.pickedUpAt?.length || o.turnedInScu !== undefined)
+          ? {
+              ...c,
+              objectives: c.objectives.map((o) =>
+                o.pickedUpAt?.length || o.turnedInScu !== undefined ? { ...o, pickedUpAt: [], turnedInScu: undefined } : o
+              )
+            }
+          : c
+      )
+      set({
+        loadingActive: false,
+        loadingSteps: null,
+        loadingBoxes: null,
+        loadingIdx: 0,
+        loadedPins: {},
+        looseBoxes: [],
+        looseSpots: {},
+        looseAt: {},
+        deferredObjectives: [],
+        grabbedObjectives: [],
+        isRouteAuto: true,
+        currentLocation: ''
+      })
+      commit(updated)
+      scheduleReroute()
     },
 
     unmarkTurnIn: (objectiveIds) => {

@@ -5,7 +5,7 @@ import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS } from '@shared/box'
 import { sharedCut } from '@shared/payout'
 import { contractParty } from '@shared/contract'
-import { deriveContracts, shareSplit } from '../state/manifest'
+import { deriveContracts, pickupVisitKey, shareSplit } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, HoverDiv } from '../components/ui'
 import TurnInModal from '../components/TurnInModal'
@@ -14,7 +14,7 @@ import Typeahead from '../components/Typeahead'
 
 const COLS = '1fr 160px 130px 110px 96px 28px'
 // long names ellipsize, not widen
-const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px 26px'
+const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px 84px 26px'
 
 const statusColor: Record<string, string> = {
   active: C.green,
@@ -38,6 +38,8 @@ export default function ContractsPage(): React.ReactElement {
   const setLastPickupOnly = useStore((s) => s.setLastPickupOnly)
   const editObjective = useStore((s) => s.editObjective)
   const deleteObjective = useStore((s) => s.deleteObjective)
+  const route = useStore((s) => s.route)
+  const setPickedUp = useStore((s) => s.setPickedUp)
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
   // hide until ocr capture resolves
@@ -53,6 +55,19 @@ export default function ContractsPage(): React.ReactElement {
     const c = contracts.find((c) => c.id === contractId)
     const o = c?.objectives.find((o) => o.id === objectiveId)
     if (c && o) setEditBoxes({ contractId, objectiveId, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
+  }
+
+  // ticking here covers every routed pickup visit for the objective at once
+  const togglePickedUp = (contractId: string, objectiveId: string, picked: boolean): void => {
+    if (picked) {
+      const keys = (route?.steps ?? [])
+        .filter((s) => s.loadRefs.some((r) => r.objectiveId === objectiveId))
+        .map((s) => pickupVisitKey(s.nodeKey, s.trip))
+      for (const k of keys.length ? keys : ['manual#0']) setPickedUp(contractId, objectiveId, k, true)
+    } else {
+      const o = contracts.find((c) => c.id === contractId)?.objectives.find((o) => o.id === objectiveId)
+      for (const k of o?.pickedUpAt ?? []) setPickedUp(contractId, objectiveId, k, false)
+    }
   }
 
   return (
@@ -233,6 +248,7 @@ export default function ContractsPage(): React.ReactElement {
                         { h: 'BOX BREAKDOWN', align: 'left' },
                         { h: 'COUNT', align: 'right' },
                         { h: '', align: 'left' },
+                        { h: '', align: 'left' },
                         { h: '', align: 'left' }
                       ].map((c, i) => (
                         <span key={i} style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.18em', color: C.faint, textAlign: c.align as 'left' | 'right' }}>
@@ -248,8 +264,8 @@ export default function ContractsPage(): React.ReactElement {
                     {c.objectives.map((o) => {
                       const ti = o.turnedInScu
                       const isTurnedIn = ti !== undefined
-                      // color tracks turn-in fullness
-                      const tiColor = ti === undefined ? C.textBody : ti >= o.scu ? C.green : ti <= 0 ? C.red : C.amber
+                      // dim until picked up, lit while aboard, then color tracks turn-in fullness
+                      const tiColor = ti === undefined ? (o.pickedUp ? C.amber : C.dim) : ti >= o.scu ? C.green : ti <= 0 ? C.red : C.amber
                       return (
                         <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
                           <span style={{ fontFamily: F.display, fontSize: 15, color: tiColor, textShadow: isTurnedIn ? GLOW : 'none' }}>
@@ -278,6 +294,14 @@ export default function ContractsPage(): React.ReactElement {
                             {o.boxStr || '-'}
                           </span>
                           <span style={{ fontFamily: F.mono, fontSize: 12, color: isTurnedIn ? tiColor : C.dim, textAlign: 'right' }}>{o.boxCount} box</span>
+                          <Btn
+                            onClick={() => togglePickedUp(c.id, o.objectiveId, !o.pickedUp)}
+                            title={o.pickedUp ? 'Uncheck this pickup' : 'Check off this cargo as collected'}
+                            style={{ border: `1px solid ${o.pickedUp ? C.dim : C.green}`, background: 'transparent', color: o.pickedUp ? C.dim : C.green, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', padding: '5px 0', cursor: 'pointer', textAlign: 'center' }}
+                            hoverStyle={{ background: o.pickedUp ? 'rgba(255,255,255,0.06)' : 'rgba(95,208,137,0.10)', textShadow: GLOW }}
+                          >
+                            {o.pickedUp ? '✓ PICKED UP' : 'PICK UP'}
+                          </Btn>
                           <Btn
                             onClick={() => setEditTurnIn({ contractId: c.id, objectiveId: o.objectiveId, commodity: o.commodity, destination: o.destination, scu: o.scu, boxStr: o.boxStr, ref: c.ref, turnedInScu: ti })}
                             title={isTurnedIn ? `Turned in: ${ti >= o.scu ? 'full' : ti <= 0 ? 'none' : `${ti} SCU`}` : 'Record what you handed over'}

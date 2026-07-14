@@ -388,10 +388,12 @@ function ByDestination({
         >
           <StopHeader stop={stop} offCount={stop.items.reduce((n, it) => n + (offGrid.get(it.objectiveId)?.count ?? 0), 0)} />
           {!stop.pickupOnly && stop.items.map((item) => {
-            // color tracks turn-in fullness
+            // dim until picked up, lit while aboard, then color tracks turn-in fullness
             const tiColor =
               item.turnedInScu === undefined
-                ? C.amber
+                ? item.pickedUp
+                  ? C.amber
+                  : C.dim
                 : item.turnedInScu >= item.scu
                   ? C.green
                   : item.turnedInScu <= 0

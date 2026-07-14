@@ -1181,6 +1181,8 @@ export default function CargoGridPage(): React.ReactElement {
   }, [grids, offGridBay])
   const [dropNotice, setDropNotice] = useState<string | null>(null)
   const [shelfOpen, setShelfOpen] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const resetRoute = useStore((s) => s.resetRoute)
   useEffect(() => {
     if (!dropNotice) return
     const t = setTimeout(() => setDropNotice(null), 5000)
@@ -2324,6 +2326,38 @@ export default function CargoGridPage(): React.ReactElement {
               />
             )}
           </div>
+        )}
+        {loading && (
+          <Btn
+            onClick={() => {
+              if (!confirmReset) {
+                setConfirmReset(true)
+                return
+              }
+              setConfirmReset(false)
+              resetRoute()
+            }}
+            onMouseLeave={() => setConfirmReset(false)}
+            title="Wipe all pickups, turn-ins and manual ordering, then re-solve the route from scratch"
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 108,
+              zIndex: 4,
+              border: `1px solid ${confirmReset ? C.red : 'rgba(236,116,112,0.55)'}`,
+              background: confirmReset ? 'rgba(236,116,112,0.16)' : 'rgba(8,12,16,0.82)',
+              color: C.red,
+              fontFamily: F.display,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              padding: '6px 12px',
+              cursor: 'pointer'
+            }}
+            hoverStyle={{ border: `1px solid ${C.red}`, background: 'rgba(236,116,112,0.10)' }}
+          >
+            {confirmReset ? 'CONFIRM · RESET' : 'RESET ROUTE'}
+          </Btn>
         )}
         {loading && (
           <Btn
