@@ -60,6 +60,8 @@ export interface Stop {
   start?: boolean
   /** node key, for reordering */
   nodeKey?: string
+  /** already collected; kept on the board so restarts don't erase history */
+  done?: boolean
 }
 
 export interface DerivedContractObjective {
@@ -392,6 +394,57 @@ export function deriveRouteStops(
       pickupOnly,
       // only the true first stop is pinned; a return to the start is an ordinary draggable visit
       start: out.length === 0 && step.nodeKey === 'depot'
+    })
+  }
+
+  // aboard cargo gets no pickup step from the solver; keep its stop visible as history
+  const routed = new Set<string>()
+  for (const step of route.steps) for (const r of step.loadRefs) routed.add(r.objectiveId)
+  const doneStops = new Map<string, Stop>()
+  for (const { c, o } of byObjective.values()) {
+    if (!o.pickedUpAt?.length || o.delivered || o.turnedInScu !== undefined || routed.has(o.id)) continue
+    const at = o.pickups?.length ? o.pickups[o.pickups.length - 1] : c.pickup
+    if (!at) continue
+    let stop = doneStops.get(normLoc(at))
+    if (!stop) {
+      const split = splitDestination(at)
+      stop = {
+        destination: at,
+        idx: 0,
+        n: '✓',
+        code: split.code,
+        name: split.name || at,
+        region: split.region,
+        color: '#5fd089',
+        items: [],
+        totSCU: 0,
+        totBoxes: 0,
+        totContracts: 0,
+        pickups: [],
+        pickupOnly: true,
+        done: true
+      }
+      doneStops.set(normLoc(at), stop)
+    }
+    const boxes = boxList(o.boxes)
+    stop.pickups!.push({
+      objectiveId: o.id,
+      contractId: c.id,
+      ref: c.ref,
+      commodity: o.commodity,
+      scu: o.scuAmount,
+      boxStr: listBreakdown(boxes),
+      boxCount: boxes.length,
+      destination: o.destination,
+      split: (o.pickups?.length ?? 0) > 1,
+      pickupKey: o.pickedUpAt[o.pickedUpAt.length - 1],
+      picked: true
+    })
+  }
+  if (doneStops.size) {
+    out.unshift(...doneStops.values())
+    out.forEach((s, i) => {
+      s.idx = i
     })
   }
   return out

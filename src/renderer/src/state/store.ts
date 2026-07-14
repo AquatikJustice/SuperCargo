@@ -1315,6 +1315,10 @@ export const useStore = create<StoreState>((set, get) => {
         if (nk && nk !== get().currentLocation) set({ currentLocation: nk })
       }
       commit(updated)
+      // un-ticked cargo the plan thought aboard needs its pickup routed again
+      if (!picked && !get().route?.steps.some((s) => s.loadRefs.some((r) => r.objectiveId === objectiveId))) {
+        scheduleReroute()
+      }
     },
 
     addLoadedPins: (pins) => {

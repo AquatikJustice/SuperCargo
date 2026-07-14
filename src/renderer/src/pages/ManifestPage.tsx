@@ -78,7 +78,7 @@ export default function ManifestPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING }}>
       <PageHeader
         title="CARGO MANIFEST"
-        subtitle={`${totals.contracts} active contracts · ${stops.length} stops`}
+        subtitle={`${totals.contracts} active contracts · ${stops.filter((s) => !s.done).length} stops`}
         right={<GroupToggle groupBy={groupBy} setGroupBy={setGroupBy} />}
       />
 
@@ -94,7 +94,7 @@ export default function ManifestPage(): React.ReactElement {
       >
         <SummaryStat label="TOTAL SCU" value={fmt(totals.scu)} first />
         <SummaryStat label="BOXES" value={fmt(totals.boxes)} />
-        <SummaryStat label="STOPS" value={String(stops.length)} />
+        <SummaryStat label="STOPS" value={String(stops.filter((s) => !s.done).length)} />
         <SummaryStat label="DISTANCE" value={route ? fmtDistance(route.totalDistance) : 'N/A'} />
         <div style={{ flex: 1, minWidth: 240, padding: '16px 0 16px 34px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <LoadBar current={aboard} peak={peak} capacity={capMax} reserved={reserved} />
@@ -351,9 +351,9 @@ function ByDestination({
       {stops.map((stop) => (
         <div
           key={`${stop.idx}-${stop.pickupOnly ? 'p' : 'd'}-${stop.destination}`}
-          draggable={!stop.start}
+          draggable={!stop.start && !stop.done}
           onDragStart={(e) => {
-            if (stop.start) return
+            if (stop.start || stop.done) return
             setDragIdx(stop.idx)
             try {
               e.dataTransfer.effectAllowed = 'move'
@@ -362,13 +362,13 @@ function ByDestination({
             }
           }}
           onDragOver={(e) => {
-            if (stop.start) return
+            if (stop.start || stop.done) return
             e.preventDefault()
             if (overIdx !== stop.idx) setOverIdx(stop.idx)
           }}
           onDragLeave={() => setOverIdx((v) => (v === stop.idx ? null : v))}
           onDrop={(e) => {
-            if (stop.start) return
+            if (stop.start || stop.done) return
             e.preventDefault()
             const fromKey = dragIdx !== null ? stops[dragIdx]?.nodeKey : undefined
             if (fromKey && stop.nodeKey && fromKey !== stop.nodeKey) reorderStops(fromKey, stop.nodeKey)
@@ -381,7 +381,7 @@ function ByDestination({
           }}
           style={{
             marginBottom: 16,
-            opacity: dragIdx === stop.idx ? 0.45 : 1,
+            opacity: stop.done ? 0.6 : dragIdx === stop.idx ? 0.45 : 1,
             outline: overIdx === stop.idx && dragIdx !== stop.idx ? `1px solid ${C.accBorder}` : 'none',
             outlineOffset: 6
           }}
@@ -557,7 +557,11 @@ function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): 
   const external = stop.hasElevator ?? loc?.hasElevator
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 12, borderBottom: `1px solid ${C.lineStrong}` }}>
-      {stop.start ? (
+      {stop.done ? (
+        <div style={{ color: C.green, display: 'flex', flex: 'none', fontSize: 16, lineHeight: 1 }} title="Cargo collected here, riding along">
+          ✓
+        </div>
+      ) : stop.start ? (
         <div style={{ color: C.acc, display: 'flex', flex: 'none', fontSize: 19, lineHeight: 1 }} title="Starting location">
           ▸
         </div>
@@ -583,6 +587,23 @@ function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): 
       >
         {stop.destination || stop.name}
       </span>
+      {stop.done && (
+        <span
+          style={{
+            flex: 'none',
+            color: C.green,
+            border: '1px solid rgba(95,208,137,0.5)',
+            background: 'rgba(95,208,137,0.10)',
+            padding: '3px 8px',
+            fontFamily: F.display,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.14em'
+          }}
+        >
+          PICKED UP
+        </span>
+      )}
       {offCount > 0 && <OffGridBadge variant="rollup" count={offCount} />}
       <ElevatorBadge external={external} />
     </div>
