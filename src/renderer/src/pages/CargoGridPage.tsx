@@ -1152,9 +1152,12 @@ export default function CargoGridPage(): React.ReactElement {
   // if it fits, a return-visit pickup just joins the stop; card only asks when the stack would get ugly
   const grabbedOnce = useRef('')
   const [grabAsk, setGrabAsk] = useState(false)
+  // boxes the grab can't seat on the grid; accepting sends exactly these off grid
+  const [grabOverflow, setGrabOverflow] = useState<{ keys: string[]; count: number; scu: number } | null>(null)
   useEffect(() => {
     grabbedOnce.current = ''
     setGrabAsk(false)
+    setGrabOverflow(null)
   }, [loadIdx])
   const currentObjIds = useMemo(
     () => new Set([...(currentLoad?.loadIds ?? []), ...(currentLoad?.dropIds ?? [])]),
@@ -1255,9 +1258,18 @@ export default function CargoGridPage(): React.ReactElement {
     })
     const base = new Set<string>()
     for (const s of loadingPack.snaps) for (const u of s.unplaced) base.add(u.id)
-    // volume fits but the stack doesn't seat it: no card
-    for (const s of probe.snaps) for (const u of s.unplaced) if (!base.has(u.id)) return
-    if (probe.concessions.length > loadingPack.conc) setGrabAsk(true)
+    // grid can't seat it all: offer anyway, with the honest off-grid count (per-bucket overload call)
+    const over = new Map<string, PackBox>()
+    for (const s of probe.snaps) for (const u of s.unplaced) if (!base.has(u.id)) over.set(u.id, u)
+    if (over.size) {
+      const boxes = [...over.values()]
+      setGrabOverflow({
+        keys: boxes.map((b) => boxKey(b)),
+        count: boxes.length,
+        scu: boxes.reduce((a, b) => a + b.size, 0)
+      })
+      setGrabAsk(true)
+    } else if (probe.concessions.length > loadingPack.conc) setGrabAsk(true)
     else grabOffer.ids.forEach((id) => setObjectiveGrabbed(id, true))
   }, [loading, grabOffer, loadingPack, frozenSteps, drag, loadIdx, deferredObjectives, tickedObj, grabbedObjectives, grids, fixtures, setObjectiveGrabbed])
 
@@ -2172,10 +2184,32 @@ export default function CargoGridPage(): React.ReactElement {
                 ids.forEach((id) => setObjectiveDeferred(id, true))
                 if (shift) setLoadIdx((i) => Math.max(0, i - shift))
               }}
-              grab={grabAsk && grabOffer ? { scu: grabOffer.scu, count: grabOffer.count, stepNo: grabOffer.stepNo } : null}
-              onGrab={() => grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))}
+              grab={
+                grabAsk && grabOffer
+                  ? {
+                      scu: grabOffer.scu,
+                      count: grabOffer.count,
+                      stepNo: grabOffer.stepNo,
+                      offGrid: grabOverflow ? { count: grabOverflow.count, scu: grabOverflow.scu } : null
+                    }
+                  : null
+              }
+              onGrab={() => {
+                grabOffer?.ids.forEach((id) => setObjectiveGrabbed(id, true))
+                if (grabOverflow) {
+                  const at = currentLoad?.kind === 'load' ? pickupVisitKey(currentLoad.nodeKey, currentLoad.trip) : undefined
+                  for (const key of grabOverflow.keys) {
+                    if (loadedPins[key]) clearLoadedPin(key)
+                    setBoxLoose(key, true, at)
+                  }
+                }
+              }}
               grabbedHere={currentLoad?.kind === 'load' ? currentLoad.loadIds.filter((id) => grabbedObjectives.includes(id)) : []}
-              onUngrab={(ids) => ids.forEach((id) => setObjectiveGrabbed(id, false))}
+              onUngrab={(ids) => {
+                ids.forEach((id) => setObjectiveGrabbed(id, false))
+                // pull the grab's off-grid boxes back with it
+                for (const key of looseBoxes) if (ids.some((id) => key.startsWith(id + '#'))) setBoxLoose(key, false)
+              }}
               deferred={deferredLabels}
               onUndoDefer={(id) => setObjectiveDeferred(id, false)}
               capacity={result.capacity}
@@ -2806,7 +2840,7 @@ function LoadingPanel({
   onDecide: () => void
   onStashOffGrid: (boxes: PackBox[]) => void
   onComeBack: (objectiveIds: string[]) => void
-  grab: { scu: number; count: number; stepNo: number } | null
+  grab: { scu: number; count: number; stepNo: number; offGrid: { count: number; scu: number } | null } | null
   onGrab: () => void
   grabbedHere: string[]
   onUngrab: (ids: string[]) => void
@@ -3043,12 +3077,17 @@ function LoadingPanel({
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
             {grab.count} boxes / {grab.scu} SCU are set for a return at step {grab.stepNo}. Grab them now and skip that stop.
           </div>
+          {grab.offGrid && (
+            <div style={{ fontFamily: F.mono, fontSize: 11, color: '#ec7470', margin: '0 0 8px' }}>
+              the grid only seats part of it: {grab.offGrid.count} boxes / {grab.offGrid.scu} SCU go OFF GRID
+            </div>
+          )}
           <Btn
             onClick={onGrab}
             style={{ width: '100%', border: `1px solid ${C.amber}`, background: 'rgba(255,180,60,0.1)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: 8, cursor: 'pointer' }}
             hoverStyle={{ background: 'rgba(255,180,60,0.22)' }}
           >
-            GRAB IT NOW
+            {grab.offGrid ? 'GRAB IT NOW · EXTRAS OFF GRID' : 'GRAB IT NOW'}
           </Btn>
         </div>
       )}
