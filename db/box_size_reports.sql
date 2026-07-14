@@ -16,14 +16,14 @@ create table if not exists public.box_size_reports (
 
 alter table public.box_size_reports enable row level security;
 
--- anon inserts only, no read-back with the publishable key
-create policy "anon can insert box size reports"
+-- role-agnostic: the sb_publishable key does not authenticate as anon, a TO clause never matches
+create policy "clients can insert box size reports"
   on public.box_size_reports for insert
-  to anon
   with check (true);
 
 -- which contracts get corrected, and how often
-create view public.box_report_overview as
+-- security_invoker so the view can't bypass RLS: publishable key inserts but never reads back
+create view public.box_report_overview with (security_invoker = on) as
 select
   coalesce(nullif(contract_name, ''), title) as contract,
   generator,
@@ -37,7 +37,7 @@ group by 1, 2, 3, 4
 order by reports desc;
 
 -- per-commodity corrections, ready to turn into override entries
-create view public.box_report_corrections as
+create view public.box_report_corrections with (security_invoker = on) as
 select
   coalesce(nullif(r.contract_name, ''), r.title) as contract,
   r.generator,
