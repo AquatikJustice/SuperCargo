@@ -46,12 +46,13 @@ function rowFromOcr(o: OcrObjective): ObjRow {
 }
 
 function rowFromContract(o: DeliveryObjective): ObjRow {
+  const pickups = o.pickups?.filter((p) => p.trim())
   return {
     key: rowKey++,
     commodity: o.commodity,
     scuAmount: o.scuAmount,
     destination: o.destination,
-    pickups: o.pickups && o.pickups.length ? o.pickups : undefined
+    pickups: pickups && pickups.length ? pickups : undefined
   }
 }
 
@@ -130,26 +131,35 @@ export default function CaptureModal(): React.ReactElement | null {
     setTab('ocr')
     setContributed(false)
     const logged = target?.objectives ?? []
+    // last resort so the field isn't blank; the review is the place to correct it
+    const contractPickup = target?.pickup.trim()
+    const fillPickup = (row: ObjRow, read?: string[]): ObjRow => {
+      if (row.pickups?.length) return row
+      if (read?.length) return { ...row, pickups: read, ocrPickup: true }
+      return contractPickup ? { ...row, pickups: [contractPickup] } : row
+    }
     if (logged.length > 0) {
-      // cross-system: log only names the system, pull the station off the ocr read
       setRows(
         logged.map((o) => {
-          const row = rowFromContract(o)
-          if (!isSystemDestination(o.destination)) return row
+          let row = rowFromContract(o)
           // match by scu, the commodity read is often just a guess ("Rg Fuel")
           const sameScu = ocrResult.objectives.filter((x) => x.scuAmount === o.scuAmount)
           const named = o.commodity.trim().toLowerCase()
           const hit =
             sameScu.find((x) => (x.commodity.match ?? x.commodity.input).trim().toLowerCase() === named) ??
             (sameScu.length === 1 ? sameScu[0] : undefined)
-          if (!hit) return row
-          const d = seedField(hit.destination)
-          // an unmatched read must not blank the logged destination
-          return d.value ? { ...row, destination: d.value, ocrDestination: d.hint } : row
+          // cross-system: log only names the system, pull the station off the ocr read
+          if (hit && isSystemDestination(o.destination)) {
+            const d = seedField(hit.destination)
+            // an unmatched read must not blank the logged destination
+            if (d.value) row = { ...row, destination: d.value, ocrDestination: d.hint }
+          }
+          const read = hit?.pickups?.map((p) => p.match).filter((x): x is string => !!x)
+          return fillPickup(row, read)
         })
       )
     } else if (ocrResult.objectives.length > 0) {
-      setRows(ocrResult.objectives.map(rowFromOcr))
+      setRows(ocrResult.objectives.map(rowFromOcr).map((r) => fillPickup(r)))
     } else {
       setRawEdit(ocrResult.rawText)
     }
