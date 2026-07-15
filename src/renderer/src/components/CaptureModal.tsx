@@ -570,6 +570,11 @@ export default function CaptureModal(): React.ReactElement | null {
                     {pickups.length === 0 && (
                       <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint }}>uses contract pickup</span>
                     )}
+                    {target?.lastPickupOnly && pickups.filter((p) => p.trim()).length < 2 && (
+                      <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>
+                        bugged multi-pickup contract: add every pickup the game lists before confirming
+                      </span>
+                    )}
                   </div>
                 </div>
               )

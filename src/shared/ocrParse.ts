@@ -324,7 +324,10 @@ export function parseOcrText(rawText: string): ParsedOcr {
       .slice(1)
       .map((s) => normalizeDestination(trimDestinationTail(cleanFragment(cutSentence(s)))))
       .filter((s) => s.length >= 3 && !DEST_PROSE.test(s))
-    if (entries.length) for (const o of found) o.pickups = entries
+    // a half-read list must not shrink a fuller collect-line set
+    if (entries.length) {
+      for (const o of found) if (entries.length >= (o.pickups?.length ?? 0)) o.pickups = entries
+    }
   }
 
   let maxBoxSize: number | undefined
