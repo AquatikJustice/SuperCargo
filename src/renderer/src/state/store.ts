@@ -316,6 +316,7 @@ interface StoreState {
   unmarkTurnIn: (objectiveIds: string[]) => void
   setPickedUp: (contractId: string, objectiveId: string, pickupKey: string, picked: boolean) => void
   clearAllPickedUp: () => void
+  setSharerLeft: (id: string, v: boolean) => void
   resetRoute: () => void
   dismissNotice: () => void
   setObjectiveScu: (contractId: string, objectiveId: string, scuAmount: number) => void
@@ -1361,6 +1362,14 @@ export const useStore = create<StoreState>((set, get) => {
         c.objectives.some((o) => o.pickedUpAt?.length)
           ? { ...c, objectives: c.objectives.map((o) => (o.pickedUpAt?.length ? { ...o, pickedUpAt: [] } : o)) }
           : c
+      )
+      if (updated.some((c, i) => c !== get().contracts[i])) commit(updated)
+    },
+
+    // manual escape hatch: the abandon push is a single log line, easy for a closed app to miss
+    setSharerLeft: (id, v) => {
+      const updated = get().contracts.map((c) =>
+        c.id === id && c.sharedWithMe ? { ...c, sharerLeft: v || undefined } : c
       )
       if (updated.some((c, i) => c !== get().contracts[i])) commit(updated)
     },

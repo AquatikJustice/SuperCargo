@@ -40,6 +40,7 @@ export default function ContractsPage(): React.ReactElement {
   const deleteObjective = useStore((s) => s.deleteObjective)
   const route = useStore((s) => s.route)
   const setPickedUp = useStore((s) => s.setPickedUp)
+  const setSharerLeft = useStore((s) => s.setSharerLeft)
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
   // hide until ocr capture resolves
@@ -155,7 +156,15 @@ export default function ContractsPage(): React.ReactElement {
                         {c.blueprint && <BlueprintBadge />}
                         {c.lastPickupOnly && <PickupBugBadge />}
                         {c.sharedWithMe ? (
-                          <ShareBadge label={c.sharerLeft ? 'SHARED · SHARER LEFT' : 'SHARED WITH YOU'} />
+                          <ShareBadge
+                            label={c.sharerLeft ? 'SHARED · SHARER LEFT' : 'SHARED WITH YOU'}
+                            title={
+                              c.sharerLeft
+                                ? 'The sharer is off the contract; reward no longer splits. Click to undo.'
+                                : 'Click if the sharer abandoned or left while the app missed it; the reward stops splitting.'
+                            }
+                            onClick={() => setSharerLeft(c.id, !c.sharerLeft)}
+                          />
                         ) : c.sharedWith.length ? (
                           <ShareBadge label={`SHARED · ${c.sharedWith.length} joined`} />
                         ) : null}
@@ -803,10 +812,17 @@ function PickupBugBadge(): React.ReactElement {
   )
 }
 
-function ShareBadge({ label }: { label: string }): React.ReactElement {
+function ShareBadge({ label, title, onClick }: { label: string; title?: string; onClick?: () => void }): React.ReactElement {
   return (
     <span
-      title="Shared contract (from the game log)"
+      title={title ?? 'Shared contract (from the game log)'}
+      onClick={
+        onClick &&
+        ((e: React.MouseEvent) => {
+          e.stopPropagation()
+          onClick()
+        })
+      }
       style={{
         flex: 'none',
         display: 'inline-flex',
@@ -819,7 +835,8 @@ function ShareBadge({ label }: { label: string }): React.ReactElement {
         fontSize: 10,
         fontWeight: 600,
         letterSpacing: '0.14em',
-        padding: '2px 7px'
+        padding: '2px 7px',
+        cursor: onClick ? 'pointer' : 'default'
       }}
     >
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
