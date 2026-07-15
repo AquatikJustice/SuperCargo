@@ -29,6 +29,11 @@ const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\
 // never a commodity name
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
 const RE_COLLECT = /collect\s+(.+?)\s+from\s+(.+)/gi
+// the details-panel list is authoritative: slot order and LocationNAddress placeholders are the
+// broken-slot clues, and the objectives list papers over them
+const RE_PICKUP_LIST =
+  /pick\s*-?\s*up\s+locations?\s*(?:\([^)]*\))?\s*:?\s*([\s\S]*?)(?=drop\s*-?\s*off\s+location|primary\s+objectives|reputation\s+awarded|by\s+the\s+way|and\s+don|thanks\s+in|contract\s+deadline|reward\b|$)/i
+const RE_LIST_SPLIT = /[-•·]?\s*(?:freight\s+)?\w{0,2}levator\s+at\s+/i
 
 // box-size wording, most specific first
 const BOX_PATTERNS = [
@@ -310,6 +315,16 @@ export function parseOcrText(rawText: string): ParsedOcr {
   const allPickups = [...pickupsByCommodity.values()].flat()
   if (allPickups.length && allPickups.every((p) => p.toLowerCase() === allPickups[0].toLowerCase())) {
     for (const o of found) if (!o.pickups?.length) o.pickups = [allPickups[0]]
+  }
+  // details-panel list beats the collect lines; dups and placeholders kept, they are the clues
+  const list = RE_PICKUP_LIST.exec(inlineText)
+  if (list) {
+    const entries = list[1]
+      .split(RE_LIST_SPLIT)
+      .slice(1)
+      .map((s) => normalizeDestination(trimDestinationTail(cleanFragment(cutSentence(s)))))
+      .filter((s) => s.length >= 3 && !DEST_PROSE.test(s))
+    if (entries.length) for (const o of found) o.pickups = entries
   }
 
   let maxBoxSize: number | undefined

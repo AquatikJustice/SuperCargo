@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
-import { isSystemDestination } from '@shared/contract'
+import { isBrokenSlotToken, isSystemDestination } from '@shared/contract'
 import type { DeliveryObjective, MatchResult, OcrObjective, OcrEditTally } from '@shared/types'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
@@ -29,8 +29,11 @@ function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
 }
 
+const pickupValue = (p: MatchResult): string | null =>
+  p.match ?? (isBrokenSlotToken(p.input) ? p.input : null)
+
 function rowFromOcr(o: OcrObjective): ObjRow {
-  const pickups = o.pickups?.map((p) => p.match).filter((x): x is string => !!x)
+  const pickups = o.pickups?.map(pickupValue).filter((x): x is string => !!x)
   const commodity = seedField(o.commodity)
   const destination = seedField(o.destination)
   return {
@@ -131,12 +134,10 @@ export default function CaptureModal(): React.ReactElement | null {
     setTab('ocr')
     setContributed(false)
     const logged = target?.objectives ?? []
-    // last resort so the field isn't blank; the review is the place to correct it
-    const contractPickup = target?.pickup.trim()
+    // panel reads only; the title is StarStrings-edited and never trusted for pickups
     const fillPickup = (row: ObjRow, read?: string[]): ObjRow => {
       if (row.pickups?.length) return row
-      if (read?.length) return { ...row, pickups: read, ocrPickup: true }
-      return contractPickup ? { ...row, pickups: [contractPickup] } : row
+      return read?.length ? { ...row, pickups: read, ocrPickup: true } : row
     }
     if (logged.length > 0) {
       setRows(
@@ -154,12 +155,12 @@ export default function CaptureModal(): React.ReactElement | null {
             // an unmatched read must not blank the logged destination
             if (d.value) row = { ...row, destination: d.value, ocrDestination: d.hint }
           }
-          const read = hit?.pickups?.map((p) => p.match).filter((x): x is string => !!x)
+          const read = hit?.pickups?.map(pickupValue).filter((x): x is string => !!x)
           return fillPickup(row, read)
         })
       )
     } else if (ocrResult.objectives.length > 0) {
-      setRows(ocrResult.objectives.map(rowFromOcr).map((r) => fillPickup(r)))
+      setRows(ocrResult.objectives.map(rowFromOcr))
     } else {
       setRawEdit(ocrResult.rawText)
     }

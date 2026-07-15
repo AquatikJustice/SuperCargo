@@ -21,6 +21,11 @@ export function collapseLastPickup(o: DeliveryObjective): DeliveryObjective {
 const BROKEN_SLOT_LOCATION = 'Nyx Gateway (Pyro)'
 const PLACEHOLDER_RE = /^(?:location|destination)\s*\d*\s*address\s*\d*$/i
 
+/** broken-slot tokens survive parse and review verbatim, the collapse reads them */
+export function isBrokenSlotToken(s: string): boolean {
+  return PLACEHOLDER_RE.test(s.trim())
+}
+
 export function resolveBrokenPickups(o: DeliveryObjective): DeliveryObjective {
   if (!o.pickups || o.pickups.length < 2) return o
   const seen = new Set<string>()
