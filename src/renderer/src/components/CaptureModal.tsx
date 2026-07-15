@@ -24,12 +24,13 @@ const newRow = (): ObjRow => ({ key: rowKey++, commodity: '', scuAmount: 0, dest
 
 function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   const guess = !m.match && m.suggestions.length > 0
-  const value = m.match ?? (guess ? m.suggestions[0] : m.input)
+  // never seed off-roster text; an unmatched read stays visible in the hint line only
+  const value = m.match ?? (guess ? m.suggestions[0] : '')
   return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
 }
 
 function rowFromOcr(o: OcrObjective): ObjRow {
-  const pickups = o.pickups?.map((p) => p.match ?? p.input).filter(Boolean)
+  const pickups = o.pickups?.map((p) => p.match).filter((x): x is string => !!x)
   const commodity = seedField(o.commodity)
   const destination = seedField(o.destination)
   return {
@@ -143,7 +144,8 @@ export default function CaptureModal(): React.ReactElement | null {
             (sameScu.length === 1 ? sameScu[0] : undefined)
           if (!hit) return row
           const d = seedField(hit.destination)
-          return { ...row, destination: d.value, ocrDestination: d.hint }
+          // an unmatched read must not blank the logged destination
+          return d.value ? { ...row, destination: d.value, ocrDestination: d.hint } : row
         })
       )
     } else if (ocrResult.objectives.length > 0) {
@@ -197,7 +199,13 @@ export default function CaptureModal(): React.ReactElement | null {
     mutPickups(key, (ps) => ps.filter((_, j) => j !== i))
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
-  const canSubmit = validRows.length > 0
+  // half-filled rows (e.g. ocr couldn't read the count) block submit instead of silently dropping
+  const incompleteRows = rows.filter(
+    (r) =>
+      (r.commodity.trim() || r.destination.trim() || r.scuAmount > 0) &&
+      !(r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
+  )
+  const canSubmit = validRows.length > 0 && incompleteRows.length === 0
 
   // every field ocr attempted counts; a touched one is a miss, nothing touched = 100%
   const reportOcrAccuracy = (): void => {
@@ -474,13 +482,25 @@ export default function CaptureModal(): React.ReactElement | null {
                       />
                       {r.ocrCommodity && <OcrHint hint={r.ocrCommodity} />}
                     </div>
-                    <input
-                      style={{ ...inputStyle, borderBottom: 0, fontFamily: F.mono, textAlign: 'right' }}
-                      placeholder="0"
-                      inputMode="numeric"
-                      value={r.scuAmount || ''}
-                      onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
-                    />
+                    <div>
+                      <input
+                        style={{
+                          ...inputStyle,
+                          borderBottom: (r.commodity.trim() || r.destination.trim()) && r.scuAmount <= 0 ? `1px solid ${C.red}` : 0,
+                          fontFamily: F.mono,
+                          textAlign: 'right'
+                        }}
+                        placeholder="0"
+                        inputMode="numeric"
+                        value={r.scuAmount || ''}
+                        onChange={(e) => update(r.key, { scuAmount: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
+                      />
+                      {(r.commodity.trim() || r.destination.trim()) && r.scuAmount <= 0 && (
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.red, marginTop: 3, textAlign: 'right' }}>
+                          not read
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <Typeahead
                         value={r.destination}
@@ -556,7 +576,12 @@ export default function CaptureModal(): React.ReactElement | null {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '16px 20px', borderTop: `1px solid ${C.lineStrong}` }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, padding: '16px 20px', borderTop: `1px solid ${C.lineStrong}` }}>
+          {!calibrating && !isContributeMode && showEditor && incompleteRows.length > 0 && (
+            <span style={{ fontFamily: F.body, fontSize: 12, color: C.red, marginRight: 'auto' }}>
+              finish or remove the incomplete objective first
+            </span>
+          )}
           {calibrating ? (
             <Btn
               onClick={() => setCalibrating(false)}

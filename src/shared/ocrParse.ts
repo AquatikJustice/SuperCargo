@@ -20,6 +20,8 @@ export interface ParsedOcr {
 const FRAC = '[\\/71|lI]'
 // group 1 is the total, not the done count
 const RE_DELIVER_TO = new RegExp(`deliver\\s+\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\s+of\\s+(.+?)\\s+to\\s+([^.\\n]+)`, 'gi')
+// glare can eat the count outright ("Deliver     SCU of Waste to Endgame"); keep the objective, scu 0 = fill in review
+const RE_DELIVER_NOAMT = /deliver\b[^a-z0-9\n]*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
 const RE_DELIVERED_TO = /(\d+)\s*scu\s+of\s+(.+?)\s+delivered\s+to\s+([^.\n]+)/gi
 const RE_GENERIC = /(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
 // commodity is the line above
@@ -240,10 +242,10 @@ export function parseOcrText(rawText: string): ParsedOcr {
   const found: RawObjective[] = []
   const seen = new Set<string>()
 
-  const add = (commodityRaw: string, scuAmount: number, destinationRaw: string): void => {
+  const add = (commodityRaw: string, scuAmount: number, destinationRaw: string, allowZero = false): void => {
     const commodity = cleanFragment(commodityRaw)
     const destination = normalizeDestination(trimDestinationTail(cleanFragment(destinationRaw)))
-    if (!commodity || !destination || !Number.isFinite(scuAmount) || scuAmount <= 0) return
+    if (!commodity || !destination || !Number.isFinite(scuAmount) || scuAmount < (allowZero ? 0 : 1)) return
     // a real destination never spans another to/from or carries flavor words
     if (/\b(?:to|from)\b/i.test(destination) || DEST_PROSE.test(destination)) return
     const key = `${commodity.toLowerCase()}|${destination.toLowerCase()}`
@@ -281,6 +283,10 @@ export function parseOcrText(rawText: string): ParsedOcr {
   collect(RE_DELIVER_TO, 1, 2, 3)
   collect(RE_DELIVERED_TO, 1, 2, 3)
   collect(RE_GENERIC, 1, 2, 3)
+  // last, so a real count wins the dedupe slot
+  RE_DELIVER_NOAMT.lastIndex = 0
+  let nm: RegExpExecArray | null
+  while ((nm = RE_DELIVER_NOAMT.exec(inlineText)) !== null) add(nm[1], 0, nm[2], true)
 
   // group pickups by commodity; inlineText already breaks before each "Collect"
   const pickupsByCommodity = new Map<string, string[]>()
@@ -322,6 +328,8 @@ export function parseOcrText(rawText: string): ParsedOcr {
 // prints the tag, so a bare match can land in the wrong system. prefer the destination's system
 function preferSameSystem(p: MatchResult, destName: string | null, locations: Location[]): MatchResult {
   if (!p.match || !destName) return p
+  // a read that spelled the tag is trusted as-is
+  if (p.input.includes('(')) return p
   const dest = locations.find((l) => l.name === destName)
   if (!dest?.system) return p
   const base = p.match.replace(/\s*\([^)]*\)\s*$/, '')
@@ -455,6 +463,38 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
   return bestMatch(input, names)
 }
 
+// the untagged matches vote for the contract's system; any tagged match that landed in a
+// different system (and whose raw text never spelled the tag) swaps to its sibling there
+function preferContractSystem(objs: OcrObjective[], locations: Location[]): OcrObjective[] {
+  const sysOf = (name: string | null | undefined): string | undefined =>
+    name ? locations.find((l) => l.name === name)?.system : undefined
+  const votes = new Map<string, number>()
+  for (const o of objs) {
+    for (const m of [o.destination, ...(o.pickups ?? [])]) {
+      if (!m.match || m.match.includes('(')) continue
+      const s = sysOf(m.match)
+      if (s) votes.set(s, (votes.get(s) ?? 0) + 1)
+    }
+  }
+  let system: string | undefined
+  let top = 0
+  for (const [s, n] of votes) {
+    if (n > top) {
+      system = s
+      top = n
+    }
+  }
+  if (!system) return objs
+  const fix = (m: MatchResult): MatchResult => {
+    if (!m.match || !/\([^)]*\)\s*$/.test(m.match)) return m
+    if (m.input.includes('(') || sysOf(m.match) === system) return m
+    const base = m.match.replace(/\s*\([^)]*\)\s*$/, '').toLowerCase()
+    const sibling = locations.find((l) => l.system === system && l.name.toLowerCase().startsWith(base + ' ('))
+    return sibling ? { ...m, match: sibling.name } : m
+  }
+  return objs.map((o) => ({ ...o, destination: fix(o.destination), pickups: o.pickups?.map(fix) }))
+}
+
 /** fuzzy-match parsed objectives against the uex lists */
 export function matchObjectives(
   raw: RawObjective[],
@@ -462,7 +502,7 @@ export function matchObjectives(
   locations: Location[]
 ): OcrObjective[] {
   const commodityNames = commodities.map((c) => c.name)
-  return raw.map((o) => {
+  const objs = raw.map((o) => {
     const destination = resolveLocation(o.destination, locations)
     return {
       commodity: bestMatch(o.commodity, commodityNames),
@@ -471,4 +511,5 @@ export function matchObjectives(
       pickups: o.pickups?.map((p) => preferSameSystem(resolveLocation(p, locations), destination.match, locations))
     }
   })
+  return preferContractSystem(objs, locations)
 }

@@ -35,6 +35,7 @@ import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
 import { isRosterShip } from '@shared/uexMap'
 import { withModules } from '@shared/shipModules'
 import { isSystemDestination } from '@shared/contract'
+import { resolveLogLocation } from '@shared/logLocation'
 import { gridCapacity, gridsFor, loadableGrids, setGridFaces, type CargoGrid } from '@shared/cargoGrids'
 import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
@@ -673,10 +674,14 @@ export const useStore = create<StoreState>((set, get) => {
       set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, loadingIdx: 0 })
     }
     const contract = makeLogContract(item.accepted, contracts.length)
+    contract.pickup = resolveLogLocation(contract.pickup, get().locations)
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
     contract.objectives = item.objectives.map((o) => {
-      const obj = makeObjective({ commodity: o.commodity, scuAmount: o.scuAmount, destination: o.destination }, objectiveBoxSize(contract, o.commodity))
+      const obj = makeObjective(
+        { commodity: o.commodity, scuAmount: o.scuAmount, destination: resolveLogLocation(o.destination, get().locations) },
+        objectiveBoxSize(contract, o.commodity)
+      )
       return contract.lastPickupOnly ? applyPickupBug(obj) : obj
     })
     contract.objectives = applyMarkerBackfill([contract], get().locations)[0].objectives
@@ -867,6 +872,7 @@ export const useStore = create<StoreState>((set, get) => {
           set({ runId: newRunId([runId, ...history.map((h) => h.runId)]), loadingActive: false, loadingIdx: 0 })
         }
         const contract = makeLogContract(e, contracts.length)
+        contract.pickup = resolveLogLocation(contract.pickup, get().locations)
         const willOcr = get().settings.ocrAutoCapture && contractNeedsOcr(contract)
         // hold until capture resolves
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
@@ -890,15 +896,19 @@ export const useStore = create<StoreState>((set, get) => {
         const c = contracts[idx]
         // once settled, ignore re-logged objectives (cross-system ones dupe)
         if (c.objectivesSettled) return
+        // address run culled + roster-matched; the suffix's body picks the system for gate names
+        const destination = resolveLogLocation(e.destination, get().locations)
         // key on scu too, so same commodity+dest can register twice (#27); exact re-emits still dedup
-        const ek = `${e.commodity.trim().toLowerCase()}|${e.destination.trim().toLowerCase()}|${e.scuAmount}`
+        // resolve stored ones too, else a re-emit against an old verbose row dupes
+        const ek = `${e.commodity.trim().toLowerCase()}|${destination.toLowerCase()}|${e.scuAmount}`
         const exists = c.objectives.some(
-          (o) => `${o.commodity.trim().toLowerCase()}|${o.destination.trim().toLowerCase()}|${o.scuAmount}` === ek
+          (o) =>
+            `${o.commodity.trim().toLowerCase()}|${resolveLogLocation(o.destination, get().locations).toLowerCase()}|${o.scuAmount}` === ek
         )
         if (exists) return
         const objectives = [
           ...c.objectives,
-          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination: e.destination }, objectiveBoxSize(c, e.commodity))
+          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination }, objectiveBoxSize(c, e.commodity))
         ]
         // a bare-system drop can often be recovered from the dropoff marker coords, no screenshot needed
         const withCoords = applyMarkerBackfill([{ ...c, objectives }], get().locations)[0]
