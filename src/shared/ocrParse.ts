@@ -20,7 +20,7 @@ export interface ParsedOcr {
 const FRAC = '[\\/71|lI]'
 // group 1 is the total, not the done count
 const RE_DELIVER_TO = new RegExp(`deliver\\s+\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\s+of\\s+(.+?)\\s+to\\s+([^.\\n]+)`, 'gi')
-// glare can eat the count outright ("Deliver     SCU of Waste to Endgame"); keep the objective, scu 0 = fill in review
+// glare can eat the count; keep the objective, scu 0 = fill in review
 const RE_DELIVER_NOAMT = /deliver\b[^a-z0-9\n]*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
 const RE_DELIVERED_TO = /(\d+)\s*scu\s+of\s+(.+?)\s+delivered\s+to\s+([^.\n]+)/gi
 const RE_GENERIC = /(\d+)\s*scu\s+of\s+(.+?)\s+to\s+([^.\n]+)/gi
@@ -463,8 +463,7 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
   return bestMatch(input, names)
 }
 
-// the untagged matches vote for the contract's system; any tagged match that landed in a
-// different system (and whose raw text never spelled the tag) swaps to its sibling there
+// untagged matches vote the contract system; unspelled off-system tags swap to their sibling
 function preferContractSystem(objs: OcrObjective[], locations: Location[]): OcrObjective[] {
   const sysOf = (name: string | null | undefined): string | undefined =>
     name ? locations.find((l) => l.name === name)?.system : undefined

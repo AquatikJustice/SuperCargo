@@ -58,7 +58,7 @@ export function similarity(a: string, b: string): number {
   const longest = Math.max(na.length, nb.length)
   let score = 1 - dist / longest
 
-  // substring containment still scores high; tiny fragments don't count ("lon" is in "Long Forest")
+  // tiny fragments don't count ("lon" is in "Long Forest")
   if (Math.min(na.length, nb.length) >= 4 && (na.includes(nb) || nb.includes(na))) {
     score = Math.max(score, 0.85)
   }

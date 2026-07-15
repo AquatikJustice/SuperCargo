@@ -24,7 +24,7 @@ const newRow = (): ObjRow => ({ key: rowKey++, commodity: '', scuAmount: 0, dest
 
 function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   const guess = !m.match && m.suggestions.length > 0
-  // never seed off-roster text; an unmatched read stays visible in the hint line only
+  // unmatched text stays on the hint line, never in the field
   const value = m.match ?? (guess ? m.suggestions[0] : '')
   return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
 }
@@ -199,7 +199,7 @@ export default function CaptureModal(): React.ReactElement | null {
     mutPickups(key, (ps) => ps.filter((_, j) => j !== i))
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
-  // half-filled rows (e.g. ocr couldn't read the count) block submit instead of silently dropping
+  // half-filled rows block submit instead of silently dropping
   const incompleteRows = rows.filter(
     (r) =>
       (r.commodity.trim() || r.destination.trim() || r.scuAmount > 0) &&

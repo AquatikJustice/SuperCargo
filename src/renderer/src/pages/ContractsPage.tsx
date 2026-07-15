@@ -156,7 +156,7 @@ export default function ContractsPage(): React.ReactElement {
                         {c.blueprint && <BlueprintBadge />}
                         {c.lastPickupOnly && <PickupBugBadge />}
                         {c.sharedWithMe && !c.sharerLeft ? (
-                          // once the sharer is gone it's just your contract; the tag goes with them
+                          // sharer gone = plain contract, the tag goes with them
                           <ShareBadge
                             label="SHARED WITH YOU"
                             title="Click if the sharer abandoned or left while the app missed it; the tag drops and the reward stops splitting."

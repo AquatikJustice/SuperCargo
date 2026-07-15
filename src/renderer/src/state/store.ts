@@ -897,7 +897,6 @@ export const useStore = create<StoreState>((set, get) => {
         const c = contracts[idx]
         // once settled, ignore re-logged objectives (cross-system ones dupe)
         if (c.objectivesSettled) return
-        // address run culled + roster-matched; the suffix's body picks the system for gate names
         const destination = resolveLogLocation(e.destination, get().locations)
         // key on scu too, so same commodity+dest can register twice (#27); exact re-emits still dedup
         // resolve stored ones too, else a re-emit against an old verbose row dupes
@@ -1366,7 +1365,7 @@ export const useStore = create<StoreState>((set, get) => {
       if (updated.some((c, i) => c !== get().contracts[i])) commit(updated)
     },
 
-    // manual escape hatch: the abandon push is a single log line, easy for a closed app to miss
+    // abandon-while-partied logs nothing, so this needs a hand switch
     setSharerLeft: (id, v) => {
       const updated = get().contracts.map((c) =>
         c.id === id && c.sharedWithMe ? { ...c, sharerLeft: v || undefined } : c
