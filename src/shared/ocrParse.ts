@@ -253,6 +253,8 @@ export function parseOcrText(rawText: string): ParsedOcr {
     if (!commodity || !destination || !Number.isFinite(scuAmount) || scuAmount < (allowZero ? 0 : 1)) return
     // a real destination never spans another to/from or carries flavor words
     if (/\b(?:to|from)\b/i.test(destination) || DEST_PROSE.test(destination)) return
+    // same for commodities (longest real name is 5 words); column-interleaved prose fails all three
+    if (/\b(?:to|from)\b/i.test(commodity) || DEST_PROSE.test(commodity) || commodity.split(/\s+/).length > 5) return
     const key = `${commodity.toLowerCase()}|${destination.toLowerCase()}`
     if (seen.has(key)) return
     seen.add(key)
