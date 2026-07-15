@@ -155,15 +155,12 @@ export default function ContractsPage(): React.ReactElement {
                         </span>
                         {c.blueprint && <BlueprintBadge />}
                         {c.lastPickupOnly && <PickupBugBadge />}
-                        {c.sharedWithMe ? (
+                        {c.sharedWithMe && !c.sharerLeft ? (
+                          // once the sharer is gone it's just your contract; the tag goes with them
                           <ShareBadge
-                            label={c.sharerLeft ? 'SHARED · SHARER LEFT' : 'SHARED WITH YOU'}
-                            title={
-                              c.sharerLeft
-                                ? 'The sharer is off the contract; reward no longer splits. Click to undo.'
-                                : 'Click if the sharer abandoned or left while the app missed it; the reward stops splitting.'
-                            }
-                            onClick={() => setSharerLeft(c.id, !c.sharerLeft)}
+                            label="SHARED WITH YOU"
+                            title="Click if the sharer abandoned or left while the app missed it; the tag drops and the reward stops splitting."
+                            onClick={() => setSharerLeft(c.id, true)}
                           />
                         ) : c.sharedWith.length ? (
                           <ShareBadge label={`SHARED · ${c.sharedWith.length} joined`} />
@@ -220,6 +217,29 @@ export default function ContractsPage(): React.ReactElement {
                       <DetailField label="MAX BOX">
                         <EditableBoxSize value={c.maxBox} onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />
                       </DetailField>
+                      {c.sharedWithMe && c.sharerLeft && (
+                        <DetailField label="SHARING">
+                          <Btn
+                            onClick={() => setSharerLeft(c.id, false)}
+                            title="The sharer left this contract, so the full reward is yours. Click if they're actually still on it."
+                            style={{
+                              alignSelf: 'flex-start',
+                              border: `1px solid ${C.lineStrong}`,
+                              background: 'transparent',
+                              color: C.dim,
+                              fontFamily: F.display,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: '0.1em',
+                              padding: '4px 9px',
+                              cursor: 'pointer'
+                            }}
+                            hoverStyle={{ border: `1px solid ${C.amber}`, color: C.amber }}
+                          >
+                            SHARER LEFT · YOURS NOW
+                          </Btn>
+                        </DetailField>
+                      )}
                       {(c.multiPickup || c.lastPickupOnly) && (
                         <DetailField label="PICKUP BUG">
                           <Btn
