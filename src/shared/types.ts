@@ -83,6 +83,8 @@ export interface HaulingContract {
   sharerLeft?: boolean
   /** log generator name, e.g. "Covalex_Hauling" */
   generator?: string
+  /** hand-set display name; wins over the generator-derived party */
+  contractor?: string
   /** mission template, e.g. "HaulCargo_SingleToMulti3_..." */
   contractName?: string
   /** per-commodity max box size (lowercased name), from contract overrides */

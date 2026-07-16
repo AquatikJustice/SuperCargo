@@ -44,8 +44,23 @@ export default function ContractsPage(): React.ReactElement {
   const locations = useStore((s) => s.locations)
   const commodities = useStore((s) => s.commodities)
   // hide until ocr capture resolves
+  const history = useStore((s) => s.history)
   const derived = useMemo(() => deriveContracts(contracts.filter((c) => !c.pendingOcr)), [contracts])
   const locationNames = useMemo(() => locations.map((l) => l.name), [locations])
+  // every contractor the app has seen, live or archived
+  const contractorNames = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of contracts) {
+      const p = c.contractor ?? contractParty(c.generator)
+      if (p) s.add(p)
+    }
+    for (const h of history) {
+      const hc = h.replay?.contract
+      const p = hc ? (hc.contractor ?? contractParty(hc.generator)) : ''
+      if (p) s.add(p)
+    }
+    return [...s].sort()
+  }, [contracts, history])
   const commodityNames = useMemo(() => commodities.map((c) => c.name), [commodities])
   const [expanded, setExpanded] = useState<string | null>(derived[0]?.id ?? null)
   const [editTurnIn, setEditTurnIn] = useState<TurnInTarget | null>(null)
@@ -210,9 +225,13 @@ export default function ContractsPage(): React.ReactElement {
                         <EditableText value={c.rank} onCommit={(v) => editContract(c.id, { rank: v })} placeholder="set rank" />
                       </DetailField>
                       <DetailField label="CONTRACTOR">
-                        <span style={{ fontFamily: F.body, fontSize: 14, color: c.generator ? C.textBody : C.faint }} title={c.generator}>
-                          {contractParty(c.generator) || '-'}
-                        </span>
+                        <EditableText
+                          value={c.contractor ?? contractParty(c.generator)}
+                          options={contractorNames}
+                          onCommit={(v) => editContract(c.id, { contractor: v })}
+                          placeholder="set contractor"
+                          textStyle={{ fontSize: 14, color: c.contractor || c.generator ? C.textBody : C.faint }}
+                        />
                       </DetailField>
                       <DetailField label="MAX BOX">
                         <EditableBoxSize value={c.maxBox} onCommit={(n) => editContract(c.id, { maxBoxSize: n })} />

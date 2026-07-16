@@ -325,7 +325,7 @@ interface StoreState {
   /** maxBoxSize change re-boxes everything */
   editContract: (
     id: string,
-    patch: { title?: string; pickup?: string; rank?: string; reward?: number; maxBoxSize?: number }
+    patch: { title?: string; pickup?: string; rank?: string; reward?: number; maxBoxSize?: number; contractor?: string }
   ) => void
   editObjective: (
     contractId: string,
@@ -1436,6 +1436,7 @@ export const useStore = create<StoreState>((set, get) => {
           }
         }
         if (patch.rank !== undefined) next.rank = patch.rank.trim()
+        if (patch.contractor !== undefined) next.contractor = patch.contractor.trim() || undefined
         if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
         if (patch.maxBoxSize !== undefined) {
           const mbs = snapMaxBox(patch.maxBoxSize)

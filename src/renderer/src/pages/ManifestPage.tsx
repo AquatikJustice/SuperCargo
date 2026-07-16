@@ -13,6 +13,8 @@ import TurnInModal from '../components/TurnInModal'
 import BoxEditModal from '../components/BoxEditModal'
 
 const ITEM_GRID = '118px 1fr minmax(160px, 1fr) 70px 104px'
+// pickup rows: ref | scu | commodity | to destination | boxes | count | button
+const PICKUP_GRID = '46px 84px minmax(0,1fr) minmax(0,1.3fr) minmax(150px,1fr) 70px 104px'
 
 export default function ManifestPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
@@ -501,7 +503,7 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
             key={`${it.objectiveId}-${it.pickupKey}`}
             style={{
               display: 'grid',
-              gridTemplateColumns: ITEM_GRID,
+              gridTemplateColumns: PICKUP_GRID,
               alignItems: 'center',
               gap: 18,
               padding: '6px 0 6px 39px',
@@ -509,16 +511,21 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
               opacity: it.picked ? 0.5 : 1
             }}
           >
+            <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>[{it.ref}]</span>
             <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right', textDecoration: it.picked ? 'line-through' : 'none' }}>
               {it.scu}
               <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
-              <span style={{ fontFamily: F.body, fontSize: 15, color: C.green, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {it.commodity}
-              </span>
-              <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint, flex: 'none' }}>[{it.ref}]</span>
-            </div>
+            <span style={{ fontFamily: F.body, fontSize: 15, color: C.green, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {it.commodity}
+            </span>
+            <span
+              title={`Delivers to ${it.destination}`}
+              style={{ fontFamily: F.body, fontSize: 13, color: C.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              <span style={{ color: C.faint }}>to </span>
+              {it.destination}
+            </span>
             {showBoxMath ? (
               <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
                 <span style={{ color: C.faint }}>· </span>
