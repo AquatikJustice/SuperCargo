@@ -3,6 +3,7 @@ import { useStore } from '../state/store'
 import { C, F } from '../theme'
 import { buildLoadingSteps, filterDeferredSteps, type LoadingStep } from '../state/loading'
 import { offGridByObjective, objectiveStops } from '../state/manifest'
+import type { OcrWaitState } from '@shared/types'
 
 const WHITE = '#eaf1f7'
 const GREEN = '#8fe9b0'
@@ -16,6 +17,7 @@ export default function CompactWindowApp(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const looseBoxes = useStore((s) => s.looseBoxes)
+  const ocrWait = useStore((s) => s.ocrWait)
   const settings = useStore((s) => s.settings)
   const scale = settings.overlayScale || 1
   const opacity = settings.overlayOpacity ?? 0.85
@@ -115,12 +117,15 @@ export default function CompactWindowApp(): React.ReactElement {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'transparent', fontFamily: F.display }}>
       <div ref={contentRef} style={{ width: BASE_W, boxSizing: 'border-box', zoom: scale, display: 'flex', flexDirection: 'column', gap: 7, padding: 8 }}>
+        {ready && ocrWait && <SharedWaitCard wait={ocrWait} opacity={opacity} />}
         {!ready ? null : !step ? (
-          <Panel opacity={opacity}>
-            <div style={{ padding: '12px 14px', fontSize: 13, color: C.dim, lineHeight: 1.5 }}>
-              No active route. Accept a contract to see your loads here.
-            </div>
-          </Panel>
+          ocrWait ? null : (
+            <Panel opacity={opacity}>
+              <div style={{ padding: '12px 14px', fontSize: 13, color: C.dim, lineHeight: 1.5 }}>
+                No active route. Accept a contract to see your loads here.
+              </div>
+            </Panel>
+          )
         ) : (
           <>
             <Chip title={step.label} counter={stopCounter} opacity={opacity} />
@@ -179,6 +184,33 @@ export default function CompactWindowApp(): React.ReactElement {
         )}
       </div>
     </div>
+  )
+}
+
+function SharedWaitCard({ wait, opacity }: { wait: OcrWaitState; opacity: number }): React.ReactElement {
+  const meta = [wait.contractor, wait.rank].filter(Boolean).join(' · ')
+  return (
+    <Panel opacity={opacity}>
+      <div style={{ padding: '10px 14px 11px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontFamily: F.display, fontSize: 11.5, letterSpacing: '0.16em', color: C.amber }}>
+          SHARED CONTRACT · OPEN YOUR MOBIGLAS
+        </div>
+        {wait.title && (
+          <div style={{ fontSize: 15, fontWeight: 700, color: WHITE, lineHeight: 1.3 }}>{wait.title}</div>
+        )}
+        {meta && (
+          <div style={{ fontFamily: F.body, fontSize: 12.5, color: 'rgba(196,214,230,0.85)' }}>{meta}</div>
+        )}
+        {wait.pickup && (
+          <div style={{ fontFamily: F.body, fontSize: 12.5, color: 'rgba(196,214,230,0.85)' }}>
+            Pickup: <b style={{ color: GREEN }}>{wait.pickup}</b>
+          </div>
+        )}
+        <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
+          Bring up this contract's page. It captures on its own once it can read it.
+        </div>
+      </div>
+    </Panel>
   )
 }
 

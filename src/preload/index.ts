@@ -21,6 +21,7 @@ import type {
   OcrEngineInfo,
   OcrResult,
   OcrEditTally,
+  OcrWaitState,
   ContractDataStatus,
   DataSyncResult,
   BoxSizeReport
@@ -101,8 +102,10 @@ const api = {
   }): void => ipcRenderer.send(IPC.ocrReportAccuracy, payload),
   onOcrResult: (cb: (r: OcrResult) => void): Unsubscribe => on(IPC.evtOcrResult, cb),
   onOcrStatus: (cb: (s: string) => void): Unsubscribe => on(IPC.evtOcrStatus, cb),
-  requestOcrCapture: (missionId: string): void =>
-    ipcRenderer.send(IPC.ocrRequestCapture, missionId),
+  onOcrWait: (cb: (w: OcrWaitState) => void): Unsubscribe => on(IPC.evtOcrWait, cb),
+  // wait = keep retrying until the contract screen shows (shared accepts)
+  requestOcrCapture: (missionId: string, wait?: Omit<OcrWaitState, 'active'>): void =>
+    ipcRenderer.send(IPC.ocrRequestCapture, missionId, wait),
 
   getContractDataStatus: (): Promise<ContractDataStatus> =>
     ipcRenderer.invoke(IPC.contractDataStatus),
