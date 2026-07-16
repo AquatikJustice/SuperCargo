@@ -13,7 +13,7 @@ const STATUS_COLOR: Record<HistoryStatus, string> = {
   failed: C.red
 }
 
-type Filter = 'all' | 'completed' | 'abandoned'
+type Filter = 'all' | 'completed'
 
 // prefer the game's logged award over the reward estimate
 const netPayout = (h: HistoryEntry): number => h.actualPayout ?? h.payout
@@ -54,7 +54,6 @@ export default function HistoryPage(): React.ReactElement {
         runId,
         entries,
         completedCount: done.length,
-        abandonedCount: entries.filter((e) => e.status === 'abandoned').length,
         failedCount: entries.filter((e) => e.status === 'failed').length,
         scu: done.reduce((a, e) => a + e.totalScu, 0),
         earnings: done.reduce((a, e) => a + (netPayout(e) || 0), 0),
@@ -64,7 +63,6 @@ export default function HistoryPage(): React.ReactElement {
   }, [shown])
 
   const completed = history.filter((h) => h.status === 'completed')
-  const abandoned = history.filter((h) => h.status === 'abandoned')
   const scuHauled = completed.reduce((a, h) => a + h.totalScu, 0)
   const boxesHauled = completed.reduce((a, h) => a + h.totalBoxes, 0)
   const earnings = completed.reduce((a, h) => a + (netPayout(h) || 0), 0)
@@ -72,7 +70,7 @@ export default function HistoryPage(): React.ReactElement {
   if (history.length === 0) {
     return (
       <div style={{ padding: PAGE_PADDING }}>
-        <PageHeader title="HISTORY" subtitle="Completed & abandoned contracts · earnings" />
+        <PageHeader title="HISTORY" subtitle="Completed contracts · earnings" />
         <EmptyState />
       </div>
     )
@@ -82,7 +80,7 @@ export default function HistoryPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING }}>
       <PageHeader
         title="HISTORY"
-        subtitle={`${completed.length} completed · ${abandoned.length} abandoned`}
+        subtitle={`${completed.length} completed`}
         right={
           <Btn
             onClick={() => setConfirmClear(true)}
@@ -138,7 +136,7 @@ export default function HistoryPage(): React.ReactElement {
       </div>
 
       <div style={{ display: 'flex', gap: 0, marginBottom: 14, border: `1px solid ${C.line}`, width: 'fit-content' }}>
-        {(['all', 'completed', 'abandoned'] as Filter[]).map((f) => (
+        {(['all', 'completed'] as Filter[]).map((f) => (
           <FilterTab key={f} active={filter === f} onClick={() => setFilter(f)}>
             {f.toUpperCase()}
           </FilterTab>
@@ -161,7 +159,6 @@ interface RunGroupData {
   runId: string
   entries: HistoryEntry[]
   completedCount: number
-  abandonedCount: number
   failedCount: number
   scu: number
   earnings: number
@@ -222,7 +219,7 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
   const [open, setOpen] = useState(defaultOpen)
   const [confirmDel, setConfirmDel] = useState(false)
   const deleteRun = useStore((s) => s.deleteRun)
-  const { runId, entries, completedCount, abandonedCount, failedCount, earnings, latest } = group
+  const { runId, entries, completedCount, failedCount, earnings, latest } = group
 
   return (
     <div style={{ marginBottom: 10, border: `1px solid ${C.line}`, borderLeft: `3px solid ${C.acc}` }}>
@@ -262,7 +259,6 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
         <span style={{ flex: 1 }} />
         <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.08em', color: C.body, flex: 'none' }}>
           {completedCount} done
-          {abandonedCount > 0 && <span style={{ color: C.amber }}> · {abandonedCount} aband.</span>}
           {failedCount > 0 && <span style={{ color: C.red }}> · {failedCount} failed</span>}
         </span>
         <span style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textShadow: GLOW, flex: 'none', minWidth: 132, textAlign: 'right' }}>

@@ -571,6 +571,8 @@ export const useStore = create<StoreState>((set, get) => {
   // newest first, deduped by id
   const archive = (contract: HaulingContract, status: HistoryStatus): void => {
     reportBoxOutcome(contract, status)
+    // abandons stay out of history: rerolling contracts for a better offer is normal play
+    if (status === 'abandoned') return
     const s = get()
     const entry = toHistoryEntry(contract, status, s.runId, new Date().toISOString())
     // snapshot inputs for replay
@@ -777,11 +779,14 @@ export const useStore = create<StoreState>((set, get) => {
             : c
         )
       const ended = manifest.contracts.filter((c) => c.status !== 'active')
-      let history = historyDoc.entries
+      // one-time sweep of entries recorded before abandons stopped counting
+      let history = historyDoc.entries.filter((h) => h.status !== 'abandoned')
+      const purged = history.length !== historyDoc.entries.length
+      if (purged) persistHistory(history)
       if (ended.length) {
         const seen = new Set(history.map((h) => h.id))
         const migrated = ended
-          .filter((c) => !seen.has(c.id))
+          .filter((c) => !seen.has(c.id) && c.status !== 'abandoned')
           .map((c) => toHistoryEntry(c, c.status as HistoryStatus, manifest.runId, c.acceptedAt))
         history = [...migrated, ...history]
         persistHistory(history)
