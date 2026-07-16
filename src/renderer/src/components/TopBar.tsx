@@ -317,8 +317,8 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
             zIndex: 70
           }}
         >
-          {/* modules sit ABOVE the search: the results list drops over anything below it */}
-          {modules.length > 0 && (
+          {/* narrow keeps them here; wide shows inline pills instead */}
+          {narrow && modules.length > 0 && (
             <div style={{ marginBottom: 14, borderBottom: `1px solid ${C.lineStrong}`, paddingBottom: 12 }}>
               <div style={{ ...labelStyle, fontSize: 10, marginBottom: 9 }}>CARGO MODULES FITTED</div>
               {modules.map((m) => {
@@ -368,6 +368,34 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           />
         </div>
       )}
+
+      {!narrow &&
+        modules.map((m) => {
+          const on = installed.includes(m.id)
+          return (
+            <Btn
+              key={m.id}
+              onClick={() => toggleModule(m.id)}
+              title={`${m.name} · +${m.scu} SCU · click to ${on ? 'remove' : 'fit'}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                flex: 'none',
+                border: `1px solid ${on ? C.accBorder : 'rgba(255,255,255,0.14)'}`,
+                background: 'transparent',
+                padding: '4px 9px',
+                cursor: 'pointer'
+              }}
+              hoverStyle={{ border: `1px solid ${C.acc}` }}
+            >
+              <Switch on={on} />
+              <span style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', color: on ? C.text : C.dim, whiteSpace: 'nowrap' }}>
+                {m.name.toUpperCase()}
+              </span>
+            </Btn>
+          )
+        })}
 
       {activeNeedsGrid && !narrow && (
         <span
