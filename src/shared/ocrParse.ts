@@ -29,8 +29,7 @@ const RE_PANEL_LINE = new RegExp(`^(.+?):\\s*\\d+?\\s*${FRAC}\\s*(\\d+)\\s*scu\\
 // never a commodity name
 const RE_NOISE_LINE = /scu|deliver|collect|objective|reward|elevator|^\s*[-•]/i
 const RE_COLLECT = /collect\s+(.+?)\s+from\s+(.+)/gi
-// the details-panel list is authoritative: slot order and LocationNAddress placeholders are the
-// broken-slot clues, and the objectives list papers over them
+// details list is authoritative; slot order and placeholder tokens are the broken-slot clues
 const RE_PICKUP_LIST =
   /pick\s*-?\s*up\s+locations?\s*(?:\([^)]*\))?\s*:?\s*([\s\S]*?)(?=drop\s*-?\s*off\s+location|primary\s+objectives|reputation\s+awarded|by\s+the\s+way|and\s+don|thanks\s+in|contract\s+deadline|reward\b|$)/i
 const RE_LIST_SPLIT = /[-•·]?\s*(?:freight\s+)?\w{0,2}levator\s+at\s+/i
@@ -309,8 +308,7 @@ export function parseOcrText(rawText: string): ParsedOcr {
     arr.push(pickup)
     pickupsByCommodity.set(key, arr)
   }
-  // one collect line per objective on multi-drop contracts; a lone objective keeps every line
-  // (Multi-to-single prints several, and the duplicates are the broken-slot tell)
+  // multi-drop prints one line per objective; a lone objective keeps all, dups are the tell
   for (const [key, lines] of pickupsByCommodity) {
     if (!lines.length) continue
     const objs = found.filter((o) => o.commodity.toLowerCase() === key)
@@ -525,9 +523,7 @@ function preferContractSystem(objs: OcrObjective[], locations: Location[]): OcrO
   return objs.map((o) => ({ ...o, destination: fix(o.destination), pickups: o.pickups?.map(fix) }))
 }
 
-// the objectives panel scrolls past ~5 entries, so review rows can describe lines the capture
-// never saw; a label carrying those poisons training. rows that came straight from the read are
-// trusted; the rest must claim a distinct read agreeing on 2 of scu/commodity/destination
+// the panel scrolls, so hand-added rows may label lines the capture never saw
 export function rowsOutsideRead(
   rows: Array<{ scuAmount: number; commodity: string; destination: string; fromRead?: boolean }>,
   reads: OcrObjective[]

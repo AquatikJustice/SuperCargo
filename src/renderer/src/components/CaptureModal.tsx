@@ -271,7 +271,7 @@ export default function CaptureModal(): React.ReactElement | null {
       pickups: pickups?.map((p) => p.trim()).filter(Boolean)
     }))
 
-    // a label listing rows the capture never saw poisons training; keep the contract, skip the sample
+    // rows the capture never saw poison the label; keep the contract, skip the sample
     if (ocrResult?.ok && ocrResult.sampleId && collecting && outsideRead === 0) {
       const text = validRows
         .map((r) => `Deliver ${r.scuAmount} SCU of ${r.commodity} to ${r.destination}`)
@@ -613,7 +613,7 @@ export default function CaptureModal(): React.ReactElement | null {
               title="The objectives panel scrolls, so rows you add by hand may not be in the screenshot. The contract saves normally; only the training contribution is skipped."
               style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginRight: 'auto' }}
             >
-              {outsideRead} row{outsideRead === 1 ? ' isn’t' : 's aren’t'} in the capture · training sample won’t be saved
+              {outsideRead} row{outsideRead === 1 ? " isn't" : "s aren't"} in the capture · training sample won't be saved
             </span>
           )}
           {calibrating ? (
