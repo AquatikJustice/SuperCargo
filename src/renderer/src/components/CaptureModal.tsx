@@ -3,6 +3,7 @@ import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
 import { isBrokenSlotToken, isSystemDestination } from '@shared/contract'
+import { rowsOutsideRead } from '@shared/ocrParse'
 import type { DeliveryObjective, MatchResult, OcrObjective, OcrEditTally } from '@shared/types'
 import { Btn } from './ui'
 import Typeahead from './Typeahead'
@@ -210,6 +211,14 @@ export default function CaptureModal(): React.ReactElement | null {
     mutPickups(key, (ps) => ps.filter((_, j) => j !== i))
 
   const validRows = rows.filter((r) => r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
+  // rows the capture can't vouch for (scrolled-off objectives the user typed in by hand)
+  const outsideRead =
+    ocrResult?.ok && collecting
+      ? rowsOutsideRead(
+          validRows.map((r) => ({ ...r, fromRead: !!(r.ocrCommodity || r.ocrDestination) })),
+          ocrResult.objectives
+        )
+      : 0
   // half-filled rows block submit instead of silently dropping
   const incompleteRows = rows.filter(
     (r) =>
@@ -262,7 +271,8 @@ export default function CaptureModal(): React.ReactElement | null {
       pickups: pickups?.map((p) => p.trim()).filter(Boolean)
     }))
 
-    if (ocrResult?.ok && ocrResult.sampleId && collecting) {
+    // a label listing rows the capture never saw poisons training; keep the contract, skip the sample
+    if (ocrResult?.ok && ocrResult.sampleId && collecting && outsideRead === 0) {
       const text = validRows
         .map((r) => `Deliver ${r.scuAmount} SCU of ${r.commodity} to ${r.destination}`)
         .join('\n')
@@ -596,6 +606,14 @@ export default function CaptureModal(): React.ReactElement | null {
           {!calibrating && !isContributeMode && showEditor && incompleteRows.length > 0 && (
             <span style={{ fontFamily: F.body, fontSize: 12, color: C.red, marginRight: 'auto' }}>
               finish or remove the incomplete objective first
+            </span>
+          )}
+          {!calibrating && !isContributeMode && showEditor && incompleteRows.length === 0 && outsideRead > 0 && (
+            <span
+              title="The objectives panel scrolls, so rows you add by hand may not be in the screenshot. The contract saves normally; only the training contribution is skipped."
+              style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginRight: 'auto' }}
+            >
+              {outsideRead} row{outsideRead === 1 ? ' isn’t' : 's aren’t'} in the capture · training sample won’t be saved
             </span>
           )}
           {calibrating ? (

@@ -309,9 +309,20 @@ export function parseOcrText(rawText: string): ParsedOcr {
     arr.push(pickup)
     pickupsByCommodity.set(key, arr)
   }
-  for (const o of found) {
-    const ps = pickupsByCommodity.get(o.commodity.toLowerCase())
-    if (ps && ps.length) o.pickups = ps
+  // one collect line per objective on multi-drop contracts; a lone objective keeps every line
+  // (Multi-to-single prints several, and the duplicates are the broken-slot tell)
+  for (const [key, lines] of pickupsByCommodity) {
+    if (!lines.length) continue
+    const objs = found.filter((o) => o.commodity.toLowerCase() === key)
+    if (objs.length <= 1) {
+      if (objs[0]) objs[0].pickups = lines
+    } else if (new Set(lines.map((l) => l.toLowerCase())).size === 1) {
+      for (const o of objs) o.pickups = [lines[0]]
+    } else if (lines.length === objs.length) {
+      objs.forEach((o, i) => (o.pickups = [lines[i]]))
+    } else {
+      for (const o of objs) o.pickups = lines
+    }
   }
   // ocr can drop a collect line; if every read pickup is one place, the misses share it
   const allPickups = [...pickupsByCommodity.values()].flat()
@@ -512,6 +523,33 @@ function preferContractSystem(objs: OcrObjective[], locations: Location[]): OcrO
     return sibling ? { ...m, match: sibling.name } : m
   }
   return objs.map((o) => ({ ...o, destination: fix(o.destination), pickups: o.pickups?.map(fix) }))
+}
+
+// the objectives panel scrolls past ~5 entries, so review rows can describe lines the capture
+// never saw; a label carrying those poisons training. rows that came straight from the read are
+// trusted; the rest must claim a distinct read agreeing on 2 of scu/commodity/destination
+export function rowsOutsideRead(
+  rows: Array<{ scuAmount: number; commodity: string; destination: string; fromRead?: boolean }>,
+  reads: OcrObjective[]
+): number {
+  const free = [...reads]
+  const claim = (r: (typeof rows)[number]): boolean => {
+    const i = free.findIndex((o) => {
+      let agree = 0
+      if (o.scuAmount === r.scuAmount) agree++
+      if ((o.commodity.match ?? o.commodity.input).trim().toLowerCase() === r.commodity.trim().toLowerCase()) agree++
+      if ((o.destination.match ?? '').trim().toLowerCase() === r.destination.trim().toLowerCase()) agree++
+      return agree >= 2
+    })
+    if (i < 0) return false
+    free.splice(i, 1)
+    return true
+  }
+  // read-seeded rows consume their reads first so a hand-added twin can't claim one
+  for (const r of rows) if (r.fromRead) claim(r)
+  let outside = 0
+  for (const r of rows) if (!r.fromRead && !claim(r)) outside++
+  return outside
 }
 
 /** fuzzy-match parsed objectives against the uex lists */
