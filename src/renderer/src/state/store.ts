@@ -14,6 +14,7 @@ import type {
   Location,
   Commodity,
   OcrResult,
+  OcrWaitState,
   OcrEngineInfo,
   HistoryEntry,
   HistoryStatus,
@@ -27,7 +28,7 @@ import type {
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
-import { contractRef, applyPickupBug, restorePickups } from '@shared/contract'
+import { contractRef, contractParty, applyPickupBug, restorePickups } from '@shared/contract'
 import { backfillDestinations } from '@shared/markerResolve'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
@@ -254,6 +255,8 @@ interface StoreState {
 
   ocrStatus: 'idle' | 'capturing' | 'recognizing'
   ocrResult: OcrResult | null
+  /** capture is holding for a shared contract's screen */
+  ocrWait: OcrWaitState | null
   ocrEngine: OcrEngineInfo | null
 
   // overlays
@@ -733,6 +736,7 @@ export const useStore = create<StoreState>((set, get) => {
     gridFacesSyncedAt: '',
     ocrStatus: 'idle',
     ocrResult: null,
+    ocrWait: null,
     ocrEngine: null,
     captureOpen: false,
     captureTargetId: null,
@@ -886,12 +890,25 @@ export const useStore = create<StoreState>((set, get) => {
         // OCR-held contracts announce themselves when they resolve, not now
         if (!willOcr) announce(contract.id)
         scheduleReroute()
+        // an accept preceded by a share means the user hit [ from the prompt,
+        // nowhere near the contract screen; capture has to wait for it
+        const sharedAccept = (pendingShare.get(e.missionId) ?? []).some((s) => s.kind === 'shared')
         // a MissionShared/PlayerJoined that beat the accept applies now
         drainShare(contract.id)
         if (willOcr) {
           // open capture so the wait shows
           set({ captureOpen: true, captureTargetId: e.missionId, ocrResult: null, ocrStatus: 'recognizing' })
-          window.supercargo.requestOcrCapture(e.missionId)
+          window.supercargo.requestOcrCapture(
+            e.missionId,
+            sharedAccept
+              ? {
+                  title: contract.title || undefined,
+                  contractor: contractParty(contract.generator) || undefined,
+                  rank: contract.rank || undefined,
+                  pickup: contract.pickup || undefined
+                }
+              : undefined
+          )
           armCaptureNet(e.missionId)
         }
       }))
@@ -989,6 +1006,7 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onOcrStatus((s) =>
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })
       ))
+      track(window.supercargo.onOcrWait((w) => set({ ocrWait: w.active ? w : null })))
       track(window.supercargo.onOcrResult((r) => {
         // capture came back, hold stays until the user acts
         clearCaptureNet()

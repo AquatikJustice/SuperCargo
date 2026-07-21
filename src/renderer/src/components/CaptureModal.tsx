@@ -95,6 +95,7 @@ export default function CaptureModal(): React.ReactElement | null {
 
   const ocrResult = useStore((s) => s.ocrResult)
   const ocrStatus = useStore((s) => s.ocrStatus)
+  const ocrWait = useStore((s) => s.ocrWait)
   const ocrEngine = useStore((s) => s.ocrEngine)
   const runOcr = useStore((s) => s.runOcr)
   const clearOcr = useStore((s) => s.clearOcr)
@@ -369,15 +370,33 @@ export default function CaptureModal(): React.ReactElement | null {
             <OcrCalibrator />
           </div>
         ) : tab === 'ocr' && !hasOcr ? (
-          <OcrCapturePane
-            recognizing={recognizing}
-            engineLabel={ocrEngine?.label ?? 'Tesseract'}
-            available={ocrEngine?.available ?? true}
-            detail={ocrEngine?.detail}
-            error={ocrResult && !ocrResult.ok ? ocrResult.error : undefined}
-            onCapture={() => void runOcr()}
-            onAdjustCrop={() => setCalibrating(true)}
-          />
+          <>
+            {ocrWait && ocrWait.missionId === targetId && (
+              <div
+                style={{
+                  margin: '14px 20px 0',
+                  padding: '10px 12px',
+                  border: `1px solid ${C.amber}`,
+                  fontFamily: F.body,
+                  fontSize: 12.5,
+                  color: C.text,
+                  lineHeight: 1.5
+                }}
+              >
+                Shared contract. Open your mobiGlas to its page; it captures on its own once it can
+                read it, or press your capture hotkey to snap right away.
+              </div>
+            )}
+            <OcrCapturePane
+              recognizing={recognizing}
+              engineLabel={ocrEngine?.label ?? 'Tesseract'}
+              available={ocrEngine?.available ?? true}
+              detail={ocrEngine?.detail}
+              error={ocrResult && !ocrResult.ok ? ocrResult.error : undefined}
+              onCapture={() => void runOcr()}
+              onAdjustCrop={() => setCalibrating(true)}
+            />
+          </>
         ) : (
           <div style={{ padding: '18px 20px' }}>
             {tab === 'ocr' && hasOcr && ocrResult && !isContributeMode && (

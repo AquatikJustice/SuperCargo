@@ -68,6 +68,7 @@ export const IPC = {
   evtWindowState: 'evt:window:state',
   evtOcrResult: 'evt:ocr:result',
   evtOcrStatus: 'evt:ocr:status',
+  evtOcrWait: 'evt:ocr:wait', // shared-accept capture waiting for the contract screen
   evtManifestChanged: 'evt:manifest:changed', // saved by another window
   evtCompactState: 'evt:compact:state',
   evtLoadingState: 'evt:loading:state', // main window's loading-mode step

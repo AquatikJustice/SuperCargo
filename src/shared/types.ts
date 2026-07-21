@@ -639,6 +639,16 @@ export interface OcrResult {
   targetMissionId?: string
 }
 
+/** shared accept: capture holds until the contract is actually on screen */
+export interface OcrWaitState {
+  active: boolean
+  missionId?: string
+  title?: string
+  contractor?: string
+  rank?: string
+  pickup?: string
+}
+
 export interface OcrEngineInfo {
   id: string
   label: string
