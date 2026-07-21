@@ -118,6 +118,8 @@ export function contractParty(generator?: string): string {
   return generator
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
+    // some orgs already end in "Hauling" then get the "_Hauling" suffix ("LingFamilyHauling_Hauling")
+    .replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1')
     .replace(/\s+/g, ' ')
     .trim()
 }
