@@ -15,6 +15,8 @@ import Typeahead from '../components/Typeahead'
 const COLS = '1fr 160px 130px 110px 96px 28px'
 // long names ellipsize, not widen
 const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px 84px 26px'
+// pickup column inserted before destination when a contract loads from more than one place
+const OBJ_COLS_PICKUP = '20px 58px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 170px 64px 84px 84px 26px'
 
 const statusColor: Record<string, string> = {
   active: C.green,
@@ -137,6 +139,8 @@ export default function ContractsPage(): React.ReactElement {
 
           {derived.map((c) => {
             const isOpen = expanded === c.id
+            const splitPickup = c.pickupLocations.length > 1
+            const objCols = splitPickup ? OBJ_COLS_PICKUP : OBJ_COLS
             const split = shareSplit(c)
             const shownReward = split > 1 ? sharedCut(c.reward, split) : c.reward
             return (
@@ -188,7 +192,12 @@ export default function ContractsPage(): React.ReactElement {
                       </div>
                     </div>
                   </div>
-                  <span style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>{c.pickup || '-'}</span>
+                  <span
+                    style={{ fontFamily: F.body, fontSize: 13, color: C.body }}
+                    title={splitPickup ? c.pickupLocations.join(', ') : undefined}
+                  >
+                    {splitPickup ? `${c.pickupLocations[0]} +${c.pickupLocations.length - 1}` : c.pickup || '-'}
+                  </span>
                   <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
                     <span style={{ fontFamily: F.mono, fontSize: 14, color: C.text, textShadow: GLOW }}>
                       {c.reward ? fmt(shownReward) : '-'}
@@ -287,11 +296,12 @@ export default function ContractsPage(): React.ReactElement {
                         </DetailField>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: objCols, gap: 18, padding: '0 0 8px', borderBottom: `1px solid ${C.lineSoft}`, marginBottom: 4 }}>
                       {[
                         { h: '', align: 'left' },
                         { h: 'SCU', align: 'right' },
                         { h: 'COMMODITY', align: 'left' },
+                        ...(splitPickup ? [{ h: 'PICKUP', align: 'left' }] : []),
                         { h: 'DESTINATION', align: 'left' },
                         { h: 'BOX BREAKDOWN', align: 'left' },
                         { h: 'COUNT', align: 'right' },
@@ -315,7 +325,7 @@ export default function ContractsPage(): React.ReactElement {
                       // dim until picked up, lit while aboard, then color tracks turn-in fullness
                       const tiColor = ti === undefined ? (o.pickedUp ? C.amber : C.dim) : ti >= o.scu ? C.green : ti <= 0 ? C.red : C.amber
                       return (
-                        <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: OBJ_COLS, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                        <div key={o.objectiveId} style={{ display: 'grid', gridTemplateColumns: objCols, gap: 18, alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
                           <span style={{ fontFamily: F.display, fontSize: 15, color: tiColor, textShadow: isTurnedIn ? GLOW : 'none' }}>
                             {isTurnedIn ? '✓' : ''}
                           </span>
@@ -327,6 +337,15 @@ export default function ContractsPage(): React.ReactElement {
                             placeholder="commodity"
                             textStyle={{ fontSize: 14, color: isTurnedIn ? tiColor : C.textBody }}
                           />
+                          {splitPickup && (
+                            <EditableText
+                              value={o.pickups?.length ? o.pickups.join(' + ') : c.pickup}
+                              options={locationNames}
+                              onCommit={(v) => editObjective(c.id, o.objectiveId, { pickups: v ? [v] : [] })}
+                              placeholder="pickup"
+                              textStyle={{ fontSize: 13, color: isTurnedIn ? tiColor : o.pickups?.length ? C.body : C.faint }}
+                            />
+                          )}
                           <EditableText
                             value={o.destination}
                             options={locationNames}

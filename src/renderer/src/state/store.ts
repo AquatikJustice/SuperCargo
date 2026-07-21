@@ -330,7 +330,7 @@ interface StoreState {
   editObjective: (
     contractId: string,
     objectiveId: string,
-    patch: { commodity?: string; destination?: string }
+    patch: { commodity?: string; destination?: string; pickups?: string[] }
   ) => void
   deleteObjective: (contractId: string, objectiveId: string) => void
   /** game bug: all cargo at the last listed pickup; on = collapse multi-pickups, off = restore */
@@ -1476,6 +1476,10 @@ export const useStore = create<StoreState>((set, get) => {
             const next = { ...o }
             if (patch.commodity !== undefined) next.commodity = patch.commodity.trim()
             if (patch.destination !== undefined) next.destination = patch.destination.trim()
+            if (patch.pickups !== undefined) {
+              const ps = patch.pickups.map((p) => p.trim()).filter(Boolean)
+              next.pickups = ps.length ? ps : undefined
+            }
             return next
           })
         }
