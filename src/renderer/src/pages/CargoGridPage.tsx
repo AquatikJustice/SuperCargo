@@ -2220,7 +2220,15 @@ export default function CargoGridPage(): React.ReactElement {
               idx={loadIdx}
               total={loadSteps.length}
               turnedIn={turnedIn}
-              onTurnIn={(entries) => turnInDestination(entries)}
+              onTurnIn={(entries) => {
+                turnInDestination(entries)
+                // step forward once every objective at this drop is accounted for
+                const cur = loadSteps[loadIdx]
+                if (cur?.kind === 'drop') {
+                  const done = new Set(entries.map((e) => e.objectiveId))
+                  if (cur.dropIds.every((id) => done.has(id) || turnedIn[id] !== undefined)) setLoadIdx((i) => i + 1)
+                }
+              }}
               onUnmark={(ids) => unmarkTurnIn(ids)}
               onLoaded={() => {
                 // ticks manifest pickups and locks each box where the plan put it
@@ -3071,13 +3079,14 @@ function LoadingPanel({
                 {isPast && <span style={{ marginLeft: 'auto', fontFamily: F.body, fontSize: 11, color: C.green }}>✓ done</span>}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {s.lines.map((l) =>
+                {s.lines.map((l, i) =>
                   load ? (
                     <LoadLineRow
                       key={l.objectiveId}
                       line={l}
                       color={objColors.get(l.objectiveId)}
                       onEdit={isCurrent ? () => onEditBoxes(l) : undefined}
+                      showTell={i === 0 || s.lines[i - 1].contractId !== l.contractId}
                     />
                   ) : !isFinalChunk(l) ? (
                     <SplitDropRow key={l.objectiveId} line={l} />
@@ -3217,24 +3226,29 @@ function destLabelOf(destination: string): string {
 function LoadLineRow({
   line,
   color,
-  onEdit
+  onEdit,
+  showTell = true
 }: {
   line: LoadingStep['lines'][number]
   color?: string
   onEdit?: () => void
+  // repeats across a contract's commodities are one find-action; header shows once
+  showTell?: boolean
 }): React.ReactElement {
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
-        {line.tell ? (
-          <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
-            Find the contract with <b style={{ color: C.text }}>{line.tell}</b>
-          </span>
-        ) : (
-          <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ No standout box, match the whole set</span>
-        )}
-      </div>
+      {showTell && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: F.mono, fontSize: 11, color: C.acc }}>{line.ref}</span>
+          {line.tell ? (
+            <span style={{ fontFamily: F.body, fontSize: 13, color: C.textBody }}>
+              Find the contract with <b style={{ color: C.text }}>{line.tell}</b>
+            </span>
+          ) : (
+            <span style={{ fontFamily: F.body, fontSize: 13, color: C.amber }}>⚠ No standout box, match the whole set</span>
+          )}
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 4, alignItems: 'baseline' }}>
         <span style={{ fontFamily: F.mono, fontSize: 13, color: color ?? C.text, fontWeight: 600 }}>{line.breakdown}</span>
         <span style={{ fontFamily: F.body, fontSize: 13, color: C.dim }}>{line.commodity}</span>
