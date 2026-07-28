@@ -1688,6 +1688,11 @@ export default function CargoGridPage(): React.ReactElement {
       n++
     }
     setFrozenSteps(combined)
+    // hold the cursor on the same logical step; a rebuilt list must not scroll it forward
+    const anchor = combined.findIndex(
+      (f) => f.kind === cur.kind && f.nodeKey === cur.nodeKey && f.trip === cur.trip && f.boundFor === cur.boundFor
+    )
+    if (anchor >= 0 && anchor !== loadIdx) setLoadIdx(anchor)
     // re-seat existing boxes into the new drop order
     const nextBoxes = frozenBoxes
     if (nextBoxes)
