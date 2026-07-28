@@ -33,6 +33,12 @@ function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
 const pickupValue = (p: MatchResult): string | null =>
   p.match ?? (isBrokenSlotToken(p.input) ? p.input : null)
 
+// a hauling screen the reader whiffed on, vs a genuinely non-contract page
+const looksLikeContract = (text: string): boolean => {
+  const t = text.toLowerCase()
+  return /\bhaul/.test(t) && /\bscu\b/.test(t) && /\b(?:deliver|collect)\b/.test(t)
+}
+
 function rowFromOcr(o: OcrObjective): ObjRow {
   const pickups = o.pickups?.map(pickupValue).filter((x): x is string => !!x)
   const commodity = seedField(o.commodity)
@@ -112,11 +118,19 @@ export default function CaptureModal(): React.ReactElement | null {
   const [contributed, setContributed] = useState(false)
   const [calibrating, setCalibrating] = useState(false)
 
+  // auto-recapture budget for a contract screen that read blank; reset when the user snaps by hand
+  const autoRetry = useRef(0)
+  const userCapture = (): void => {
+    autoRetry.current = 0
+    void runOcr()
+  }
+
   // seed once, else clobbers reward
   const seededRef = useRef(false)
   useEffect(() => {
     if (!open) {
       seededRef.current = false
+      autoRetry.current = 0
       return
     }
     if (seededRef.current) return
@@ -169,6 +183,16 @@ export default function CaptureModal(): React.ReactElement | null {
     if (ocrResult.maxBoxSize) setMaxBox(ocrResult.maxBoxSize)
     if (ocrResult.reward) setReward(ocrResult.reward)
   }, [ocrResult])
+
+  // read blank on an obvious contract screen (glare, faint objectives): grab fresh frames a few times
+  useEffect(() => {
+    if (!open || !ocrResult?.ok || ocrStatus !== 'idle' || ocrWait?.active) return
+    const blank = ocrResult.objectives.length === 0 && !target?.objectives?.length
+    if (!blank || !looksLikeContract(ocrResult.rawText) || autoRetry.current >= 4) return
+    autoRetry.current += 1
+    const t = setTimeout(() => void runOcr(), 400)
+    return () => clearTimeout(t)
+  }, [ocrResult, ocrStatus, ocrWait, open, target, runOcr])
 
   // ocr-filled fields the user corrected, for the accuracy stat
   const touched = useRef(new Set<string>())
@@ -393,7 +417,7 @@ export default function CaptureModal(): React.ReactElement | null {
               available={ocrEngine?.available ?? true}
               detail={ocrEngine?.detail}
               error={ocrResult && !ocrResult.ok ? ocrResult.error : undefined}
-              onCapture={() => void runOcr()}
+              onCapture={() => userCapture()}
               onAdjustCrop={() => setCalibrating(true)}
             />
           </>
@@ -408,7 +432,7 @@ export default function CaptureModal(): React.ReactElement | null {
                 showRaw={showRaw}
                 rawText={ocrResult.rawText}
                 onToggleRaw={() => setShowRaw((v) => !v)}
-                onRecapture={() => void runOcr()}
+                onRecapture={() => userCapture()}
                 onAdjustCrop={() => setCalibrating(true)}
                 recognizing={recognizing}
               />
@@ -419,7 +443,7 @@ export default function CaptureModal(): React.ReactElement | null {
                 imageDataUrl={ocrResult.imageDataUrl}
                 confidence={ocrResult.confidence}
                 ms={ocrResult.ms}
-                onRecapture={() => void runOcr()}
+                onRecapture={() => userCapture()}
                 onAdjustCrop={() => setCalibrating(true)}
                 recognizing={recognizing}
                 value={rawEdit}
@@ -833,7 +857,7 @@ function ContributePane({
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
         <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.16em', color: C.text }}>
-          NO HAULING OBJECTIVES
+          {looksLikeContract(value) ? 'OBJECTIVES NOT READ' : 'NO HAULING OBJECTIVES'}
         </span>
         <span style={{ fontFamily: F.mono, fontSize: 11, color: confColor }}>{conf}% confidence</span>
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>{ms} ms</span>
@@ -844,7 +868,9 @@ function ContributePane({
         </MiniBtn>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-        Not a hauling contract, so nothing&apos;s added. You can still help train the OCR by fixing the text below.
+        {looksLikeContract(value)
+          ? "This looks like a hauling contract, but the objectives didn't read (glare or faint text). Recapture or adjust the crop; fixing the text below still helps train the OCR."
+          : "Not a hauling contract, so nothing's added. You can still help train the OCR by fixing the text below."}
       </div>
 
       <div style={labelStyle}>CAPTURED PANEL</div>
