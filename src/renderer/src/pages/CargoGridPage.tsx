@@ -1629,7 +1629,13 @@ export default function CargoGridPage(): React.ReactElement {
       d: [...deferredObjectives].sort(),
       g: [...grabbedObjectives].sort(),
       l: [...looseBoxes].sort(),
-      c: crates.map((c) => c.size).sort((a, b) => a - b)
+      c: crates.map((c) => c.size).sort((a, b) => a - b),
+      // route order + what's being hauled, so a reorder or a new/removed contract re-solves
+      o: order,
+      k: contracts
+        .filter((c) => !c.pendingOcr)
+        .flatMap((c) => c.objectives.map((ob) => `${ob.id}|${ob.scuAmount}|${ob.destination}`))
+        .sort()
     })
   const lastSolvedSig = useRef('')
   useEffect(() => {
@@ -1703,6 +1709,17 @@ export default function CargoGridPage(): React.ReactElement {
         })
       )
   }
+
+  // a new/removed contract or a reorder mid-load re-solves the tail from where the ship sits
+  // (defer/grab/stash keep re-solving on step-ahead as before, so their timing is untouched)
+  useEffect(() => {
+    if (!loading) return
+    const sig = compositionSig()
+    if (sig === lastSolvedSig.current) return
+    lastSolvedSig.current = sig
+    resolveTail()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, order, contracts])
 
   // does the open step's own cargo have a box with no seat?
   const curUnfit = useMemo(() => {
