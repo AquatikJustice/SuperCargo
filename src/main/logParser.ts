@@ -5,7 +5,7 @@ import type {
   ContractEndedEvent,
   CompletionType,
   ShareEvent,
-  MarkerDropoff
+  MarkerPoint
 } from '@shared/types'
 
 const PATTERN_TIMESTAMP = /^<([0-9T:\-.Z]+)>/
@@ -42,6 +42,9 @@ export type ParsedLine =
   | { kind: 'share'; event: ShareEvent }
   | null
 
+const byIndex = (marks?: MarkerPoint[]): MarkerPoint[] | undefined =>
+  marks?.length ? [...marks].sort((a, b) => a.index - b.index) : undefined
+
 export function parseTimestamp(line: string): string | null {
   const match = PATTERN_TIMESTAMP.exec(line)
   return match ? match[1] : null
@@ -53,7 +56,8 @@ export interface MarkerEntry {
   contractName: string
   defId?: string
   /** one CreateMarker line per objective, so these accumulate across lines */
-  dropoffs: MarkerDropoff[]
+  dropoffs: MarkerPoint[]
+  pickups: MarkerPoint[]
 }
 
 // mutates the markers map
@@ -70,15 +74,16 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
     const defId = defMatch ? defMatch[1] : undefined
     let entry = markers.get(missionId)
     if (!entry) {
-      entry = { generator, contractName, defId, dropoffs: [] }
+      entry = { generator, contractName, defId, dropoffs: [], pickups: [] }
       markers.set(missionId, entry)
     }
     const objMatch = PATTERN_MARKER_OBJ.exec(line)
     const posMatch = PATTERN_MARKER_POS.exec(line)
-    if (objMatch && posMatch && objMatch[1].toLowerCase() === 'dropoff') {
+    if (objMatch && posMatch) {
       const index = parseInt(objMatch[2], 10)
-      if (!entry.dropoffs.some((d) => d.index === index)) {
-        entry.dropoffs.push({ index, x: parseFloat(posMatch[1]), y: parseFloat(posMatch[2]), z: parseFloat(posMatch[3]) })
+      const slots = objMatch[1].toLowerCase() === 'pickup' ? entry.pickups : entry.dropoffs
+      if (!slots.some((d) => d.index === index)) {
+        slots.push({ index, x: parseFloat(posMatch[1]), y: parseFloat(posMatch[2]), z: parseFloat(posMatch[3]) })
       }
     }
     return { kind: 'marker', missionId, generator, contractName, defId }
@@ -100,7 +105,8 @@ export function parseLine(line: string, markers: Map<string, MarkerEntry>): Pars
       pickup,
       acceptedAt: ts,
       blueprint: hasBlueprintMarker(rawTitle),
-      markerDropoffs: marker?.dropoffs.length ? [...marker.dropoffs].sort((a, b) => a.index - b.index) : undefined
+      markerDropoffs: byIndex(marker?.dropoffs),
+      markerPickups: byIndex(marker?.pickups)
     }
     // no marker yet, use title
     const isHauling = generator ? isHaulingGenerator(generator) : /haul/i.test(rawTitle)
