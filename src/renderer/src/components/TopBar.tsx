@@ -135,10 +135,10 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   const label =
     crew.role === 'member'
       ? stale
-        ? 'CREW · NOT UPDATING'
-        : 'CREW · READ ONLY'
+        ? 'NOT UPDATING'
+        : 'READ ONLY'
       : crew.role === 'leader'
-        ? `CREW · ${crew.code}`
+        ? `CREW ${crew.code}`
         : 'CREW'
 
   const copy = (): void => {
@@ -253,7 +253,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                     {copied ? 'COPIED' : 'COPY CODE'}
                   </Btn>
                   <div style={{ ...labelStyle, margin: '18px 0 7px' }}>
-                    CONNECTED · {crew.members.length}
+                    {crew.members.length} CONNECTED
                   </div>
                   {crew.members.map((m) => (
                     <div
@@ -276,7 +276,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               )}
               {stale && (
                 <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color: C.amber, marginBottom: 11 }}>
-                  NO UPDATE · {Math.round(staleFor / 60_000)} MIN
+                  NO UPDATE IN {Math.round(staleFor / 60_000)} MIN
                 </div>
               )}
               <Btn
