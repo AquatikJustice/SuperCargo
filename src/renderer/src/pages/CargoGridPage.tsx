@@ -953,7 +953,6 @@ export default function CargoGridPage(): React.ReactElement {
   }, [loading, loadingPack, loadIdx])
   const offGrid = useMemo(() => looseSummary(looseNow), [looseNow])
   // heavy once off-grid cargo is a real slice of the hold, not a box or two
-  const offGridHeavy = result.capacity > 0 && offGrid.scu > result.capacity * 0.04
 
   // replan must never change what's visible at the same step; log what moved if it does
   const blinkRef = useRef<{ idx: number; ids: Set<string>; pins: number; loose: number; steps: number } | null>(null)
@@ -2184,7 +2183,6 @@ export default function CargoGridPage(): React.ReactElement {
           >
             <OffGridGlyph />
             <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
-            {offGridHeavy && <span style={{ fontStyle: 'italic', color: C.amber }}>watch your total</span>}
           </span>
         )}
       </div>
@@ -3154,14 +3152,14 @@ function LoadingPanel({
       {isLoad && grab && (
         <div style={{ margin: '0 16px', padding: '10px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: C.amber }}>
-            ALSO HERE - SKIP THE RETURN
+            ALSO AT THIS LOCATION
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
-            {grab.count} boxes / {grab.scu} SCU are set for a return at step {grab.stepNo}. Grab them now and skip that stop.
+            {grab.count} boxes / {grab.scu} SCU planned for step {grab.stepNo}
           </div>
           {grab.offGrid && (
             <div style={{ fontFamily: F.mono, fontSize: 11, color: '#ec7470', margin: '0 0 8px' }}>
-              the grid only seats part of it: {grab.offGrid.count} boxes / {grab.offGrid.scu} SCU go OFF GRID
+              {grab.offGrid.count} boxes / {grab.offGrid.scu} SCU go off grid
             </div>
           )}
           <Btn
@@ -3169,7 +3167,7 @@ function LoadingPanel({
             style={{ width: '100%', border: `1px solid ${C.amber}`, background: 'rgba(255,180,60,0.1)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: 8, cursor: 'pointer' }}
             hoverStyle={{ background: 'rgba(255,180,60,0.22)' }}
           >
-            {grab.offGrid ? 'GRAB IT NOW - EXTRAS OFF GRID' : 'GRAB IT NOW'}
+            GRAB IT NOW
           </Btn>
         </div>
       )}
@@ -3217,7 +3215,7 @@ function LoadingPanel({
             style={{ flex: 1, border: `1px solid ${blockAdvance ? C.lineStrong : C.acc}`, background: blockAdvance ? 'transparent' : C.accFillStrong, color: blockAdvance ? C.ghost : C.text, textShadow: blockAdvance ? 'none' : GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: blockAdvance ? 'default' : 'pointer' }}
             hoverStyle={blockAdvance ? {} : { background: 'rgba(255,210,30,0.26)' }}
           >
-            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT - DECIDE ABOVE" : blockKind === 'digout' ? 'DIG-OUT - DECIDE ABOVE' : 'LOADED'}
+            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT" : blockKind === 'digout' ? 'DIG-OUT' : 'LOADED'}
           </Btn>
         ) : (
           <>

@@ -251,7 +251,7 @@ export default function ContractsPage(): React.ReactElement {
                         <DetailField label="SHARING">
                           <Btn
                             onClick={() => setSharerLeft(c.id, false)}
-                            title="The sharer left this contract, so the full reward is yours. Click if they're actually still on it."
+                            title="Reward isn't being split. Click if they're still on the contract."
                             style={{
                               alignSelf: 'flex-start',
                               border: `1px solid ${C.lineStrong}`,
@@ -266,7 +266,7 @@ export default function ContractsPage(): React.ReactElement {
                             }}
                             hoverStyle={{ border: `1px solid ${C.amber}`, color: C.amber }}
                           >
-                            SHARER LEFT - YOURS NOW
+                            FULL REWARD
                           </Btn>
                         </DetailField>
                       )}
