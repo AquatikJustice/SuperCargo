@@ -3,6 +3,7 @@ import { useStore, type ManualObjectiveInput } from '../state/store'
 import { C, F, GLOW, fmt } from '../theme'
 import { MAX_BOX_OPTIONS, calculateBoxes, boxCount } from '@shared/box'
 import { isBrokenSlotToken, isSystemDestination } from '@shared/contract'
+import { resolvePickups } from '@shared/markerResolve'
 import { rowsOutsideRead } from '@shared/ocrParse'
 import type { DeliveryObjective, MatchResult, OcrObjective, OcrEditTally } from '@shared/types'
 import { Btn } from './ui'
@@ -53,6 +54,12 @@ function rowFromOcr(o: OcrObjective): ObjRow {
     ocrDestination: destination.hint,
     ocrPickup: !!(pickups && pickups.length)
   }
+}
+
+// log-named slots win; the panel read covers the ones a shared Z left blank
+function mergePickups(marked: (string | null)[], read?: string[]): string[] {
+  const spare = (read ?? []).filter((r) => !marked.some((m) => m?.toLowerCase() === r.trim().toLowerCase()))
+  return marked.map((m) => m ?? spare.shift() ?? '')
 }
 
 function rowFromContract(o: DeliveryObjective): ObjRow {
@@ -106,6 +113,7 @@ export default function CaptureModal(): React.ReactElement | null {
   const runOcr = useStore((s) => s.runOcr)
   const clearOcr = useStore((s) => s.clearOcr)
   const collecting = useStore((s) => s.settings.contributeTrainingData)
+  const markerPickups = useMemo(() => target?.markerPickups ?? [], [target])
 
   const [tab, setTab] = useState<'manual' | 'ocr'>('manual')
   const [title, setTitle] = useState('')
@@ -179,6 +187,11 @@ export default function CaptureModal(): React.ReactElement | null {
       setRows(ocrResult.objectives.map(rowFromOcr))
     } else {
       setRawEdit(ocrResult.rawText)
+    }
+    // markers belong to the contract, not an objective, so only a lone row can take them
+    if (markerPickups.length) {
+      const marked = resolvePickups(markerPickups, locations)
+      setRows((rs) => (rs.length === 1 ? [{ ...rs[0], pickups: mergePickups(marked, rs[0].pickups) }] : rs))
     }
     if (ocrResult.maxBoxSize) setMaxBox(ocrResult.maxBoxSize)
     if (ocrResult.reward) setReward(ocrResult.reward)
@@ -623,9 +636,9 @@ export default function CaptureModal(): React.ReactElement | null {
                     {pickups.length === 0 && (
                       <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint }}>uses contract pickup</span>
                     )}
-                    {target?.lastPickupOnly && pickups.filter((p) => p.trim()).length < 2 && (
+                    {rows.length === 1 && pickups.filter((p) => p.trim()).length < markerPickups.length && (
                       <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>
-                        bugged multi-pickup contract: add every pickup the game lists before confirming
+                        the game lists {markerPickups.length} pickups for this contract, fill them all in before confirming
                       </span>
                     )}
                   </div>

@@ -110,10 +110,6 @@ export interface DerivedContract {
   generator?: string
   /** hand-set display name; wins over the generator-derived party */
   contractor?: string
-  /** pickup-bug collapse active on the contract */
-  lastPickupOnly: boolean
-  /** any objective has (or had) 2+ pickups, so the collapse toggle applies */
-  multiPickup: boolean
   /** distinct pickup per objective (own pickup, else contract pickup); >1 = split across places */
   pickupLocations: string[]
 }
@@ -502,8 +498,6 @@ export function deriveContracts(contracts: HaulingContract[]): DerivedContract[]
       sharerLeft: !!c.sharerLeft,
       generator: c.generator,
       contractor: c.contractor,
-      lastPickupOnly: !!c.lastPickupOnly,
-      multiPickup: c.objectives.some((o) => (o.pickups?.length ?? 0) > 1 || (o.originalPickups?.length ?? 0) > 1),
       pickupLocations: [
         ...new Set(
           c.objectives.flatMap((o) => (o.pickups?.length ? o.pickups : c.pickup ? [c.pickup] : []))

@@ -1,4 +1,3 @@
-import type { DeliveryObjective } from './types'
 
 export interface ParsedTitle {
   rank: string
@@ -6,50 +5,12 @@ export interface ParsedTitle {
   pickup: string
 }
 
-// CIG bug: multi-pickup single-drop hauls spawn ALL cargo at the last listed pickup
-export function collapseLastPickup(o: DeliveryObjective): DeliveryObjective {
-  if (!o.pickups || o.pickups.length < 2) return o
-  // ocr sometimes leaks the destination into the pickup list; collapsing onto it would kill the route job
-  const dest = o.destination.trim().toLowerCase()
-  const real = o.pickups.filter((p) => p.trim().toLowerCase() !== dest)
-  const last = real.length ? real[real.length - 1] : o.pickups[o.pickups.length - 1]
-  return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [last] }
-}
-
-// a broken cross-system slot shows "LocationNAddress" in the details list and the objectives
-// repeat another slot's name to cover for it; physically the cargo sits at the Pyro-side Nyx gate
-const BROKEN_SLOT_LOCATION = 'Nyx Gateway (Pyro)'
+// a broken cross-system slot shows "LocationNAddress" in the details list; the read stays raw
+// so the review screen shows what the game printed instead of a wrong guess
 const PLACEHOLDER_RE = /^(?:location|destination)\s*\d*\s*address\s*\d*$/i
 
-/** broken-slot tokens survive parse and review verbatim, the collapse reads them */
 export function isBrokenSlotToken(s: string): boolean {
   return PLACEHOLDER_RE.test(s.trim())
-}
-
-export function resolveBrokenPickups(o: DeliveryObjective): DeliveryObjective {
-  if (!o.pickups || o.pickups.length < 2) return o
-  const seen = new Set<string>()
-  let changed = false
-  const pickups = o.pickups.map((p) => {
-    const k = p.trim().toLowerCase()
-    if (PLACEHOLDER_RE.test(k) || seen.has(k)) {
-      changed = true
-      return BROKEN_SLOT_LOCATION
-    }
-    seen.add(k)
-    return p
-  })
-  return changed ? { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups } : o
-}
-
-export function applyPickupBug(o: DeliveryObjective): DeliveryObjective {
-  return collapseLastPickup(resolveBrokenPickups(o))
-}
-
-export function restorePickups(o: DeliveryObjective): DeliveryObjective {
-  if (!o.originalPickups) return o
-  const { originalPickups, ...rest } = o
-  return { ...rest, pickups: originalPickups }
 }
 
 // game logs cross-system drops as just "Pyro System", real station needs OCR

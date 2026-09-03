@@ -32,8 +32,8 @@ import type {
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
-import { contractRef, contractParty, applyPickupBug, restorePickups } from '@shared/contract'
-import { backfillDestinations } from '@shared/markerResolve'
+import { contractRef, contractParty } from '@shared/contract'
+import { applyMarkerBackfill } from '@shared/markerResolve'
 import { newRunId } from '@shared/run'
 import { estimatePayout } from '@shared/payout'
 import { DEFAULT_SHIP, SHIPS, type Ship } from '@shared/ships'
@@ -157,14 +157,14 @@ function makeLogContract(e: ContractAcceptedEvent, refIndex: number): HaulingCon
     generator: e.generator || undefined,
     contractName: e.contractName || undefined,
     commodityBoxSizes: e.commodityBoxSizes,
-    lastPickupOnly: e.lastPickupOnly || undefined,
-    markerDropoffs: e.markerDropoffs
+    markerDropoffs: e.markerDropoffs,
+    markerPickups: e.markerPickups
   }
 }
 
 // one report per contract, at the end of its life, and only if something was corrected
 function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
-  const edited = c.originalMaxBoxSize != null || c.objectives.some((o) => o.originalBoxes) || c.lastPickupOnlyManual
+  const edited = c.originalMaxBoxSize != null || c.objectives.some((o) => o.originalBoxes)
   if (!edited) return
   const report: BoxSizeReport = {
     missionId: c.id,
@@ -186,25 +186,22 @@ function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
       boxes: o.boxes,
       originalBoxes: o.originalBoxes,
       delivered: o.delivered
-    })),
-    lastPickupOnly: c.lastPickupOnly,
-    lastPickupOnlyManual: c.lastPickupOnlyManual
+    }))
   }
   window.supercargo.reportBoxSizes(report)
 }
 
-// recover destinations the game logged as a bare system (or left blank) from the dropoff marker coords
-function applyMarkerBackfill(contracts: HaulingContract[], locations: Location[]): HaulingContract[] {
-  if (!locations.length) return contracts
-  let changed = false
-  const next = contracts.map((c) => {
-    if (!c.markerDropoffs?.length || !c.objectives.length) return c
-    const fills = backfillDestinations(c.objectives.map((o) => o.destination), c.markerDropoffs, locations)
-    if (fills.every((f) => f === null)) return c
-    changed = true
-    return { ...c, objectives: c.objectives.map((o, i) => (fills[i] ? { ...o, destination: fills[i] as string } : o)) }
-  })
-  return changed ? next : contracts
+// 4.10 fixed the multi-pickup spawn bug, so contracts saved under the collapse get their stops back
+function uncollapsePickups(c: HaulingContract): HaulingContract {
+  type Collapsed = DeliveryObjective & { originalPickups?: string[] }
+  if (!c.objectives.some((o) => (o as Collapsed).originalPickups)) return c
+  return {
+    ...c,
+    objectives: c.objectives.map((o) => {
+      const { originalPickups, ...rest } = o as Collapsed
+      return originalPickups ? { ...rest, pickups: originalPickups } : o
+    })
+  }
 }
 
 interface StoreState {
@@ -351,8 +348,6 @@ interface StoreState {
     patch: { commodity?: string; destination?: string; pickups?: string[] }
   ) => void
   deleteObjective: (contractId: string, objectiveId: string) => void
-  /** game bug: all cargo at the last listed pickup; on = collapse multi-pickups, off = restore */
-  setLastPickupOnly: (contractId: string, on: boolean) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
   setContractReward: (contractId: string, reward: number) => void
   setObjectivesDelivered: (
@@ -735,13 +730,12 @@ export const useStore = create<StoreState>((set, get) => {
     contract.pickup = resolveLogLocation(contract.pickup, get().locations)
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
-    contract.objectives = item.objectives.map((o) => {
-      const obj = makeObjective(
+    contract.objectives = item.objectives.map((o) =>
+      makeObjective(
         { commodity: o.commodity, scuAmount: o.scuAmount, destination: resolveLogLocation(o.destination, get().locations) },
         objectiveBoxSize(contract, o.commodity)
       )
-      return contract.lastPickupOnly ? applyPickupBug(obj) : obj
-    })
+    )
     contract.objectives = applyMarkerBackfill([contract], get().locations)[0].objectives
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
@@ -831,12 +825,15 @@ export const useStore = create<StoreState>((set, get) => {
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
         .map((c) => (c.pendingOcr ? { ...c, pendingOcr: false } : c))
+        .map(uncollapsePickups)
         // settle already-resolved legacy contracts (no bare "X System" dest left)
         .map((c) =>
           c.objectivesSettled == null && c.objectives.length > 0 && !c.objectives.some((o) => isSystemDestination(o.destination))
             ? { ...c, objectivesSettled: true }
             : c
         )
+      // markers name multi-pickup stops the old collapse threw away
+      const restored = applyMarkerBackfill(active, locRoster?.locations ?? [])
       const ended = manifest.contracts.filter((c) => c.status !== 'active')
       // one-time sweep of entries recorded before abandons stopped counting
       let history = historyDoc.entries.filter((h) => h.status !== 'abandoned')
@@ -852,8 +849,8 @@ export const useStore = create<StoreState>((set, get) => {
         // keep the rest; only contracts moved
         void window.supercargo.saveManifest({
           ...manifest,
-          contracts: active,
-          order: nextOrder(active, manifest.order)
+          contracts: restored,
+          order: nextOrder(restored, manifest.order)
         })
       }
 
@@ -864,8 +861,8 @@ export const useStore = create<StoreState>((set, get) => {
       set({
         settings,
         runId: manifest.runId,
-        contracts: active,
-        order: nextOrder(active, manifest.order),
+        contracts: restored,
+        order: nextOrder(restored, manifest.order),
         stopOrder: manifest.stopOrder ?? [],
         startLocation: manifest.startLocation ?? '',
         currentLocation: manifest.currentLocation ?? '',
@@ -1282,8 +1279,7 @@ export const useStore = create<StoreState>((set, get) => {
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
           .map((o) => {
             const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
-            const base = makeObjective(o, maxBoxSize)
-            const shaped = c.lastPickupOnly ? applyPickupBug(base) : base
+            const shaped = makeObjective(o, maxBoxSize)
             return kept
               ? {
                   ...shaped,
@@ -1302,7 +1298,7 @@ export const useStore = create<StoreState>((set, get) => {
             ? objPickups[0]
             : undefined
         // box size confirmed now, release hold and freeze against re-emits
-        return {
+        const next = {
           ...c,
           pickup: commonPickup ?? c.pickup,
           maxBoxSize,
@@ -1311,6 +1307,7 @@ export const useStore = create<StoreState>((set, get) => {
           objectivesSettled: true,
           objectives: rebuilt
         }
+        return applyMarkerBackfill([next], get().locations)[0]
       })
       clearCaptureNet()
       commit(contracts)
@@ -1584,22 +1581,11 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     editContract: (id, patch) => {
-      const repointed: string[] = []
       const contracts = get().contracts.map((c) => {
         if (c.id !== id) return c
         const next = { ...c }
         if (patch.title !== undefined) next.title = patch.title.trim()
-        if (patch.pickup !== undefined) {
-          next.pickup = patch.pickup.trim()
-          // while collapsed the route reads o.pickups, so a hand-set pickup must land there too
-          if (c.lastPickupOnly && next.pickup) {
-            next.objectives = next.objectives.map((o) => {
-              if (!o.pickups?.length || o.pickups[0] === next.pickup) return o
-              repointed.push(o.id)
-              return { ...o, originalPickups: o.originalPickups ?? o.pickups, pickups: [next.pickup] }
-            })
-          }
-        }
+        if (patch.pickup !== undefined) next.pickup = patch.pickup.trim()
         if (patch.rank !== undefined) next.rank = patch.rank.trim()
         if (patch.contractor !== undefined) next.contractor = patch.contractor.trim() || undefined
         if (patch.reward !== undefined) next.reward = Math.max(0, Math.round(patch.reward))
@@ -1615,14 +1601,6 @@ export const useStore = create<StoreState>((set, get) => {
         return next
       })
       commit(contracts)
-      if (repointed.length) {
-        const pins = get().loadedPins
-        const kept = Object.fromEntries(
-          Object.entries(pins).filter(([k]) => !repointed.some((oid) => k.startsWith(oid + '#')))
-        )
-        if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
-        set({ isRouteAuto: true })
-      }
       scheduleReroute()
     },
 
@@ -1699,28 +1677,6 @@ export const useStore = create<StoreState>((set, get) => {
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))
       if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
-      scheduleReroute()
-    },
-
-    setLastPickupOnly: (contractId, on) => {
-      const affected: string[] = []
-      const contracts = get().contracts.map((c) => {
-        if (c.id !== contractId || !!c.lastPickupOnly === on) return c
-        const objectives = c.objectives.map((o) => {
-          const next = on ? applyPickupBug(o) : restorePickups(o)
-          if (next !== o) affected.push(o.id)
-          return next
-        })
-        return { ...c, lastPickupOnly: on || undefined, lastPickupOnlyManual: true, objectives }
-      })
-      commit(contracts)
-      // pins made under the old pickup layout would re-seat cargo at dead stops
-      const pins = get().loadedPins
-      const kept = Object.fromEntries(
-        Object.entries(pins).filter(([k]) => !affected.some((id) => k.startsWith(id + '#')))
-      )
-      if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
-      set({ isRouteAuto: true })
       scheduleReroute()
     },
 
