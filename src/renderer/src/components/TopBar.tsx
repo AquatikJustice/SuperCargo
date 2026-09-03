@@ -198,7 +198,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value.slice(0, 24))}
-                placeholder="What the crew sees"
+                placeholder="NAME"
                 maxLength={24}
                 style={{ ...crewInput, letterSpacing: 'normal', fontFamily: F.body }}
               />
@@ -209,7 +209,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                   value={entry}
                   onChange={(e) => setEntry(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && void join()}
-                  placeholder="PASTE IT HERE"
+                  placeholder="CODE"
                   spellCheck={false}
                   style={{ ...crewInput, flex: 1, minWidth: 0 }}
                 />
@@ -226,9 +226,6 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               )}
 
               <div style={{ height: 1, background: C.lineSoft, margin: '18px 0 14px' }} />
-              <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 9 }}>
-                Or run one yourself: everyone who enters your code sees your route and hold.
-              </div>
               <Btn onClick={() => void start()} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
                 {busy ? 'STARTING...' : 'START A CREW'}
               </Btn>
@@ -258,11 +255,6 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                   <div style={{ ...labelStyle, margin: '18px 0 7px' }}>
                     CONNECTED · {crew.members.length}
                   </div>
-                  {crew.members.length <= 1 && (
-                    <div style={{ fontFamily: F.body, fontSize: 12, color: C.faint }}>
-                      Nobody's joined yet.
-                    </div>
-                  )}
                   {crew.members.map((m) => (
                     <div
                       key={m.id}
@@ -277,15 +269,14 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                   ))}
                 </>
               ) : (
-                <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 11 }}>
-                  Watching {crew.code} as {settings.crewName || 'Crew'}. Your own run is waiting for
-                  you when you leave.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
+                  <Field label="CODE" value={crew.code} />
+                  <Field label="AS" value={settings.crewName || 'Crew'} />
                 </div>
               )}
               {stale && (
-                <div style={{ fontFamily: F.body, fontSize: 12, color: C.amber, marginBottom: 11 }}>
-                  Nothing from the crew leader for {Math.round(staleFor / 60_000)} min. They may have
-                  closed the app; what you're looking at could be out of date.
+                <div style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.14em', color: C.amber, marginBottom: 11 }}>
+                  NO UPDATE · {Math.round(staleFor / 60_000)} MIN
                 </div>
               )}
               <Btn
@@ -302,6 +293,15 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function Field({ label, value }: { label: string; value: string }): React.ReactElement {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+      <span style={{ ...labelStyle, marginBottom: 0, flex: 'none' }}>{label}</span>
+      <span style={{ fontFamily: F.mono, fontSize: 13, color: C.text, letterSpacing: '0.1em' }}>{value}</span>
     </div>
   )
 }
