@@ -112,7 +112,10 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   const startCrew = useStore((s) => s.startCrew)
   const joinCrew = useStore((s) => s.joinCrew)
   const leaveCrew = useStore((s) => s.leaveCrew)
+  const settings = useStore((s) => s.settings)
+  const updateSettings = useStore((s) => s.updateSettings)
   const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
+  const [name, setName] = useState(settings.crewName ?? '')
   const [entry, setEntry] = useState('')
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -144,9 +147,22 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
     setTimeout(() => setCopied(false), 1400)
   }
 
+  // the name rides along at join time, so it has to be saved before either call
+  const saveName = async (): Promise<void> => {
+    if (name.trim() !== (settings.crewName ?? '')) await updateSettings({ crewName: name.trim() })
+  }
+
+  const start = async (): Promise<void> => {
+    setBusy(true)
+    await saveName()
+    await startCrew()
+    setBusy(false)
+  }
+
   const join = async (): Promise<void> => {
     if (entry.trim().length < 4) return
     setBusy(true)
+    await saveName()
     await joinCrew(entry)
     setBusy(false)
     setEntry('')
@@ -178,49 +194,44 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
         >
           {!inCrew ? (
             <>
-              <div style={{ ...labelStyle, marginBottom: 8 }}>START A CREW</div>
-              <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 9 }}>
-                Your run gets mirrored to everyone who joins with your code.
-              </div>
-              <Btn
-                onClick={() => {
-                  setBusy(true)
-                  void startCrew().finally(() => setBusy(false))
-                }}
-                style={crewBtn}
-                hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}
-              >
-                {busy ? 'STARTING...' : 'START CREW'}
-              </Btn>
+              <div style={{ ...labelStyle, marginBottom: 7 }}>YOUR NAME</div>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value.slice(0, 24))}
+                placeholder="What the crew sees"
+                maxLength={24}
+                style={{ ...crewInput, letterSpacing: 'normal', fontFamily: F.body }}
+              />
 
-              <div style={{ ...labelStyle, margin: '18px 0 8px' }}>JOIN A CREW</div>
+              <div style={{ ...labelStyle, margin: '18px 0 7px' }}>CREW CODE</div>
               <div style={{ display: 'flex', gap: 7 }}>
                 <input
                   value={entry}
                   onChange={(e) => setEntry(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && void join()}
-                  placeholder="CODE"
+                  placeholder="PASTE IT HERE"
                   spellCheck={false}
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    background: 'transparent',
-                    border: `1px solid ${C.lineStrong}`,
-                    color: C.text,
-                    fontFamily: F.mono,
-                    fontSize: 14,
-                    letterSpacing: '0.16em',
-                    padding: '7px 9px',
-                    outline: 'none'
-                  }}
+                  style={{ ...crewInput, flex: 1, minWidth: 0 }}
                 />
-                <Btn onClick={() => void join()} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
+                <Btn
+                  onClick={() => void join()}
+                  style={{ ...crewBtn, width: 'auto' }}
+                  hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}
+                >
                   JOIN
                 </Btn>
               </div>
               {crew.error && (
                 <div style={{ fontFamily: F.body, fontSize: 12, color: C.red, marginTop: 9 }}>{crew.error}</div>
               )}
+
+              <div style={{ height: 1, background: C.lineSoft, margin: '18px 0 14px' }} />
+              <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 9 }}>
+                Or run one yourself: everyone who enters your code sees your route and hold.
+              </div>
+              <Btn onClick={() => void start()} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
+                {busy ? 'STARTING...' : 'START A CREW'}
+              </Btn>
             </>
           ) : (
             <>
@@ -267,7 +278,8 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                 </>
               ) : (
                 <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 11 }}>
-                  Watching {crew.code}. Your own run is waiting for you when you leave.
+                  Watching {crew.code} as {settings.crewName || 'Crew'}. Your own run is waiting for
+                  you when you leave.
                 </div>
               )}
               {stale && (
@@ -292,6 +304,18 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
       )}
     </div>
   )
+}
+
+const crewInput: React.CSSProperties = {
+  width: '100%',
+  background: 'transparent',
+  border: `1px solid ${C.lineStrong}`,
+  color: C.text,
+  fontFamily: F.mono,
+  fontSize: 14,
+  letterSpacing: '0.16em',
+  padding: '7px 9px',
+  outline: 'none'
 }
 
 const crewBtn: React.CSSProperties = {

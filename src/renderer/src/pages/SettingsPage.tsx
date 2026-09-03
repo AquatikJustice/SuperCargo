@@ -46,7 +46,6 @@ function Section({ title }: { title: string }): React.ReactElement {
 
 export default function SettingsPage(): React.ReactElement {
   const settings = useStore((s) => s.settings)
-  const crewActive = useStore((s) => s.crew.role !== null)
   const updateSettings = useStore((s) => s.updateSettings)
   const watcher = useStore((s) => s.watcher)
   const appVersion = useStore((s) => s.appVersion)
@@ -241,36 +240,6 @@ export default function SettingsPage(): React.ReactElement {
             {ships.length} ships · {locations.length} locations · {commodities.length} commodities
           </span>
           {!dataSyncing && dataStatus && <DataSyncPill result={dataStatus} />}
-        </div>
-      </div>
-
-      <Section title="CREW" />
-      <div style={rowStyle}>
-        <span style={keyStyle}>Your name</span>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-          <input
-            value={settings.crewName ?? ''}
-            disabled={crewActive}
-            onChange={(e) => void updateSettings({ crewName: e.target.value.slice(0, 24) })}
-            placeholder="What the crew sees"
-            maxLength={24}
-            style={{
-              background: 'transparent',
-              border: `1px solid ${C.lineStrong}`,
-              color: crewActive ? C.faint : C.text,
-              fontFamily: F.body,
-              fontSize: 14,
-              padding: '6px 9px',
-              width: 220,
-              textAlign: 'right',
-              outline: 'none'
-            }}
-          />
-          {crewActive && (
-            <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint }}>
-              Leave the crew to change this
-            </span>
-          )}
         </div>
       </div>
 
