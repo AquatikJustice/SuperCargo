@@ -798,18 +798,22 @@ export default function CargoGridPage(): React.ReactElement {
     pins: Map<string, Placement>
     source: PackBox[]
   } | null>(null)
+  // ticked pickups: cargo physically on the ship, so it loads at step 0 and its pins are untouchable
+  const aboardObjectives = useMemo(
+    () =>
+      new Set(
+        contracts.flatMap((c) =>
+          c.objectives
+            .filter((o) => (o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined)
+            .map((o) => o.id)
+        )
+      ),
+    [contracts]
+  )
   const loadingPack = useMemo(() => {
     if (!loadSteps.length) return null
     const source = frozenBoxes ?? applyDropSeq(packBoxes(contracts, order, true) as PackBox[])
-    // aboard cargo loads at step 0 (its pickup was dropped)
-    const aboardObjs = new Set(
-      contracts.flatMap((c) =>
-        c.objectives
-          .filter((o) => (o.pickedUpAt?.length ?? 0) > 0 && !o.delivered && o.turnedInScu === undefined)
-          .map((o) => o.id)
-      )
-    )
-    const events = buildLoadEvents(loadSteps, source, aboardObjs)
+    const events = buildLoadEvents(loadSteps, source, aboardObjectives)
     const looseIds = new Set(source.filter((b) => looseBoxes.includes(boxKey(b))).map((b) => b.id))
     // aboard cargo is locked where it loaded; re-plan packs around it, per bay floor axis
     const pins = new Map<string, Placement>()
@@ -842,7 +846,7 @@ export default function CargoGridPage(): React.ReactElement {
       count: s.placements.length + s.unplaced.length
     }))
     return { snaps, stepBoxes: events.map((e) => e.load), conc: whole.concessions.length }
-  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures, spaceDeliveryPiles])
+  }, [loadSteps, grids, contracts, order, frozenBoxes, looseBoxes, loadedPins, fixtures, spaceDeliveryPiles, aboardObjectives])
 
   // pickup key per aboard box, so a frozen pin matches a hand-placed one
   const pickupKeyById = useMemo(() => {
@@ -1652,6 +1656,8 @@ export default function CargoGridPage(): React.ReactElement {
         .sort()
     })
   const lastSolvedSig = useRef('')
+  // hand-rearranging doesn't re-solve mid-step (that would lag every drag); it's cashed in on step forward
+  const layoutDirty = useRef(false)
   useEffect(() => {
     if (loading) lastSolvedSig.current = compositionSig()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1661,6 +1667,7 @@ export default function CargoGridPage(): React.ReactElement {
   const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
     const cur = loadSteps[loadIdx]
     if (!loading || !frozenSteps || !cur) return
+    layoutDirty.current = false
     const aboard = new Set<string>()
     // seed aboard from the live snap not pins, else a delivered box's stale pin re-boards it
     const curIds = new Set(cur.kind === 'load' ? cur.loadIds : [])
@@ -1823,6 +1830,7 @@ export default function CargoGridPage(): React.ReactElement {
           if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
             addLoadedPins(pins)
+            layoutDirty.current = true
           }
         }
         if (ghost.members) setSel(new Set())
@@ -2045,11 +2053,14 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (!loading || !frozenSteps) return
     for (const [key, p] of Object.entries(loadedPins)) {
+      // already loaded: a re-plan can renumber its trip out from under the key, but the box is still
+      // sitting there, so it keeps its pin
+      if (aboardObjectives.has(key.split('#')[0])) continue
       // unknown key = squatter; ahead-of-cursor pins are the rewind's job, don't race the re-solve
       if (!stepPos.byPickup.has(p.pickupKey)) clearLoadedPin(key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, frozenSteps, stepPos, loadedPins])
+  }, [loading, frozenSteps, stepPos, loadedPins, aboardObjectives])
 
   // every box gets pinned on show so the re-solver can't shuffle it; a delivery can still drop its floor, so the pin follows the settled snap down
   useEffect(() => {
@@ -2288,9 +2299,9 @@ export default function CargoGridPage(): React.ReactElement {
                     addLoadedPins(pins)
                   }
                 }
-                // re-pack only when inputs changed since last checkpoint; won't-fit already resolved on arrival
+                // step forward is the checkpoint: what you rearranged is now the layout the tail plans against
                 const sig = compositionSig()
-                if (sig !== lastSolvedSig.current) resolveTail()
+                if (sig !== lastSolvedSig.current || layoutDirty.current) resolveTail()
                 lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
