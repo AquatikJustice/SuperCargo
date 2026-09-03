@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useStore } from '../state/store'
 
 type DivProps = React.HTMLAttributes<HTMLDivElement> & {
   hoverStyle?: React.CSSProperties
@@ -44,4 +45,14 @@ export function Btn({ hoverStyle, style, ...rest }: BtnProps): React.ReactElemen
       style={hover && hoverStyle ? { ...style, ...hoverStyle } : style}
     />
   )
+}
+
+/** false for a crew member: their app mirrors the leader and changes nothing */
+export function useCanEdit(): boolean {
+  return useStore((s) => s.crew.role !== 'member')
+}
+
+/** anything that would change the run; a crew member simply doesn't get it */
+export function WriteOnly({ children }: { children: React.ReactNode }): React.ReactElement | null {
+  return useCanEdit() ? <>{children}</> : null
 }

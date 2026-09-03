@@ -152,6 +152,8 @@ export interface AppSettings {
   /** keep + upload each confirmed capture to train the shared OCR model */
   contributeTrainingData: boolean
   telemetryClientId: string
+  /** what the crew leader sees in the member list; not an account, just a label */
+  crewName: string
 
   /** anonymous usage snapshot on launch; on by default */
   shareUsageStats: boolean
@@ -700,6 +702,13 @@ export interface CrewSnapshot {
 
 export type CrewRole = 'leader' | 'member'
 
+export interface CrewMember {
+  name: string
+  role: CrewRole
+  /** presence key, so two people sharing a name still count separately */
+  id: string
+}
+
 export interface CrewState {
   role: CrewRole | null
   code: string
@@ -707,6 +716,6 @@ export interface CrewState {
   connected: boolean
   /** epoch ms of the last snapshot applied, for the staleness readout */
   lastAt: number
-  members: number
+  members: CrewMember[]
   error?: string
 }

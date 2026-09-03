@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot, CrewMember } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -583,11 +583,15 @@ function registerIpc(): void {
     return true
   })
 
-  ipcMain.handle(IPC.crewStart, () => crew.startCrew())
-  ipcMain.handle(IPC.crewJoin, (_e, code: string) =>
-    crew.joinCrew(code, {
-      snapshot: (snap) => send(IPC.evtCrewSnapshot, snap),
-      status: (up, error) => send(IPC.evtCrewStatus, { up, error })
+  const crewHandlers = {
+    status: (up: boolean, error?: string) => send(IPC.evtCrewStatus, { up, error }),
+    members: (m: CrewMember[]) => send(IPC.evtCrewMembers, m)
+  }
+  ipcMain.handle(IPC.crewStart, (_e, name: string) => crew.startCrew(name, crewHandlers))
+  ipcMain.handle(IPC.crewJoin, (_e, p: { code: string; name: string }) =>
+    crew.joinCrew(p.code, p.name, {
+      ...crewHandlers,
+      snapshot: (snap: CrewSnapshot) => send(IPC.evtCrewSnapshot, snap)
     })
   )
   ipcMain.handle(IPC.crewLeave, () => crew.leaveCrew())

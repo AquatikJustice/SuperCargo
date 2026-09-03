@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { useNarrow } from '../state/useViewport'
 import { C, F, GLOW } from '../theme'
-import { Btn } from './ui'
+import { Btn, WriteOnly } from './ui'
 import Typeahead from './Typeahead'
 import { shipCapacity } from '@shared/shipModules'
 import { hasGridMarkup } from '@shared/cargoGrids'
@@ -88,8 +88,10 @@ export default function TopBar(): React.ReactElement {
       </div>
 
       <div className="no-drag" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
-        {reviewCount > 0 && <ReviewPill count={reviewCount} onClick={() => openScanReview()} />}
-        <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
+        <WriteOnly>
+          {reviewCount > 0 && <ReviewPill count={reviewCount} onClick={() => openScanReview()} />}
+          <ChromeButton onClick={() => openCapture()} icon={<ScanIcon />} label="SCAN CONTRACT" compact={narrow} />
+        </WriteOnly>
         <ChromeButton
           onClick={() => (compactOpen ? closeCompact() : openCompact())}
           icon={<CompactIcon active={compactOpen} />}
@@ -242,6 +244,26 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                   <Btn onClick={copy} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
                     {copied ? 'COPIED' : 'COPY CODE'}
                   </Btn>
+                  <div style={{ ...labelStyle, margin: '18px 0 7px' }}>
+                    CONNECTED · {crew.members.length}
+                  </div>
+                  {crew.members.length <= 1 && (
+                    <div style={{ fontFamily: F.body, fontSize: 12, color: C.faint }}>
+                      Nobody's joined yet.
+                    </div>
+                  )}
+                  {crew.members.map((m) => (
+                    <div
+                      key={m.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0' }}
+                    >
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: C.green, flex: 'none' }} />
+                      <span style={{ fontFamily: F.body, fontSize: 13, color: C.body }}>{m.name}</span>
+                      {m.role === 'leader' && (
+                        <span style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>you</span>
+                      )}
+                    </div>
+                  ))}
                 </>
               ) : (
                 <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 11 }}>

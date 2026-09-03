@@ -25,7 +25,8 @@ import type {
   ContractDataStatus,
   DataSyncResult,
   BoxSizeReport,
-  CrewSnapshot
+  CrewSnapshot,
+  CrewMember
 } from '@shared/types'
 
 type Unsubscribe = () => void
@@ -46,9 +47,9 @@ const api = {
   exportRunFile: (payload: { defaultName: string; json: string }): Promise<string | null> =>
     ipcRenderer.invoke(IPC.exportRunFile, payload),
 
-  startCrew: (): Promise<string | null> => ipcRenderer.invoke(IPC.crewStart),
-  joinCrew: (code: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC.crewJoin, code),
+  startCrew: (name: string): Promise<string | null> => ipcRenderer.invoke(IPC.crewStart, name),
+  joinCrew: (code: string, name: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.crewJoin, { code, name }),
   leaveCrew: (): Promise<void> => ipcRenderer.invoke(IPC.crewLeave),
   endCrew: (): Promise<void> => ipcRenderer.invoke(IPC.crewEnd),
   publishCrew: (snap: Omit<CrewSnapshot, 'rev'>): Promise<boolean> =>
@@ -56,6 +57,7 @@ const api = {
   onCrewSnapshot: (cb: (s: CrewSnapshot) => void): Unsubscribe => on(IPC.evtCrewSnapshot, cb),
   onCrewStatus: (cb: (s: { up: boolean; error?: string }) => void): Unsubscribe =>
     on(IPC.evtCrewStatus, cb),
+  onCrewMembers: (cb: (m: CrewMember[]) => void): Unsubscribe => on(IPC.evtCrewMembers, cb),
 
   loadManifest: (): Promise<ManifestDoc> => ipcRenderer.invoke(IPC.manifestLoad),
   saveManifest: (doc: ManifestDoc): Promise<boolean> =>

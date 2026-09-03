@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   contractsDataPath: '',
   contributeTrainingData: false,
   telemetryClientId: '',
+  crewName: '',
   shareUsageStats: true,
   alwaysOnTop: false,
   theme: 'dark',

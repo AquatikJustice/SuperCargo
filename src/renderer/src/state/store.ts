@@ -26,6 +26,7 @@ import type {
   StorAllCrate,
   BoxSizeReport,
   CrewState,
+  CrewMember,
   ManifestDoc,
   CrewSnapshot
 } from '@shared/types'
@@ -86,6 +87,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   contractsDataPath: '',
   contributeTrainingData: false,
   telemetryClientId: '',
+  crewName: '',
   shareUsageStats: true,
   alwaysOnTop: false,
   theme: 'dark',
@@ -775,7 +777,7 @@ export const useStore = create<StoreState>((set, get) => {
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
-    crew: { role: null, code: '', connected: false, lastAt: 0, members: 0 },
+    crew: { role: null, code: '', connected: false, lastAt: 0, members: [] },
     crewBoxes: [],
     crewSeenAt: 0,
     history: [],
@@ -1064,6 +1066,9 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onCrewStatus((s) => {
         set((st) => ({ crew: { ...st.crew, connected: s.up, error: s.error } }))
       }))
+      track(window.supercargo.onCrewMembers((m: CrewMember[]) => {
+        set((st) => ({ crew: { ...st.crew, members: m } }))
+      }))
 
       // apply without persisting, avoids ping-pong
       track(window.supercargo.onManifestChanged((doc) => {
@@ -1199,12 +1204,12 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     startCrew: async () => {
-      const code = await window.supercargo.startCrew()
+      const code = await window.supercargo.startCrew(get().settings.crewName)
       if (!code) {
-        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0, error: "Couldn't reach the crew server" } })
+        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [], error: "Couldn't reach the crew server" } })
         return
       }
-      set({ crew: { role: 'leader', code, connected: true, lastAt: Date.now(), members: 0 } })
+      set({ crew: { role: 'leader', code, connected: true, lastAt: Date.now(), members: [] } })
       pushCrew()
     },
 
@@ -1215,20 +1220,20 @@ export const useStore = create<StoreState>((set, get) => {
         order: get().order,
         settings: get().settings
       }
-      const res = await window.supercargo.joinCrew(code)
+      const res = await window.supercargo.joinCrew(code, get().settings.crewName)
       if (!res.ok) {
         preCrew = null
-        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0, error: res.error } })
+        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [], error: res.error } })
         return
       }
-      set({ crew: { role: 'member', code: code.trim().toUpperCase(), connected: true, lastAt: Date.now(), members: 0 } })
+      set({ crew: { role: 'member', code: code.trim().toUpperCase(), connected: true, lastAt: Date.now(), members: [] } })
     },
 
     leaveCrew: async () => {
       const { role } = get().crew
       if (role === 'leader') await window.supercargo.endCrew()
       else await window.supercargo.leaveCrew()
-      set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0 }, crewSeenAt: 0 })
+      set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [] }, crewSeenAt: 0 })
       // hand the member their own manifest back
       if (preCrew) {
         set({ contracts: preCrew.contracts, order: preCrew.order, settings: preCrew.settings, layout: null })

@@ -6,7 +6,7 @@ import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals
 import { buildLoadingSteps, loadProfile } from '../state/loading'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
-import { Btn } from '../components/ui'
+import { Btn, useCanEdit } from '../components/ui'
 import LoadBar from '../components/LoadBar'
 import Typeahead from '../components/Typeahead'
 import TurnInModal from '../components/TurnInModal'
@@ -335,6 +335,7 @@ function ByDestination({
   onTurnIn: (stop: Stop, item: StopItem) => void
   onEditBoxes: (contractId: string, objectiveId: string) => void
 }): React.ReactElement {
+  const canEdit = useCanEdit()
   const reorderStops = useStore((s) => s.reorderStops)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
@@ -463,7 +464,7 @@ function ByDestination({
               <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>
                 {item.boxCount} box
               </div>
-              {item.delivered ? (
+              {item.delivered || !canEdit ? (
                 <span />
               ) : (
                 <Btn
@@ -489,6 +490,7 @@ function ByDestination({
 
 function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: PickupItem[]; showBoxMath: boolean; label: boolean; onEditBoxes: (contractId: string, objectiveId: string) => void }): React.ReactElement {
   const setPickedUp = useStore((s) => s.setPickedUp)
+  const canEdit = useCanEdit()
   return (
     <div style={{ marginTop: 6 }}>
       {label && (
@@ -541,7 +543,7 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
               <div />
             )}
             <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{it.boxCount} box</div>
-            {it.pickupKey ? (
+            {it.pickupKey && canEdit ? (
               <Btn
                 onClick={() => setPickedUp(it.contractId, it.objectiveId, it.pickupKey as string, !it.picked)}
                 title={it.picked ? 'Uncheck this pickup' : 'Check off this pickup'}
@@ -561,6 +563,7 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
 }
 
 function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): React.ReactElement {
+  const canEdit = useCanEdit()
   const locations = useStore((s) => s.locations)
   const loc = useMemo(() => locations.find((l) => l.name === stop.destination), [locations, stop.destination])
   const external = stop.hasElevator ?? loc?.hasElevator
@@ -574,10 +577,12 @@ function StopHeader({ stop, offCount = 0 }: { stop: Stop; offCount?: number }): 
         <div style={{ color: C.acc, display: 'flex', flex: 'none', fontSize: 19, lineHeight: 1 }} title="Starting location">
           ▸
         </div>
-      ) : (
+      ) : canEdit ? (
         <div style={{ cursor: 'grab', color: '#a3adb1', display: 'flex', flex: 'none' }} title="Drag to reorder">
           <GripIcon />
         </div>
+      ) : (
+        <div style={{ width: 14, flex: 'none' }} />
       )}
       <span
         style={{

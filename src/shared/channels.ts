@@ -80,5 +80,6 @@ export const IPC = {
   evtLoadingState: 'evt:loading:state', // main window's loading-mode step
   evtCrewSnapshot: 'evt:crew:snapshot', // leader's run, for a crew member to render
   evtCrewStatus: 'evt:crew:status', // crew link up/down
+  evtCrewMembers: 'evt:crew:members', // who's actually on the channel
   evtSettings: 'evt:settings' // settings changed, keep the overlay in sync
 } as const

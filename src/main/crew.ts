@@ -1,7 +1,7 @@
 // crew mode transport: the leader upserts one row, members subscribe to it and render read-only
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
-import type { CrewSnapshot } from '@shared/types'
+import type { CrewSnapshot, CrewMember, CrewRole } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
 const TABLE = 'crew_sessions'
@@ -15,6 +15,7 @@ let code = ''
 let rev = 0
 let onSnapshot: ((s: CrewSnapshot) => void) | null = null
 let onStatus: ((up: boolean, error?: string) => void) | null = null
+let onMembers: ((m: CrewMember[]) => void) | null = null
 
 function db(): SupabaseClient {
   if (!client) client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
@@ -31,15 +32,51 @@ export function crewCode(): string {
   return code
 }
 
+/** presence: everyone on the channel announces a name, so the leader sees who actually turned up */
+function watchPresence(ch: RealtimeChannel): void {
+  ch.on('presence', { event: 'sync' }, () => {
+    const seen = ch.presenceState<{ name: string; role: CrewRole }>()
+    const out: CrewMember[] = []
+    for (const [id, entries] of Object.entries(seen)) {
+      const e = entries[0]
+      if (e) out.push({ id, name: e.name, role: e.role })
+    }
+    out.sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'leader' ? -1 : 1))
+    onMembers?.(out)
+  })
+}
+
+async function announce(ch: RealtimeChannel, name: string, role: CrewRole): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false
+    ch.subscribe((state) => {
+      onStatus?.(state === 'SUBSCRIBED', state === 'SUBSCRIBED' ? undefined : String(state))
+      if (state === 'SUBSCRIBED') void ch.track({ name: name || (role === 'leader' ? 'Leader' : 'Crew'), role })
+      if (!settled && (state === 'SUBSCRIBED' || state === 'CHANNEL_ERROR' || state === 'TIMED_OUT')) {
+        settled = true
+        resolve()
+      }
+    })
+  })
+}
+
 /** a free code, or null if we couldn't reach the server at all */
-export async function startCrew(): Promise<string | null> {
+export async function startCrew(
+  name: string,
+  handlers: { members: (m: CrewMember[]) => void; status: (up: boolean, error?: string) => void }
+): Promise<string | null> {
   await leaveCrew()
+  onMembers = handlers.members
+  onStatus = handlers.status
   for (let tries = 0; tries < 5; tries++) {
     const candidate = newCode()
     const { error } = await db().from(TABLE).insert({ code: candidate, rev: 0, payload: null })
     if (!error) {
       code = candidate
       rev = 0
+      channel = db().channel(`crew:${code}`, { config: { presence: { key: '' } } })
+      watchPresence(channel)
+      await announce(channel, name, 'leader')
       return code
     }
     // 23505 = someone already holds that code, roll again
@@ -61,16 +98,22 @@ export async function publish(snapshot: Omit<CrewSnapshot, 'rev'>): Promise<bool
 
 export async function joinCrew(
   joining: string,
-  handlers: { snapshot: (s: CrewSnapshot) => void; status: (up: boolean, error?: string) => void }
+  name: string,
+  handlers: {
+    snapshot: (s: CrewSnapshot) => void
+    status: (up: boolean, error?: string) => void
+    members: (m: CrewMember[]) => void
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   await leaveCrew()
   code = joining.trim().toUpperCase()
   onSnapshot = handlers.snapshot
   onStatus = handlers.status
+  onMembers = handlers.members
 
   // subscribe first: a fetch-then-subscribe order drops any update landing in between
   channel = db()
-    .channel(`crew:${code}`)
+    .channel(`crew:${code}`, { config: { presence: { key: '' } } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: TABLE, filter: `code=eq.${code}` }, (msg) => {
       const next = (msg.new as { payload: CrewSnapshot | null }).payload
       // out-of-order delivery would rewind the crew's view
@@ -79,16 +122,8 @@ export async function joinCrew(
         onSnapshot?.(next)
       }
     })
-  await new Promise<void>((resolve) => {
-    let settled = false
-    channel!.subscribe((state) => {
-      onStatus?.(state === 'SUBSCRIBED', state === 'SUBSCRIBED' ? undefined : String(state))
-      if (!settled && (state === 'SUBSCRIBED' || state === 'CHANNEL_ERROR' || state === 'TIMED_OUT')) {
-        settled = true
-        resolve()
-      }
-    })
-  })
+  watchPresence(channel)
+  await announce(channel, name, 'member')
 
   // catch-up read; the rev check above makes an overlap with a pushed update harmless
   const { data, error } = await db().from(TABLE).select('payload').eq('code', code).maybeSingle()
@@ -113,6 +148,7 @@ export async function leaveCrew(): Promise<void> {
   rev = 0
   onSnapshot = null
   onStatus = null
+  onMembers = null
 }
 
 /** leader closing up: drop the row so the code stops resolving */

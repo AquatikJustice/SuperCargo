@@ -7,7 +7,7 @@ import { sharedCut } from '@shared/payout'
 import { contractParty } from '@shared/contract'
 import { deriveContracts, pickupVisitKey, shareSplit } from '../state/manifest'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
-import { Btn, HoverDiv } from '../components/ui'
+import { Btn, HoverDiv, WriteOnly } from '../components/ui'
 import TurnInModal from '../components/TurnInModal'
 import BoxEditModal from '../components/BoxEditModal'
 import Typeahead from '../components/Typeahead'
@@ -94,6 +94,7 @@ export default function ContractsPage(): React.ReactElement {
         title="CONTRACTS"
         subtitle={`${derived.length} tracked · click a contract to expand objectives`}
         right={
+          <WriteOnly>
           <Btn
             onClick={() => openCapture()}
             style={{
@@ -111,6 +112,7 @@ export default function ContractsPage(): React.ReactElement {
           >
             + ADD CONTRACT
           </Btn>
+          </WriteOnly>
         }
       />
 
@@ -411,6 +413,7 @@ export default function ContractsPage(): React.ReactElement {
                       </div>
                     )}
 
+                    <WriteOnly>
                     <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                       <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
                       {c.dataSource !== 'manual' && (
@@ -464,6 +467,7 @@ export default function ContractsPage(): React.ReactElement {
                       )}
                       <ActionBtn label="ABANDON" color={C.red} onClick={() => abandonContract(c.id)} />
                     </div>
+                    </WriteOnly>
                   </div>
                 )}
               </div>

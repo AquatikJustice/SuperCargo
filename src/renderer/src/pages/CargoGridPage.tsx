@@ -1838,6 +1838,8 @@ export default function CargoGridPage(): React.ReactElement {
   }
 
   const startDrag = (key: string, pl: Placement, g: CargoGrid, e: ThreeEvent): void => {
+    // a crew member is watching the leader's hold, not arranging their own
+    if (crewRole === 'member') return
     const ne = e.nativeEvent
     if (ne.ctrlKey || ne.metaKey || ne.shiftKey) {
       setSel((s) => {
