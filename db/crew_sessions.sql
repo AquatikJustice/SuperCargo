@@ -15,7 +15,7 @@ create index if not exists crew_sessions_updated_idx on public.crew_sessions (up
 
 alter table public.crew_sessions enable row level security;
 
--- Guessing a live 6-character code is the only way in, so the policies are open by design.
+-- Guessing a live 8-character code is the only way in, so the policies are open by design.
 drop policy if exists crew_sessions_rw on public.crew_sessions;
 create policy crew_sessions_rw on public.crew_sessions
   for all to anon, authenticated

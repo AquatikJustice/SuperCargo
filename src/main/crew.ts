@@ -5,9 +5,9 @@ import type { CrewSnapshot } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
 const TABLE = 'crew_sessions'
-// no vowels, no 0/O/1/I: it gets read out over voice
+// meant to be pasted into chat; the unambiguous alphabet is just for whoever retypes it
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789'
-const CODE_LEN = 6
+const CODE_LEN = 8
 
 let client: SupabaseClient | null = null
 let channel: RealtimeChannel | null = null
