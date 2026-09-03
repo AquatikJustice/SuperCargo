@@ -75,7 +75,7 @@ export default function BoxEditModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 18px 12px' }}>
           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>{count} box{count === 1 ? '' : 'es'}</span>
           <span style={{ fontFamily: F.mono, fontSize: 14, color: total === scu ? C.green : C.amber }}>
-            {total} SCU{total !== scu ? ` · was ${scu}` : ''}
+            {total} SCU{total !== scu ? `, was ${scu}` : ''}
           </span>
         </div>
 

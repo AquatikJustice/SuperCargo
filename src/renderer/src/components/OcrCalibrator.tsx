@@ -89,7 +89,7 @@ export default function OcrCalibrator(): React.ReactElement {
         {preview && <CalBtn onClick={() => void runTest()}>{testing ? 'READING...' : 'TEST READ'}</CalBtn>}
         {preview && <CalBtn onClick={() => setPreview(null)}>DONE</CalBtn>}
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>
-          crop {pct(crop.x)},{pct(crop.y)} · {pct(crop.w)}×{pct(crop.h)}
+          crop {pct(crop.x)},{pct(crop.y)} {pct(crop.w)}×{pct(crop.h)}
         </span>
       </div>
 
@@ -167,10 +167,10 @@ export default function OcrCalibrator(): React.ReactElement {
             <>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.16em', color: C.text }}>
-                  TEST READ · {test.objectives.length} objective{test.objectives.length === 1 ? '' : 's'}
+                  TEST READ {test.objectives.length} objective{test.objectives.length === 1 ? '' : 's'}
                 </span>
                 <span style={{ fontFamily: F.mono, fontSize: 11, color: C.faint }}>
-                  {Math.round(test.confidence)}% · {test.ms} ms
+                  {Math.round(test.confidence)}% {test.ms} ms
                 </span>
               </div>
               {test.objectives.length === 0 ? (
@@ -180,7 +180,7 @@ export default function OcrCalibrator(): React.ReactElement {
               ) : (
                 test.objectives.map((o, i) => (
                   <div key={i} style={{ fontFamily: F.mono, fontSize: 12, color: C.body, padding: '2px 0' }}>
-                    {o.scuAmount} SCU · {o.commodity.match ?? `?${o.commodity.input}`} ·{' '}
+                    {o.scuAmount} SCU {o.commodity.match ?? `?${o.commodity.input}`}{' '}
                     {o.destination.match ?? `?${o.destination.input}`}
                   </div>
                 ))

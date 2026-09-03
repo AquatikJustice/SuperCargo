@@ -397,7 +397,7 @@ function RunChip(): React.ReactElement {
         hoverStyle={{ border: `1px solid ${C.acc}`, color: C.body }}
       >
         <span>
-          RUN · <span style={{ color: C.body }}>{runId || '-'}</span>
+          RUN <span style={{ color: C.body }}>{runId || '-'}</span>
         </span>
         <svg
           width="10"
@@ -614,7 +614,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
             <Btn
               key={m.id}
               onClick={() => toggleModule(m.id)}
-              title={`${m.name} · +${m.scu} SCU · click to ${on ? 'remove' : 'fit'}`}
+              title={`${m.name}, +${m.scu} SCU, click to ${on ? 'remove' : 'fit'}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',

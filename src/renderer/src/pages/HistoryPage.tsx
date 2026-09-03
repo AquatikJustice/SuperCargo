@@ -70,7 +70,7 @@ export default function HistoryPage(): React.ReactElement {
   if (history.length === 0) {
     return (
       <div style={{ padding: PAGE_PADDING }}>
-        <PageHeader title="HISTORY" subtitle="Completed contracts · earnings" />
+        <PageHeader title="HISTORY" subtitle="Completed contracts and earnings" />
         <EmptyState />
       </div>
     )
@@ -259,7 +259,7 @@ function RunGroup({ group, defaultOpen }: { group: RunGroupData; defaultOpen: bo
         <span style={{ flex: 1 }} />
         <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.08em', color: C.body, flex: 'none' }}>
           {completedCount} done
-          {failedCount > 0 && <span style={{ color: C.red }}> · {failedCount} failed</span>}
+          {failedCount > 0 && <span style={{ color: C.red }}>, {failedCount} failed</span>}
         </span>
         <span style={{ fontFamily: F.mono, fontSize: 15, color: C.acc, textShadow: GLOW, flex: 'none', minWidth: 132, textAlign: 'right' }}>
           {fmt(earnings)} <span style={{ fontSize: 11, color: C.dim }}>aUEC</span>
@@ -441,7 +441,7 @@ function RewardCell({ entry }: { entry: HistoryEntry }): React.ReactElement {
           {net ? `${fmt(net)} aUEC` : entry.reward ? '0 aUEC' : 'set -'}
         </span>
         {logged ? (
-          <span style={{ fontSize: 10, color: C.faint }}>paid{entry.reward > 0 ? ` · of ${fmt(entry.reward)}` : ''}</span>
+          <span style={{ fontSize: 10, color: C.faint }}>paid{entry.reward > 0 ? ` of ${fmt(entry.reward)}` : ''}</span>
         ) : (
           partial && entry.reward > 0 && (
             <span style={{ fontSize: 10, color: C.faint }}>of {fmt(entry.reward)}</span>

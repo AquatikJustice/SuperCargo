@@ -27,8 +27,8 @@ export default function LoadBar({
         <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.2em', color: C.dim }}>LOAD</span>
         <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
           {fmt(Math.round(current))} / {fmt(usable)} SCU
-          <span style={{ color: over ? C.red : C.dim }}> · peak {fmt(Math.round(peak))}</span>
-          {reserved > 0 && <span style={{ color: '#e07f28' }}> · {fmt(reserved)} reserved</span>}
+          <span style={{ color: over ? C.red : C.dim }}>, peak {fmt(Math.round(peak))}</span>
+          {reserved > 0 && <span style={{ color: '#e07f28' }}>, {fmt(reserved)} reserved</span>}
         </span>
       </div>
       <div style={{ position: 'relative', height: 6, background: 'rgba(255,255,255,0.10)', width: '100%' }}>

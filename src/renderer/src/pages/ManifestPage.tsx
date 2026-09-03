@@ -78,7 +78,7 @@ export default function ManifestPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING }}>
       <PageHeader
         title="CARGO MANIFEST"
-        subtitle={`${totals.contracts} active contracts · ${stops.filter((s) => !s.done).length} stops`}
+        subtitle={`${totals.contracts} active contracts, ${stops.filter((s) => !s.done).length} stops`}
         right={<GroupToggle groupBy={groupBy} setGroupBy={setGroupBy} />}
       />
 
@@ -116,7 +116,7 @@ export default function ManifestPage(): React.ReactElement {
 
       {turnIn && (
         <TurnInModal
-          heading={turnIn.stop.code ? `${turnIn.stop.code} · ${turnIn.stop.name}` : turnIn.stop.name}
+          heading={turnIn.stop.code ? `${turnIn.stop.code} ${turnIn.stop.name}` : turnIn.stop.name}
           sub="Mark what you handed over. You can change it until the contract completes."
           items={[
             {
@@ -199,7 +199,7 @@ function MissingObjectivesBanner({
         }}
         hoverStyle={{ background: 'rgba(216,166,74,0.12)' }}
       >
-        ADD OBJECTIVES · {first.ref}
+        ADD OBJECTIVES {first.ref}
       </Btn>
     </div>
   )
@@ -445,7 +445,6 @@ function ByDestination({
               </div>
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: off ? C.amber : '#b6bec0' }}>
-                  <span style={{ color: C.faint }}>· </span>
                   {off ? (
                     `${off.breakdown} off grid`
                   ) : (
@@ -530,7 +529,6 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
             </div>
             {showBoxMath ? (
               <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
-                <span style={{ color: C.faint }}>· </span>
                 <span
                   onClick={() => onEditBoxes(it.contractId, it.objectiveId)}
                   title="Click to edit the box sizes"
@@ -646,7 +644,7 @@ function OffGridBadge({ variant, count }: { variant: 'tag' | 'rollup'; count?: n
         <path d="M13.5 13.5l7 7M20.5 13.5v7h-7" />
       </svg>
       <span style={{ fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em' }}>
-        OFF GRID{rollup && count ? ` · ${count}` : ''}
+        OFF GRID{rollup && count ? ` ${count}` : ''}
       </span>
     </span>
   )
@@ -660,7 +658,7 @@ function PickupNote({ pickups }: { pickups?: string[] }): React.ReactElement | n
       title={`Pick up from ${uniq.join(', ')}`}
       style={{ fontFamily: F.body, fontSize: 11.5, color: C.acc, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
     >
-      ↤ from {uniq.join(' · ')}
+      ↤ from {uniq.join(', ')}
     </span>
   )
 }
@@ -697,7 +695,7 @@ function ByContract({
                 {c.title}
               </div>
               <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 2 }}>
-                {c.pickup ? `Pickup · ${c.pickup} · ` : ''}max box {c.maxBox} SCU
+                {c.pickup ? `Pickup ${c.pickup}, ` : ''}max box {c.maxBox} SCU
               </div>
             </div>
             <div style={{ fontFamily: F.mono, fontSize: 15, color: C.text, textShadow: GLOW, flex: 'none' }}>
@@ -721,7 +719,6 @@ function ByContract({
               </div>
               {showBoxMath ? (
                 <div style={{ fontFamily: F.mono, fontSize: 13, color: '#b6bec0' }}>
-                  <span style={{ color: C.faint }}>· </span>
                   <span
                     onClick={() => onEditBoxes(c.id, o.objectiveId)}
                     title="Click to edit the box sizes"

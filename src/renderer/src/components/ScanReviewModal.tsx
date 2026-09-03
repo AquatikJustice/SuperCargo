@@ -88,7 +88,7 @@ function ItemCard({ item }: { item: ScannedContract }): React.ReactElement {
       </div>
       {item.accepted.pickup && (
         <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 16 }}>
-          Pickup · {item.accepted.pickup}
+          Pickup {item.accepted.pickup}
         </div>
       )}
 

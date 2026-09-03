@@ -92,7 +92,7 @@ export default function ContractsPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING }}>
       <PageHeader
         title="CONTRACTS"
-        subtitle={`${derived.length} tracked · click a contract to expand objectives`}
+        subtitle={`${derived.length} tracked`}
         right={
           <WriteOnly>
           <Btn
@@ -184,13 +184,13 @@ export default function ContractsPage(): React.ReactElement {
                             onClick={() => setSharerLeft(c.id, true)}
                           />
                         ) : c.sharedWith.length ? (
-                          <ShareBadge label={`SHARED · ${c.sharedWith.length} joined`} />
+                          <ShareBadge label={`SHARED (${c.sharedWith.length})`} />
                         ) : null}
                       </div>
                       <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginTop: 1 }}>
                         {[c.rank, `${c.objCount} objectives`, `${c.totSCU} SCU`, c.reputation ? `${c.reputation} Rep` : '']
                           .filter(Boolean)
-                          .join(' · ')}
+                          .join(', ')}
                       </div>
                     </div>
                   </div>
@@ -266,7 +266,7 @@ export default function ContractsPage(): React.ReactElement {
                             }}
                             hoverStyle={{ border: `1px solid ${C.amber}`, color: C.amber }}
                           >
-                            SHARER LEFT · YOURS NOW
+                            SHARER LEFT - YOURS NOW
                           </Btn>
                         </DetailField>
                       )}
@@ -401,7 +401,7 @@ export default function ContractsPage(): React.ReactElement {
                           <span style={{ fontFamily: F.display, fontSize: 11, letterSpacing: '0.16em', color: C.acc }}>
                             POSSIBLE BLUEPRINTS
                           </span>
-                          <span style={{ fontFamily: F.body, fontSize: 11, color: C.dim }}>· via StarStrings</span>
+                          <span style={{ fontFamily: F.body, fontSize: 11, color: C.dim }}>via StarStrings</span>
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 10px' }}>
                           {c.blueprints.map((bp, i) => (
@@ -444,7 +444,7 @@ export default function ContractsPage(): React.ReactElement {
                             }}
                             hoverStyle={{ border: `1px solid ${C.green}`, color: confirmFile === c.id ? C.amber : C.green }}
                           >
-                            {confirmFile === c.id ? 'CONFIRM · FILE COMPLETE' : 'MARK COMPLETE'}
+                            {confirmFile === c.id ? 'CONFIRM FILE COMPLETE' : 'MARK COMPLETE'}
                           </Btn>
                           <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
                             manual contracts don't file from the game log, close it out here when it's done

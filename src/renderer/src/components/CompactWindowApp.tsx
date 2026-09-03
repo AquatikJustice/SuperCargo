@@ -151,7 +151,7 @@ export default function CompactWindowApp(): React.ReactElement {
                 {offGridBoxes > 0 && (
                   <div>
                     <SectionLabel color={C.amber}>
-                      GRAB OFF-GRID · {offGridBoxes} {offGridBoxes === 1 ? 'BOX' : 'BOXES'}
+                      GRAB OFF-GRID {offGridBoxes} {offGridBoxes === 1 ? 'BOX' : 'BOXES'}
                     </SectionLabel>
                     {dropOffGrid.map((x, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 14px' }}>
@@ -188,12 +188,12 @@ export default function CompactWindowApp(): React.ReactElement {
 }
 
 function SharedWaitCard({ wait, opacity }: { wait: OcrWaitState; opacity: number }): React.ReactElement {
-  const meta = [wait.contractor, wait.rank].filter(Boolean).join(' · ')
+  const meta = [wait.contractor, wait.rank].filter(Boolean).join(', ')
   return (
     <Panel opacity={opacity}>
       <div style={{ padding: '10px 14px 11px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ fontFamily: F.display, fontSize: 11.5, letterSpacing: '0.16em', color: C.amber }}>
-          SHARED CONTRACT · OPEN YOUR MOBIGLAS
+          SHARED CONTRACT - OPEN YOUR MOBIGLAS
         </div>
         {wait.title && (
           <div style={{ fontSize: 15, fontWeight: 700, color: WHITE, lineHeight: 1.3 }}>{wait.title}</div>
@@ -316,7 +316,7 @@ function LoadLine({
           <span style={{ color: dot, fontFamily: F.mono, fontWeight: 600 }}>{breakdown}</span>{' '}
           <span style={{ color: GREEN }}>{commodity}</span>
           {tripTotal && tripTotal > 1 && (
-            <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber }}> · trip {tripPos}/{tripTotal}</span>
+            <span style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber }}>, trip {tripPos}/{tripTotal}</span>
           )}
         </span>
         {delivered && (

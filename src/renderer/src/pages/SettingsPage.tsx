@@ -136,7 +136,7 @@ export default function SettingsPage(): React.ReactElement {
 
   return (
     <div style={{ padding: PAGE_PADDING, maxWidth: 820 }}>
-      <PageHeader title="SETTINGS" subtitle="Game integration · ship · display · updates" />
+      <PageHeader title="SETTINGS" subtitle="Game integration, ship, display, updates" />
 
       <Section title="GAME" />
       <div style={rowStyle}>
@@ -237,7 +237,7 @@ export default function SettingsPage(): React.ReactElement {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <SmallBtn onClick={() => void updateData()}>{dataSyncing ? 'CHECKING...' : 'UPDATE DATA'}</SmallBtn>
           <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
-            {ships.length} ships · {locations.length} locations · {commodities.length} commodities
+            {ships.length} ships, {locations.length} locations, {commodities.length} commodities
           </span>
           {!dataSyncing && dataStatus && <DataSyncPill result={dataStatus} />}
         </div>
@@ -419,7 +419,7 @@ export default function SettingsPage(): React.ReactElement {
                   hoverStyle={active ? {} : { border: `1px solid ${C.acc}` }}
                 >
                   {d.label}
-                  {d.primary ? ' ·★' : ''}
+                  {d.primary ? ' ★' : ''}
                 </Btn>
               )
             })
@@ -454,7 +454,7 @@ export default function SettingsPage(): React.ReactElement {
               outline: 'none'
             }}
           />
-          <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint, flex: 'none' }}>global · blank to disable</span>
+          <span style={{ fontFamily: F.body, fontSize: 11, color: C.faint, flex: 'none' }}>global, blank to disable</span>
         </div>
       </div>
       <div style={rowStyle}>
@@ -504,12 +504,12 @@ export default function SettingsPage(): React.ReactElement {
           <span style={keyStyle}>Contributed</span>
           <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
             {telemetry ? `${telemetry.uploaded} uploaded` : '-'}
-            {telemetry && telemetry.queued > 0 && <span style={{ color: C.amber }}> · {telemetry.queued} queued</span>}
+            {telemetry && telemetry.queued > 0 && <span style={{ color: C.amber }}>, {telemetry.queued} queued</span>}
           </span>
         </div>
       )}
 
-      <Section title="CONTRACT DATA · STARSTRINGS" />
+      <Section title="CONTRACT DATA" />
       <div style={rowStyle}>
         <span style={keyStyle}>Status</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -517,7 +517,7 @@ export default function SettingsPage(): React.ReactElement {
             <>
               <Pill color={C.green} text="DETECTED" />
               <span style={{ fontFamily: F.mono, fontSize: 13, color: C.body }}>
-                {contractData.titles} contracts · {contractData.blueprintContracts} with blueprints
+                {contractData.titles} contracts, {contractData.blueprintContracts} with blueprints
               </span>
             </>
           ) : (
@@ -617,7 +617,7 @@ function AboutBlock(): React.ReactElement {
             {MADE_BY_COMMUNITY.toUpperCase()}
           </div>
           <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-            {APP_NAME} ·{' '}
+            {APP_NAME}{' '}
             <a href={FANKIT_URL} style={{ color: C.body, textDecoration: 'underline' }}>
               Star Citizen Fankit
             </a>
@@ -634,7 +634,7 @@ function AboutBlock(): React.ReactElement {
         Community data sources:{' '}
         {DATA_CREDITS.map((c, i) => (
           <React.Fragment key={c.name}>
-            {i > 0 && ' · '}
+            {i > 0 && ', '}
             <a href={c.url} style={{ color: C.body, textDecoration: 'underline' }} title={c.use}>
               {c.name}
             </a>

@@ -735,7 +735,7 @@ export default function CargoGridPage(): React.ReactElement {
         const step = base.find((s) => s.kind === 'load' && s.loadIds.includes(id))
         const line = step?.lines.find((l) => l.objectiveId === id)
         if (!step || !line) return { id, label: id }
-        return { id, label: `${line.commodity} · ${line.totalScu} SCU · ${step.code || step.label} → ${destLabelOf(line.destination)}` }
+        return { id, label: `${line.commodity} ${line.totalScu} SCU ${step.code || step.label} → ${destLabelOf(line.destination)}` }
       })
   }, [frozenSteps, liveSteps, deferredObjectives, tickedObj])
 
@@ -2141,7 +2141,7 @@ export default function CargoGridPage(): React.ReactElement {
   if (visibleCount === 0 && !loading) {
     return (
       <div style={{ padding: PAGE_PADDING }}>
-        <PageHeader title="CARGO GRID" subtitle={`${activeShip} · 3D load plan`} />
+        <PageHeader title="CARGO GRID" subtitle={`${activeShip} 3D load plan`} />
         <Placeholder
           phase="Cargo Grid"
           lines={[
@@ -2160,7 +2160,7 @@ export default function CargoGridPage(): React.ReactElement {
     <div style={{ padding: PAGE_PADDING, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <PageHeader
         title="CARGO GRID"
-        subtitle={`${activeShip}${loading ? ' · loading' : ' · load planner'}`}
+        subtitle={`${activeShip}${loading ? ' loading' : ' load planner'}`}
       />
 
       <div style={{ display: 'flex', gap: 18, alignItems: 'baseline', flexWrap: 'wrap', margin: '2px 0 10px' }}>
@@ -2174,7 +2174,7 @@ export default function CargoGridPage(): React.ReactElement {
           {over
             ? '▲ OVER CAPACITY (overflow not shown)'
             : result.squeezed
-              ? '✓ FITS · PACKED TIGHT'
+              ? '✓ PACKED TIGHT'
               : '✓ EVERYTHING FITS'}
         </span>
         {loading && offGrid.count > 0 && (
@@ -2184,7 +2184,7 @@ export default function CargoGridPage(): React.ReactElement {
           >
             <OffGridGlyph />
             <span style={{ fontFamily: F.mono }}>off grid {offGrid.count} {offGrid.count === 1 ? 'box' : 'boxes'} / {fmt(offGrid.scu)} SCU</span>
-            {offGridHeavy && <span style={{ fontStyle: 'italic', color: C.amber }}>· watch your total</span>}
+            {offGridHeavy && <span style={{ fontStyle: 'italic', color: C.amber }}>watch your total</span>}
           </span>
         )}
       </div>
@@ -2403,7 +2403,7 @@ export default function CargoGridPage(): React.ReactElement {
             }}
             hoverStyle={{ border: `1px solid ${C.red}`, background: 'rgba(236,116,112,0.10)' }}
           >
-            {confirmReset ? 'CONFIRM · RESET' : 'RESET ROUTE'}
+            {confirmReset ? 'CONFIRM RESET' : 'RESET ROUTE'}
           </Btn>
         )}
         {loading && (
@@ -2496,7 +2496,7 @@ export default function CargoGridPage(): React.ReactElement {
           >
             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, lineHeight: 1.15 }}>
               <span style={{ fontSize: 8, letterSpacing: '0.18em', color: C.amber, opacity: 0.85 }}>EXPERIMENTAL</span>
-              <span>INCLUDE GAPS · {spaceDeliveryPiles ? 'ON' : 'OFF'}</span>
+              <span>INCLUDE GAPS {spaceDeliveryPiles ? 'ON' : 'OFF'}</span>
             </span>
           </Btn>
         )}
@@ -2836,7 +2836,7 @@ export default function CargoGridPage(): React.ReactElement {
           >
             <div style={{ fontWeight: 600 }}>{hover.commodity}</div>
             <div style={{ color: C.dim, fontSize: 12 }}>
-              {hover.size} SCU · {hover.dest}
+              {hover.size} SCU {hover.dest}
             </div>
           </div>
         )}
@@ -2992,7 +2992,7 @@ function LoadingPanel({
     return (
       <div style={{ border: `1px solid ${C.green}`, borderRadius: 6, padding: '14px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: C.green, textShadow: GLOW }}>
-          ✓ ROUTE WALKED · {total} STEPS
+          ✓ ROUTE WALKED - {total} STEPS
         </span>
         <span style={{ fontFamily: F.body, fontSize: 12.5, color: C.dim }}>
           Start over to walk it again, or exit back to the full load plan.
@@ -3051,7 +3051,7 @@ function LoadingPanel({
           STOP {stopNum} / {stopTotal}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
-          {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} · ` : ''}{step.label}
+          {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} ` : ''}{step.label}
         </span>
         <Btn
           onClick={onRepack}
@@ -3154,7 +3154,7 @@ function LoadingPanel({
       {isLoad && grab && (
         <div style={{ margin: '0 16px', padding: '10px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: C.amber }}>
-            ALSO HERE · SKIP THE RETURN
+            ALSO HERE - SKIP THE RETURN
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.body, margin: '4px 0 8px' }}>
             {grab.count} boxes / {grab.scu} SCU are set for a return at step {grab.stepNo}. Grab them now and skip that stop.
@@ -3169,13 +3169,13 @@ function LoadingPanel({
             style={{ width: '100%', border: `1px solid ${C.amber}`, background: 'rgba(255,180,60,0.1)', color: C.text, fontFamily: F.display, fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', padding: 8, cursor: 'pointer' }}
             hoverStyle={{ background: 'rgba(255,180,60,0.22)' }}
           >
-            {grab.offGrid ? 'GRAB IT NOW · EXTRAS OFF GRID' : 'GRAB IT NOW'}
+            {grab.offGrid ? 'GRAB IT NOW - EXTRAS OFF GRID' : 'GRAB IT NOW'}
           </Btn>
         </div>
       )}
       {isLoad && grabbedHere.length > 0 && (
         <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
-          grabbed early cargo is in this load ·{' '}
+          grabbed early cargo is in this load{' '}
           <span style={{ color: C.amber, cursor: 'pointer' }} onClick={() => onUngrab(grabbedHere)}>
             undo
           </span>
@@ -3217,7 +3217,7 @@ function LoadingPanel({
             style={{ flex: 1, border: `1px solid ${blockAdvance ? C.lineStrong : C.acc}`, background: blockAdvance ? 'transparent' : C.accFillStrong, color: blockAdvance ? C.ghost : C.text, textShadow: blockAdvance ? 'none' : GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: blockAdvance ? 'default' : 'pointer' }}
             hoverStyle={blockAdvance ? {} : { background: 'rgba(255,210,30,0.26)' }}
           >
-            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT · DECIDE ABOVE" : blockKind === 'digout' ? 'DIG-OUT · DECIDE ABOVE' : 'LOADED · NEXT'}
+            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT - DECIDE ABOVE" : blockKind === 'digout' ? 'DIG-OUT - DECIDE ABOVE' : 'LOADED'}
           </Btn>
         ) : (
           <>
@@ -3226,7 +3226,7 @@ function LoadingPanel({
               style={{ flex: 1, border: `1px solid ${anyTurnedIn ? C.green : C.acc}`, background: anyTurnedIn ? 'rgba(95,208,137,0.12)' : C.accFillStrong, color: anyTurnedIn ? C.green : C.text, textShadow: GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.14em', padding: 11, cursor: 'pointer' }}
               hoverStyle={{ background: anyTurnedIn ? 'rgba(95,208,137,0.2)' : 'rgba(255,210,30,0.26)' }}
             >
-              {anyTurnedIn ? 'TURNED IN · EDIT' : 'TURN IN'}
+              {anyTurnedIn ? 'TURNED IN - EDIT' : 'TURN IN'}
             </Btn>
             {arrowBtn('›', onLoaded)}
           </>
@@ -3259,7 +3259,7 @@ function LoadingPanel({
 
 function destLabelOf(destination: string): string {
   const d = splitDestination(destination)
-  return d.code ? `${d.code} · ${d.name}` : d.name || destination
+  return d.code ? `${d.code} ${d.name}` : d.name || destination
 }
 
 function LoadLineRow({
@@ -3303,7 +3303,7 @@ function LoadLineRow({
         )}
         {line.tripTotal > 1 && (
           <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>
-            trip {line.tripPos}/{line.tripTotal} · {line.scu} of {line.totalScu} SCU
+            trip {line.tripPos}/{line.tripTotal}, {line.scu} of {line.totalScu} SCU
           </span>
         )}
         {line.multiPickup && (
@@ -3363,7 +3363,7 @@ function SplitDropRow({ line }: { line: LoadingStep['lines'][number] }): React.R
         <span style={{ fontFamily: F.mono, fontSize: 11, color: C.ghost }}>[{line.ref}]</span>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 11.5, color: C.amber, marginTop: 3 }}>
-        drop this trip&apos;s {line.scu} SCU (trip {line.tripPos}/{line.tripTotal}) · {rest} SCU rides a later trip
+        drop this trip&apos;s {line.scu} SCU (trip {line.tripPos}/{line.tripTotal}), {rest} SCU rides a later trip
       </div>
     </div>
   )
@@ -3405,7 +3405,7 @@ function GrabOffGrid({ loose, dropIds }: { loose: PackBox[]; dropIds: string[] }
         ))}
       </div>
       <div style={{ marginTop: 8, fontFamily: F.mono, fontSize: 12, color: C.amber }}>
-        {summary.groups.length} {summary.groups.length === 1 ? 'bucket' : 'buckets'} · {summary.count}{' '}
+        {summary.groups.length} {summary.groups.length === 1 ? 'bucket' : 'buckets'}, {summary.count}{' '}
         {summary.count === 1 ? 'box' : 'boxes'} / {fmt(summary.scu)} SCU off-grid for this stop
       </div>
     </div>
@@ -3478,7 +3478,7 @@ function PickupDecision({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
         {dig ? <span style={{ color: accent, fontSize: 18, lineHeight: 1, flex: 'none' }}>↺</span> : <OffGridGlyph />}
         <span style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em', color: C.text }}>
-          {dig ? `Set aside ${digCount} boxes · ${digBreakdown}` : `${offBreakdown} · ${fmt(offScu)} SCU won't fit`}
+          {dig ? `Set aside ${digCount} boxes, ${digBreakdown}` : `${offBreakdown}, ${fmt(offScu)} SCU won't fit`}
         </span>
       </div>
       <div style={{ fontFamily: F.body, fontSize: 12.5, lineHeight: 1.5, color: '#a8b0b3', marginBottom: 13 }}>

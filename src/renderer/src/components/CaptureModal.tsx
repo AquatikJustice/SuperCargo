@@ -362,7 +362,7 @@ export default function CaptureModal(): React.ReactElement | null {
               </div>
               <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
                 {target
-                  ? `${target.ref} · ${target.title || 'contract'}`
+                  ? `${target.ref} ${target.title || 'contract'}`
                   : 'Add delivery objectives'}
               </div>
             </div>
@@ -499,7 +499,7 @@ export default function CaptureModal(): React.ReactElement | null {
                 ) : null}
               </div>
               <div>
-                <div style={labelStyle}>REWARD · aUEC</div>
+                <div style={labelStyle}>REWARD (aUEC)</div>
                 <input
                   style={{ ...inputStyle, fontFamily: F.mono }}
                   inputMode="numeric"
@@ -656,7 +656,7 @@ export default function CaptureModal(): React.ReactElement | null {
               title="The objectives panel scrolls, so rows you add by hand may not be in the screenshot. The contract saves normally; only the training contribution is skipped."
               style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginRight: 'auto' }}
             >
-              {outsideRead} row{outsideRead === 1 ? " isn't" : "s aren't"} in the capture · training sample won't be saved
+              {outsideRead} row{outsideRead === 1 ? " isn't" : "s aren't"} in the capture, training sample won't be saved
             </span>
           )}
           {calibrating ? (
@@ -795,7 +795,7 @@ function OcrCapturePane({
       </div>
       <div style={{ marginTop: 18, fontFamily: F.mono, fontSize: 11, color: C.faint }}>
         Engine: {engineLabel}
-        {detail ? ` · ${detail}` : ''}
+        {detail ? `, ${detail}` : ''}
       </div>
       {!available && (
         <div style={{ marginTop: 10, fontFamily: F.body, fontSize: 12, color: C.amber }}>
@@ -1008,8 +1008,8 @@ function OcrHint({ hint }: { hint: OcrHintInfo }): React.ReactElement {
   const color = hint.matched ? (pct >= 85 ? C.green : C.amber) : hint.guess ? C.amber : C.red
   const label = hint.matched ? `~ ${pct}%` : hint.guess ? '≈ best guess' : '⚠ unmatched'
   return (
-    <div style={{ fontFamily: F.mono, fontSize: 10, color, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`read: "${hint.raw}" · ${pct}% match`}>
-      {label} · "{hint.raw}"
+    <div style={{ fontFamily: F.mono, fontSize: 10, color, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`read: "${hint.raw}", ${pct}% match`}>
+      {label} "{hint.raw}"
     </div>
   )
 }

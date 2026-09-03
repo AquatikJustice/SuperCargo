@@ -102,7 +102,7 @@ function AttributionPanel(): React.ReactElement {
           <div style={{ fontFamily: F.body, fontSize: 10.5, lineHeight: 1.4, color: C.faint, marginTop: 3 }}>
             Star Citizen® is a trademark of
             <br />
-            Cloud Imperium Games · not affiliated
+            Cloud Imperium Games, not affiliated
           </div>
         </div>
       </div>
