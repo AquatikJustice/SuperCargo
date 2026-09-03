@@ -68,16 +68,7 @@ export async function joinCrew(
   onSnapshot = handlers.snapshot
   onStatus = handlers.status
 
-  const { data, error } = await db().from(TABLE).select('payload').eq('code', code).maybeSingle()
-  if (error) {
-    code = ''
-    return { ok: false, error: error.message }
-  }
-  if (!data) {
-    code = ''
-    return { ok: false, error: "That crew code doesn't exist" }
-  }
-
+  // subscribe first: a fetch-then-subscribe order drops any update landing in between
   channel = db()
     .channel(`crew:${code}`)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: TABLE, filter: `code=eq.${code}` }, (msg) => {
@@ -88,11 +79,25 @@ export async function joinCrew(
         onSnapshot?.(next)
       }
     })
-    .subscribe((s) => onStatus?.(s === 'SUBSCRIBED', s === 'SUBSCRIBED' ? undefined : String(s)))
+  await new Promise<void>((resolve) => {
+    let settled = false
+    channel!.subscribe((state) => {
+      onStatus?.(state === 'SUBSCRIBED', state === 'SUBSCRIBED' ? undefined : String(state))
+      if (!settled && (state === 'SUBSCRIBED' || state === 'CHANNEL_ERROR' || state === 'TIMED_OUT')) {
+        settled = true
+        resolve()
+      }
+    })
+  })
 
-  // whatever the leader had before we walked in
+  // catch-up read; the rev check above makes an overlap with a pushed update harmless
+  const { data, error } = await db().from(TABLE).select('payload').eq('code', code).maybeSingle()
+  if (error || !data) {
+    await leaveCrew()
+    return { ok: false, error: error?.message ?? "That crew code doesn't exist" }
+  }
   const seed = data.payload as CrewSnapshot | null
-  if (seed) {
+  if (seed && seed.rev > rev) {
     rev = seed.rev
     onSnapshot?.(seed)
   }

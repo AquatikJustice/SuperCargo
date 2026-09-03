@@ -889,6 +889,21 @@ export default function CargoGridPage(): React.ReactElement {
     const { homes } = packRun(grids, boxes, { gap: spaceDeliveryPiles ? 1 : 0, fixtures })
     return boxes.map((b) => freezeBox(objMeta, b, homes.get(b.id)))
   }, [livePack, grids, objMeta, spaceDeliveryPiles, fixtures])
+  // what the leader is looking at, so the crew renders the same hold including hand-moves
+  const setCrewBoxes = useStore((s) => s.setCrewBoxes)
+  const crewRole = useStore((s) => s.crew.role)
+  useEffect(() => {
+    if (crewRole !== 'leader') return
+    const snap = loading && loadingPack ? loadingPack.snaps[loadIdx] : null
+    if (!snap) {
+      setCrewBoxes(plan)
+      return
+    }
+    const at = new Map(snap.placements.map((p) => [p.box.id, p]))
+    const shown = [...snap.placements.map((p) => p.box), ...snap.unplaced, ...snap.loose]
+    setCrewBoxes(shown.map((b) => freezeBox(objMeta, b, at.get(b.id))))
+  }, [crewRole, loading, loadingPack, loadIdx, plan, objMeta, setCrewBoxes])
+
   const result = useMemo(() => {
     const loadable = grids.filter((g) => g.autoLoad !== false)
     const capacity = loadable.reduce((a, g) => a + g.w * g.l * g.h, 0)

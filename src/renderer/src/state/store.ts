@@ -26,6 +26,7 @@ import type {
   StorAllCrate,
   BoxSizeReport,
   CrewState,
+  ManifestDoc,
   CrewSnapshot
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
@@ -243,6 +244,8 @@ interface StoreState {
   scanQueue: ScannedContract[]
   scanReviewOpen: boolean
   crew: CrewState
+  /** leader's boxes as the grid currently has them; what a crew member renders */
+  crewBoxes: FrozenBox[]
   /** epoch ms of the leader's last snapshot; drives the stale warning */
   crewSeenAt: number
   history: HistoryEntry[]
@@ -294,6 +297,7 @@ interface StoreState {
   setGroupBy: (g: 'destination' | 'contract') => void
   toggleBoxMath: () => void
   openCapture: (targetId?: string) => void
+  setCrewBoxes: (boxes: FrozenBox[]) => void
   startCrew: () => Promise<void>
   joinCrew: (code: string) => Promise<void>
   /** leader ends it for everyone, member just walks out */
@@ -425,8 +429,41 @@ export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
+    // crew member's view is on loan; it never becomes their saved run
+    if (get().crew.role === 'member') return
     const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
-    void window.supercargo.saveManifest({ runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls })
+    const doc: ManifestDoc = { runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls }
+    void window.supercargo.saveManifest(doc)
+    pushCrew(doc)
+  }
+
+  // leader broadcast, coalesced: a drag settles into one snapshot, not one per frame
+  let crewTimer: ReturnType<typeof setTimeout> | null = null
+  const pushCrew = (doc?: ManifestDoc): void => {
+    const st = get()
+    if (st.crew.role !== 'leader') return
+    if (crewTimer) clearTimeout(crewTimer)
+    crewTimer = setTimeout(() => {
+      const cur = get()
+      const ship = cur.settings.activeShip
+      void window.supercargo
+        .publishCrew({
+          leader: cur.settings.telemetryClientId || 'Leader',
+          ship,
+          installedModules: cur.settings.installedModules[ship] ?? [],
+          manifest: doc ?? manifestDoc(),
+          boxes: cur.crewBoxes,
+          loadingIdx: cur.loadingActive ? cur.loadingIdx : null,
+          appVersion: cur.appVersion,
+          gridFacesHash: cur.gridFacesSyncedAt
+        })
+        .then((ok) => set((p) => ({ crew: { ...p.crew, connected: ok, lastAt: ok ? Date.now() : p.crew.lastAt } })))
+    }, 400)
+  }
+
+  const manifestDoc = (): ManifestDoc => {
+    const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
+    return { runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls }
   }
 
   const holdGrids = (): CargoGrid[] => {
@@ -435,6 +472,7 @@ export const useStore = create<StoreState>((set, get) => {
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
+    if (get().crew.role === 'member') return
     const nextOrd = nextOrder(contracts, order ?? get().order)
     // sync locked layout, no re-flow
     let layout = get().layout
@@ -738,6 +776,7 @@ export const useStore = create<StoreState>((set, get) => {
     scanQueue: [],
     scanReviewOpen: false,
     crew: { role: null, code: '', connected: false, lastAt: 0, members: 0 },
+    crewBoxes: [],
     crewSeenAt: 0,
     history: [],
     appVersion: '',
@@ -1153,6 +1192,12 @@ export const useStore = create<StoreState>((set, get) => {
       }
     },
 
+    setCrewBoxes: (boxes) => {
+      if (get().crew.role !== 'leader') return
+      set({ crewBoxes: boxes })
+      pushCrew()
+    },
+
     startCrew: async () => {
       const code = await window.supercargo.startCrew()
       if (!code) {
@@ -1160,6 +1205,7 @@ export const useStore = create<StoreState>((set, get) => {
         return
       }
       set({ crew: { role: 'leader', code, connected: true, lastAt: Date.now(), members: 0 } })
+      pushCrew()
     },
 
     joinCrew: async (code) => {

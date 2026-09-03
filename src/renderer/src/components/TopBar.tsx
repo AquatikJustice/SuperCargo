@@ -115,8 +115,26 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const seenAt = useStore((s) => s.crewSeenAt)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (crew.role !== 'member') return
+    const t = setInterval(() => tick((n) => n + 1), 5000)
+    return () => clearInterval(t)
+  }, [crew.role])
+
   const inCrew = crew.role !== null
-  const label = crew.role === 'member' ? 'CREW · READ ONLY' : crew.role === 'leader' ? `CREW · ${crew.code}` : 'CREW'
+  // a leader who force-quits leaves the row up, so silence is the only tell
+  const staleFor = crew.role === 'member' && seenAt ? Date.now() - seenAt : 0
+  const stale = staleFor > 60_000
+  const label =
+    crew.role === 'member'
+      ? stale
+        ? 'CREW · NOT UPDATING'
+        : 'CREW · READ ONLY'
+      : crew.role === 'leader'
+        ? `CREW · ${crew.code}`
+        : 'CREW'
 
   const copy = (): void => {
     void navigator.clipboard.writeText(crew.code)
@@ -228,6 +246,12 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               ) : (
                 <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 11 }}>
                   Watching {crew.code}. Your own run is waiting for you when you leave.
+                </div>
+              )}
+              {stale && (
+                <div style={{ fontFamily: F.body, fontSize: 12, color: C.amber, marginBottom: 11 }}>
+                  Nothing from the crew leader for {Math.round(staleFor / 60_000)} min. They may have
+                  closed the app; what you're looking at could be out of date.
                 </div>
               )}
               <Btn
