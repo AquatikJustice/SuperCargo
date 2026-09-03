@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -18,6 +18,7 @@ import * as contractData from './contractData'
 import * as telemetry from './telemetry'
 import * as usageStats from './usageStats'
 import * as boxReports from './boxReports'
+import * as crew from './crew'
 import appIcon from '../../resources/icon.png?asset'
 
 let mainWindow: BrowserWindow | null = null
@@ -581,6 +582,17 @@ function registerIpc(): void {
     broadcast(IPC.evtManifestChanged, doc, e.sender.id)
     return true
   })
+
+  ipcMain.handle(IPC.crewStart, () => crew.startCrew())
+  ipcMain.handle(IPC.crewJoin, (_e, code: string) =>
+    crew.joinCrew(code, {
+      snapshot: (snap) => send(IPC.evtCrewSnapshot, snap),
+      status: (up, error) => send(IPC.evtCrewStatus, { up, error })
+    })
+  )
+  ipcMain.handle(IPC.crewLeave, () => crew.leaveCrew())
+  ipcMain.handle(IPC.crewEnd, () => crew.endCrew())
+  ipcMain.handle(IPC.crewPublish, (_e, snap: Omit<CrewSnapshot, 'rev'>) => crew.publish(snap))
 
   ipcMain.handle(IPC.compactShow, () => showCompact())
   ipcMain.handle(IPC.compactHide, () => hideCompact())

@@ -69,8 +69,16 @@ export const IPC = {
   evtOcrResult: 'evt:ocr:result',
   evtOcrStatus: 'evt:ocr:status',
   evtOcrWait: 'evt:ocr:wait', // shared-accept capture waiting for the contract screen
+  crewStart: 'crew:start',
+  crewJoin: 'crew:join',
+  crewLeave: 'crew:leave',
+  crewEnd: 'crew:end',
+  crewPublish: 'crew:publish',
+
   evtManifestChanged: 'evt:manifest:changed', // saved by another window
   evtCompactState: 'evt:compact:state',
   evtLoadingState: 'evt:loading:state', // main window's loading-mode step
+  evtCrewSnapshot: 'evt:crew:snapshot', // leader's run, for a crew member to render
+  evtCrewStatus: 'evt:crew:status', // crew link up/down
   evtSettings: 'evt:settings' // settings changed, keep the overlay in sync
 } as const

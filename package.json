@@ -30,6 +30,7 @@
     "publish:linux": "electron-vite build && electron-builder --linux --publish always"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
     "electron-updater": "^6.3.9",
     "onnxruntime-node": "^1.27.0",
     "tesseract.js": "^5.1.1"

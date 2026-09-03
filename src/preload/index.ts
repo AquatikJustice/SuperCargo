@@ -24,7 +24,8 @@ import type {
   OcrWaitState,
   ContractDataStatus,
   DataSyncResult,
-  BoxSizeReport
+  BoxSizeReport,
+  CrewSnapshot
 } from '@shared/types'
 
 type Unsubscribe = () => void
@@ -44,6 +45,17 @@ const api = {
   pickLogFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.pickLogFile),
   exportRunFile: (payload: { defaultName: string; json: string }): Promise<string | null> =>
     ipcRenderer.invoke(IPC.exportRunFile, payload),
+
+  startCrew: (): Promise<string | null> => ipcRenderer.invoke(IPC.crewStart),
+  joinCrew: (code: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.crewJoin, code),
+  leaveCrew: (): Promise<void> => ipcRenderer.invoke(IPC.crewLeave),
+  endCrew: (): Promise<void> => ipcRenderer.invoke(IPC.crewEnd),
+  publishCrew: (snap: Omit<CrewSnapshot, 'rev'>): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.crewPublish, snap),
+  onCrewSnapshot: (cb: (s: CrewSnapshot) => void): Unsubscribe => on(IPC.evtCrewSnapshot, cb),
+  onCrewStatus: (cb: (s: { up: boolean; error?: string }) => void): Unsubscribe =>
+    on(IPC.evtCrewStatus, cb),
 
   loadManifest: (): Promise<ManifestDoc> => ipcRenderer.invoke(IPC.manifestLoad),
   saveManifest: (doc: ManifestDoc): Promise<boolean> =>

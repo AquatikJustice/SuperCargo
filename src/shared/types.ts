@@ -679,3 +679,34 @@ export type UpdateState =
   | { kind: 'downloading'; percent: number }
   | { kind: 'downloaded'; version: string }
   | { kind: 'error'; message: string }
+
+/** everything a crew member's app needs to render the leader's run, positions included */
+export interface CrewSnapshot {
+  /** bumped on every publish; a follower ignores anything not newer than what it has */
+  rev: number
+  /** leader's handle if the log gave us one, else a placeholder */
+  leader: string
+  ship: string
+  installedModules: string[]
+  manifest: ManifestDoc
+  /** boxes where the leader's grid actually has them, hand-moves included */
+  boxes: FrozenBox[]
+  /** which walk step the leader is on; null = not in loading mode */
+  loadingIdx: number | null
+  /** flags a crew member on a different build or data set, whose grid would render wrong */
+  appVersion: string
+  gridFacesHash: string
+}
+
+export type CrewRole = 'leader' | 'member'
+
+export interface CrewState {
+  role: CrewRole | null
+  code: string
+  /** false once a publish or fetch fails; the member's view is stale */
+  connected: boolean
+  /** epoch ms of the last snapshot applied, for the staleness readout */
+  lastAt: number
+  members: number
+  error?: string
+}
