@@ -1,7 +1,7 @@
 // autoUpdater needs app ready, touch only after whenReady
 
 import electronUpdater, { type AppUpdater } from 'electron-updater'
-import type { BrowserWindow } from 'electron'
+import { app, type BrowserWindow } from 'electron'
 import type { UpdateState } from '@shared/types'
 
 let listenersAttached = false
@@ -41,6 +41,8 @@ export function initUpdater(getWindow: () => BrowserWindow | null): void {
 }
 
 export async function checkForUpdates(): Promise<void> {
+  // tester builds sit beside the real install; the public feed isn't theirs to follow
+  if (app.getVersion().includes('-')) return
   try {
     await updater().checkForUpdates()
   } catch (e) {

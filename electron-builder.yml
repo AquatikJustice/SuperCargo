@@ -10,8 +10,8 @@
 # draft release (.github/workflows/release-linux.yml). electron-updater reads
 # latest.yml / latest-linux.yml from the release assets to update both.
 #
-appId: space.supercargo.app
-productName: SuperCargo
+appId: space.supercargo.alpha
+productName: SuperCargo Alpha
 copyright: Copyright © 2026 Travis
 
 directories:
@@ -70,7 +70,7 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-  shortcutName: SuperCargo
+  shortcutName: SuperCargo Alpha
   # 'always' recreates the desktop shortcut on every install AND update. Without
   # it (default true), a silent auto-update's uninstall step removes the shortcut
   # and the reinstall declines to recreate it, so the icon vanishes after updating.

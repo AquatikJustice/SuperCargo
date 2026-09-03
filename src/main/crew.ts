@@ -1,11 +1,11 @@
-// crew mode transport: the leader upserts one row, members subscribe to it and render read-only
+// crew mode transport: leader owns one row, members subscribe and render it read-only
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import type { CrewSnapshot, CrewMember, CrewRole } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
 const TABLE = 'crew_sessions'
-// meant to be pasted into chat; the unambiguous alphabet is just for whoever retypes it
+// pasted into chat; unambiguous alphabet is for whoever retypes it
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789'
 const CODE_LEN = 8
 

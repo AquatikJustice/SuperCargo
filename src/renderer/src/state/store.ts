@@ -439,7 +439,7 @@ export const useStore = create<StoreState>((set, get) => {
     pushCrew(doc)
   }
 
-  // leader broadcast, coalesced: a drag settles into one snapshot, not one per frame
+  // coalesced: a step forward writes pins, ticks and a re-solve, send one snapshot
   let crewTimer: ReturnType<typeof setTimeout> | null = null
   const pushCrew = (doc?: ManifestDoc): void => {
     const st = get()
@@ -450,7 +450,7 @@ export const useStore = create<StoreState>((set, get) => {
       const ship = cur.settings.activeShip
       void window.supercargo
         .publishCrew({
-          leader: cur.settings.telemetryClientId || 'Leader',
+          leader: cur.settings.crewName || 'Leader',
           ship,
           installedModules: cur.settings.installedModules[ship] ?? [],
           manifest: doc ?? manifestDoc(),
@@ -1214,7 +1214,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     joinCrew: async (code) => {
-      // stash the member's own run; crew mode paints over it and never writes to disk
+      // stash it before the leader's run paints over the top
       preCrew = {
         contracts: get().contracts,
         order: get().order,

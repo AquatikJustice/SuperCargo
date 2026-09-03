@@ -686,7 +686,7 @@ export type UpdateState =
 export interface CrewSnapshot {
   /** bumped on every publish; a follower ignores anything not newer than what it has */
   rev: number
-  /** leader's handle if the log gave us one, else a placeholder */
+  /** name the leader set, for a member's own display */
   leader: string
   ship: string
   installedModules: string[]

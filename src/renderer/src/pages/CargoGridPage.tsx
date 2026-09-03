@@ -889,7 +889,7 @@ export default function CargoGridPage(): React.ReactElement {
     const { homes } = packRun(grids, boxes, { gap: spaceDeliveryPiles ? 1 : 0, fixtures })
     return boxes.map((b) => freezeBox(objMeta, b, homes.get(b.id)))
   }, [livePack, grids, objMeta, spaceDeliveryPiles, fixtures])
-  // what the leader is looking at, so the crew renders the same hold including hand-moves
+  // what the leader sees, hand-moves included
   const setCrewBoxes = useStore((s) => s.setCrewBoxes)
   const crewRole = useStore((s) => s.crew.role)
   useEffect(() => {
