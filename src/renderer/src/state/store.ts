@@ -24,7 +24,9 @@ import type {
   ManualPlacement,
   ScannedContract,
   StorAllCrate,
-  BoxSizeReport
+  BoxSizeReport,
+  CrewState,
+  CrewSnapshot
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
@@ -240,6 +242,9 @@ interface StoreState {
   /** contracts a session scan found but that aren't reviewed into the list yet */
   scanQueue: ScannedContract[]
   scanReviewOpen: boolean
+  crew: CrewState
+  /** epoch ms of the leader's last snapshot; drives the stale warning */
+  crewSeenAt: number
   history: HistoryEntry[]
   appVersion: string
   update: UpdateState | null
@@ -289,6 +294,10 @@ interface StoreState {
   setGroupBy: (g: 'destination' | 'contract') => void
   toggleBoxMath: () => void
   openCapture: (targetId?: string) => void
+  startCrew: () => Promise<void>
+  joinCrew: (code: string) => Promise<void>
+  /** leader ends it for everyone, member just walks out */
+  leaveCrew: () => Promise<void>
   rescanContract: (id: string) => void
   closeCapture: () => void
   openCompact: () => void
@@ -408,6 +417,9 @@ if (import.meta.hot) {
     window.location.reload()
   })
 }
+
+// a member's own run, parked while crew mode paints the leader's over the top
+let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
 
 export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
@@ -725,6 +737,8 @@ export const useStore = create<StoreState>((set, get) => {
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
+    crew: { role: null, code: '', connected: false, lastAt: 0, members: 0 },
+    crewSeenAt: 0,
     history: [],
     appVersion: '',
     update: null,
@@ -973,6 +987,45 @@ export const useStore = create<StoreState>((set, get) => {
       }))
       track(window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null })))
 
+      // crew member: paint the leader's run, never touch disk
+      track(window.supercargo.onCrewSnapshot((snap: CrewSnapshot) => {
+        const doc = snap.manifest
+        set((st) => ({
+          runId: doc.runId,
+          contracts: doc.contracts,
+          order: doc.order,
+          stopOrder: doc.stopOrder ?? [],
+          startLocation: doc.startLocation ?? '',
+          currentLocation: doc.currentLocation ?? '',
+          isRouteAuto: doc.isRouteAuto ?? true,
+          looseBoxes: doc.loose ?? [],
+          looseSpots: doc.looseSpots ?? {},
+          looseAt: doc.looseAt ?? {},
+          deferredObjectives: doc.deferred ?? [],
+          grabbedObjectives: doc.grabbed ?? [],
+          storAlls: doc.storAlls ?? {},
+          loadedPins: doc.loadedPins ?? {},
+          loadingSteps: doc.loadingSteps ?? null,
+          loadingBoxes: doc.loadingBoxes ?? null,
+          loadingActive: snap.loadingIdx !== null,
+          loadingIdx: snap.loadingIdx ?? 0,
+          // the leader's boxes as placed, so a hand-move shows up here too
+          layout: { locked: true, boxes: snap.boxes },
+          // render their ship, not ours; settings are never persisted while in a crew
+          settings: {
+            ...st.settings,
+            activeShip: snap.ship,
+            installedModules: { ...st.settings.installedModules, [snap.ship]: snap.installedModules }
+          },
+          crewSeenAt: Date.now(),
+          crew: { ...st.crew, connected: true, lastAt: Date.now() }
+        }))
+        scheduleReroute(doc.stopOrder ?? [])
+      }))
+      track(window.supercargo.onCrewStatus((s) => {
+        set((st) => ({ crew: { ...st.crew, connected: s.up, error: s.error } }))
+      }))
+
       // apply without persisting, avoids ping-pong
       track(window.supercargo.onManifestChanged((doc) => {
         set({
@@ -1096,6 +1149,44 @@ export const useStore = create<StoreState>((set, get) => {
         })
         persist()
         get().clearAllPickedUp()
+        scheduleReroute()
+      }
+    },
+
+    startCrew: async () => {
+      const code = await window.supercargo.startCrew()
+      if (!code) {
+        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0, error: "Couldn't reach the crew server" } })
+        return
+      }
+      set({ crew: { role: 'leader', code, connected: true, lastAt: Date.now(), members: 0 } })
+    },
+
+    joinCrew: async (code) => {
+      // stash the member's own run; crew mode paints over it and never writes to disk
+      preCrew = {
+        contracts: get().contracts,
+        order: get().order,
+        settings: get().settings
+      }
+      const res = await window.supercargo.joinCrew(code)
+      if (!res.ok) {
+        preCrew = null
+        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0, error: res.error } })
+        return
+      }
+      set({ crew: { role: 'member', code: code.trim().toUpperCase(), connected: true, lastAt: Date.now(), members: 0 } })
+    },
+
+    leaveCrew: async () => {
+      const { role } = get().crew
+      if (role === 'leader') await window.supercargo.endCrew()
+      else await window.supercargo.leaveCrew()
+      set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: 0 }, crewSeenAt: 0 })
+      // hand the member their own manifest back
+      if (preCrew) {
+        set({ contracts: preCrew.contracts, order: preCrew.order, settings: preCrew.settings, layout: null })
+        preCrew = null
         scheduleReroute()
       }
     },

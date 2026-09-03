@@ -97,10 +97,178 @@ export default function TopBar(): React.ReactElement {
           compact={narrow}
           active={compactOpen}
         />
+        <CrewControl narrow={narrow} />
         <DiscordLink />
         <WindowControls />
       </div>
     </div>
+  )
+}
+
+function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
+  const crew = useStore((s) => s.crew)
+  const startCrew = useStore((s) => s.startCrew)
+  const joinCrew = useStore((s) => s.joinCrew)
+  const leaveCrew = useStore((s) => s.leaveCrew)
+  const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
+  const [entry, setEntry] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const inCrew = crew.role !== null
+  const label = crew.role === 'member' ? 'CREW · READ ONLY' : crew.role === 'leader' ? `CREW · ${crew.code}` : 'CREW'
+
+  const copy = (): void => {
+    void navigator.clipboard.writeText(crew.code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
+
+  const join = async (): Promise<void> => {
+    if (entry.trim().length < 4) return
+    setBusy(true)
+    await joinCrew(entry)
+    setBusy(false)
+    setEntry('')
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <ChromeButton
+        onClick={() => setOpen((o) => !o)}
+        icon={<CrewIcon active={inCrew} />}
+        label={label}
+        compact={narrow}
+        active={inCrew}
+      />
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            right: 0,
+            width: 268,
+            background: '#0d1113',
+            border: `1px solid ${C.lineStrong}`,
+            padding: 14,
+            zIndex: 60,
+            boxShadow: '0 12px 30px rgba(0,0,0,0.5)'
+          }}
+        >
+          {!inCrew ? (
+            <>
+              <div style={{ ...labelStyle, marginBottom: 8 }}>START A CREW</div>
+              <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 9 }}>
+                Your run gets mirrored to everyone who joins with your code.
+              </div>
+              <Btn
+                onClick={() => {
+                  setBusy(true)
+                  void startCrew().finally(() => setBusy(false))
+                }}
+                style={crewBtn}
+                hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}
+              >
+                {busy ? 'STARTING...' : 'START CREW'}
+              </Btn>
+
+              <div style={{ ...labelStyle, margin: '18px 0 8px' }}>JOIN A CREW</div>
+              <div style={{ display: 'flex', gap: 7 }}>
+                <input
+                  value={entry}
+                  onChange={(e) => setEntry(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && void join()}
+                  placeholder="CODE"
+                  spellCheck={false}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: 'transparent',
+                    border: `1px solid ${C.lineStrong}`,
+                    color: C.text,
+                    fontFamily: F.mono,
+                    fontSize: 14,
+                    letterSpacing: '0.16em',
+                    padding: '7px 9px',
+                    outline: 'none'
+                  }}
+                />
+                <Btn onClick={() => void join()} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
+                  JOIN
+                </Btn>
+              </div>
+              {crew.error && (
+                <div style={{ fontFamily: F.body, fontSize: 12, color: C.red, marginTop: 9 }}>{crew.error}</div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ ...labelStyle, marginBottom: 8 }}>
+                {crew.role === 'leader' ? 'YOUR CREW CODE' : 'IN A CREW'}
+              </div>
+              {crew.role === 'leader' ? (
+                <>
+                  <div
+                    style={{
+                      fontFamily: F.mono,
+                      fontSize: 22,
+                      letterSpacing: '0.22em',
+                      color: C.acc,
+                      textShadow: GLOW,
+                      padding: '4px 0 12px'
+                    }}
+                  >
+                    {crew.code}
+                  </div>
+                  <Btn onClick={copy} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
+                    {copied ? 'COPIED' : 'COPY CODE'}
+                  </Btn>
+                </>
+              ) : (
+                <div style={{ fontFamily: F.body, fontSize: 12, color: C.dim, marginBottom: 11 }}>
+                  Watching {crew.code}. Your own run is waiting for you when you leave.
+                </div>
+              )}
+              <Btn
+                onClick={() => {
+                  void leaveCrew()
+                  setOpen(false)
+                }}
+                style={{ ...crewBtn, marginTop: 9, color: C.dim }}
+                hoverStyle={{ border: `1px solid ${C.red}`, color: C.red }}
+              >
+                {crew.role === 'leader' ? 'END CREW' : 'LEAVE CREW'}
+              </Btn>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const crewBtn: React.CSSProperties = {
+  border: `1px solid ${C.lineStrong}`,
+  background: 'transparent',
+  color: C.body,
+  fontFamily: F.display,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.14em',
+  padding: '8px 12px',
+  cursor: 'pointer',
+  width: '100%',
+  textAlign: 'center'
+}
+
+function CrewIcon({ active }: { active: boolean }): React.ReactElement {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={active ? C.green : 'currentColor'} strokeWidth="2">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+      <path d="M16 5.5a3 3 0 0 1 0 5.8M18 20c0-2.4-.9-4.5-2.3-6" />
+    </svg>
   )
 }
 
