@@ -638,7 +638,7 @@ export default function CaptureModal(): React.ReactElement | null {
                     )}
                     {rows.length === 1 && pickups.filter((p) => p.trim()).length < markerPickups.length && (
                       <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>
-                        the game lists {markerPickups.length} pickups for this contract, fill them all in before confirming
+                        {markerPickups.length} pickups on this contract
                       </span>
                     )}
                   </div>
