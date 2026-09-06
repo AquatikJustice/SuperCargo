@@ -36,6 +36,8 @@ export interface DeliveryObjective {
   destination: string
   /** empty = use contract pickup */
   pickups?: string[]
+  /** SCU counted at each pickup, parallel to pickups; null/absent = not counted yet */
+  pickupScu?: (number | null)[]
   destinationFull?: string
   boxes: BoxAllocation[]
   /** pre-edit breakdown, stamped on first hand edit; absent = never corrected */
@@ -261,6 +263,10 @@ export interface RouteLoadLine {
   totalBreakdown: string
   destination: string
   multiPickup: boolean
+  /** which of the objective's pickups this stop is; -1 when it isn't a split haul */
+  pickupIndex: number
+  /** false = nobody has counted what's actually here */
+  counted: boolean
   objectiveId: string
   contractId: string
   /** 1-based trip for this objective */

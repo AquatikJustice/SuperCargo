@@ -11,7 +11,7 @@ import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, w
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, shipAnchored, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
-import type { BayDir } from '@shared/types'
+import type { BayDir, RouteLoadLine } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
 import { listBreakdown, boxList } from '@shared/box'
@@ -3016,7 +3016,9 @@ function LoadingPanel({
   }
 
   const isLoad = step.kind === 'load'
-  const blockAdvance = blockKind != null
+  // nothing to plan against until the split haul's cargo has been counted here
+  const uncounted = step.kind === 'load' && step.lines.some((l) => l.multiPickup && !l.counted)
+  const blockAdvance = blockKind != null || uncounted
   const destLabel = destLabelOf(step.boundFor)
   // contiguous steps at this location
   let visitStart = idx
@@ -3222,11 +3224,11 @@ function LoadingPanel({
           <Btn
             onClick={onLoaded}
             disabled={blockAdvance}
-            title={blockAdvance ? 'Make the call above first' : undefined}
+            title={uncounted ? 'Enter the SCU at this stop' : undefined}
             style={{ flex: 1, border: `1px solid ${blockAdvance ? C.lineStrong : C.acc}`, background: blockAdvance ? 'transparent' : C.accFillStrong, color: blockAdvance ? C.ghost : C.text, textShadow: blockAdvance ? 'none' : GLOW, fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: '0.16em', padding: 11, cursor: blockAdvance ? 'default' : 'pointer' }}
             hoverStyle={blockAdvance ? {} : { background: 'rgba(255,210,30,0.26)' }}
           >
-            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT" : blockKind === 'digout' ? 'DIG-OUT' : 'LOADED'}
+            {step?.start ? 'HEAD OUT' : blockKind === 'overload' ? "WON'T FIT" : blockKind === 'digout' ? 'DIG-OUT' : uncounted ? 'COUNT THE SCU' : 'LOADED'}
           </Btn>
         ) : (
           <>
@@ -3315,11 +3317,43 @@ function LoadLineRow({
             trip {line.tripPos}/{line.tripTotal}, {line.scu} of {line.totalScu} SCU
           </span>
         )}
-        {line.multiPickup && (
-          <span style={{ fontFamily: F.body, fontSize: 11, color: C.amber }}>(split pickup: load what&apos;s here)</span>
-        )}
+        {line.multiPickup && !line.counted && <WalkScuCount line={line} />}
       </div>
     </div>
+  )
+}
+
+// split haul, and nobody has counted this stop yet; the terminal is the only place it exists
+function WalkScuCount({ line }: { line: RouteLoadLine }): React.ReactElement {
+  const setPickupScu = useStore((s) => s.setPickupScu)
+  const [val, setVal] = useState('')
+  const save = (): void => {
+    const n = parseInt(val, 10)
+    if (!Number.isNaN(n) && n >= 0) setPickupScu(line.contractId, line.objectiveId, line.pickupIndex, n)
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.14em', color: C.amber }}>SCU HERE</span>
+      <input
+        value={val}
+        onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+        onBlur={save}
+        onKeyDown={(e) => e.key === 'Enter' && save()}
+        placeholder="?"
+        style={{
+          width: 52,
+          background: 'transparent',
+          border: `1px solid ${C.amber}`,
+          color: C.amber,
+          fontFamily: F.mono,
+          fontSize: 13,
+          textAlign: 'right',
+          padding: '2px 5px',
+          outline: 'none'
+        }}
+      />
+      <span style={{ fontFamily: F.mono, fontSize: 11, color: C.dim }}>of {line.totalScu}</span>
+    </span>
   )
 }
 

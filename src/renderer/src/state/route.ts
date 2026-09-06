@@ -3,7 +3,8 @@ import { planRoute, type RouteJob, type RouteResult } from '@shared/route'
 import { holdOracle, type HoldOracle } from '@shared/hold'
 import type { Placement } from '@shared/packer'
 import type { CargoGrid } from '@shared/cargoGrids'
-import { boxList } from '@shared/box'
+import { boxList, calculateBoxes } from '@shared/box'
+import { pickupAmounts } from '@shared/pickups'
 import { splitDestination } from '../data/stations'
 import { activeContracts } from './manifest'
 
@@ -241,17 +242,6 @@ function chunkToCapacity(boxes: number[], cap: number): number[][] {
 }
 
 // balance boxes across pickup terminals
-function divideBoxes(sizes: number[], n: number): number[][] {
-  const bins: number[][] = Array.from({ length: n }, () => [])
-  const sums = new Array(n).fill(0)
-  for (const s of [...sizes].sort((a, b) => b - a)) {
-    let bi = 0
-    for (let i = 1; i < n; i++) if (sums[i] < sums[bi]) bi = i
-    bins[bi].push(s)
-    sums[bi] += s
-  }
-  return bins
-}
 
 export function buildRouteModel(
   contracts: HaulingContract[],
@@ -330,16 +320,22 @@ export function buildRouteModel(
       const destNode = nodeFor(o.destination, true)
       // dedupe, repeats halve scu
       const rawPickups = o.pickups && o.pickups.length ? o.pickups : [c.pickup || '(unknown pickup)']
+      const rawAmounts = o.pickups && o.pickups.length ? pickupAmounts(o) : [o.scuAmount]
       const seenPu = new Set<string>()
-      const pickups = rawPickups.filter((p) => {
+      const keep = rawPickups.map((p) => {
         const k = norm(p)
         if (seenPu.has(k)) return false
         seenPu.add(k)
         return true
       })
-      // real boxes per terminal
+      const pickups = rawPickups.filter((_, i) => keep[i])
+      const amounts = rawAmounts.filter((_, i) => keep[i])
+      // an uncounted stop gets no boxes; it still has to be visited, and the count lands there
+      const maxBox = Math.max(...o.boxes.map((b) => b.scuSize), 1)
       const perPickup =
-        pickups.length === 1 ? [boxList(o.boxes)] : divideBoxes(boxList(o.boxes), pickups.length)
+        pickups.length === 1
+          ? [boxList(o.boxes)]
+          : amounts.map((a) => (a == null ? [] : boxList(calculateBoxes(a, maxBox))))
       pickups.forEach((pu, i) => {
         const pickupNode = nodeFor(pu || '(unknown pickup)', false)
         if (pickupNode === destNode) return

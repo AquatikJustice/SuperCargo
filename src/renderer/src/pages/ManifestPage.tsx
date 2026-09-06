@@ -510,10 +510,14 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
               opacity: it.picked ? 0.5 : 1
             }}
           >
-            <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right', textDecoration: it.picked ? 'line-through' : 'none' }}>
-              {it.scu}
-              <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
-            </div>
+            {it.counted ? (
+              <div style={{ fontFamily: F.mono, fontSize: 17, color: C.green, textAlign: 'right', textDecoration: it.picked ? 'line-through' : 'none' }}>
+                {it.scu}
+                <span style={{ fontSize: 11, color: C.dim }}> SCU</span>
+              </div>
+            ) : (
+              <ScuCount item={it} disabled={!canEdit} />
+            )}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, minWidth: 0 }}>
               <span style={{ fontFamily: F.body, fontSize: 15, color: C.green, whiteSpace: 'nowrap', flex: 'none' }}>
                 {it.commodity}
@@ -541,7 +545,7 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
               <div />
             )}
             <div style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, textAlign: 'right' }}>{it.boxCount} box</div>
-            {it.pickupKey && canEdit ? (
+            {it.pickupKey && canEdit && it.counted ? (
               <Btn
                 onClick={() => setPickedUp(it.contractId, it.objectiveId, it.pickupKey as string, !it.picked)}
                 title={it.picked ? 'Uncheck this pickup' : 'Check off this pickup'}
@@ -556,6 +560,40 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
           </div>
         )
       )}
+    </div>
+  )
+}
+
+// the game never says how much sits at each stop of a split haul, so it gets typed in on arrival
+function ScuCount({ item, disabled }: { item: PickupItem; disabled: boolean }): React.ReactElement {
+  const setPickupScu = useStore((s) => s.setPickupScu)
+  const [val, setVal] = useState('')
+  const save = (): void => {
+    const n = parseInt(val, 10)
+    if (!Number.isNaN(n) && n >= 0) setPickupScu(item.contractId, item.objectiveId, item.pickupIndex, n)
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+      <input
+        value={val}
+        disabled={disabled}
+        onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+        onBlur={save}
+        onKeyDown={(e) => e.key === 'Enter' && save()}
+        placeholder="?"
+        style={{
+          width: 54,
+          background: 'transparent',
+          border: `1px solid ${C.amber}`,
+          color: C.amber,
+          fontFamily: F.mono,
+          fontSize: 15,
+          textAlign: 'right',
+          padding: '3px 5px',
+          outline: 'none'
+        }}
+      />
+      <span style={{ fontSize: 11, color: C.dim, fontFamily: F.mono }}>SCU</span>
     </div>
   )
 }

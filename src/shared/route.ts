@@ -77,7 +77,7 @@ const EXACT_NODE_MAX = 30
 const EXACT_WORK_BUDGET = 2_500_000
 
 function realJobs(jobs: RouteJob[]): RouteJob[] {
-  return jobs.filter((j) => j.pickup !== j.dest && j.scu > 0)
+  return jobs.filter((j) => j.pickup !== j.dest && j.scu >= 0)
 }
 
 /** scu aboard for this mask */
@@ -346,7 +346,7 @@ interface IJob {
 function indexedJobs(jobs: RouteJob[]): IJob[] {
   const out: IJob[] = []
   jobs.forEach((j, idx) => {
-    if (j.pickup !== j.dest && j.scu > 0)
+    if (j.pickup !== j.dest && j.scu >= 0)
       out.push({
         pickup: j.pickup,
         dest: j.dest,

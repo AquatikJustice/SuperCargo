@@ -4,6 +4,7 @@ import type { DataSource, HaulingContract, HistoryEntry, HistoryStatus } from '@
 import type { RoutePlan } from './route'
 import { boxBreakdown, boxCount, boxList, listBreakdown } from '@shared/box'
 import { estimatePayout } from '@shared/payout'
+import { pickupAmounts } from '@shared/pickups'
 import { splitDestination } from '../data/stations'
 import { stopColor } from '../theme'
 
@@ -35,6 +36,10 @@ export interface PickupItem {
   destination: string
   /** loads from multiple places */
   split: boolean
+  /** which of the objective's pickups this stop is; -1 when it isn't a split haul */
+  pickupIndex: number
+  /** false = nobody has counted what's actually here */
+  counted: boolean
   /** pickup stop's node key */
   pickupKey?: string
   /** checked off as collected here */
@@ -205,6 +210,8 @@ export function deriveStopsWithPickups(
         ref: c.ref,
         commodity: o.commodity,
         scu: o.scuAmount,
+        pickupIndex: -1,
+        counted: true,
         boxStr: boxBreakdown(o.boxes),
         boxCount: boxCount(o.boxes),
         destination: o.destination,
@@ -346,6 +353,7 @@ export function deriveRouteStops(
       const f = byObjective.get(r.objectiveId)
       if (!f) continue
       const boxes = r.boxes ?? boxList(f.o.boxes)
+      const puIndex = (f.o.pickups ?? []).findIndex((n) => normLoc(n) === normLoc(step.label))
       pickups.push({
         objectiveId: r.objectiveId,
         contractId: f.c.id,
@@ -356,6 +364,8 @@ export function deriveRouteStops(
         boxCount: boxes.length,
         destination: f.o.destination,
         split: (f.o.pickups?.length ?? 0) > 1,
+        pickupIndex: puIndex,
+        counted: puIndex < 0 || pickupAmounts(f.o)[puIndex] !== null,
         pickupKey: pickupVisitKey(step.nodeKey, step.trip),
         picked: (f.o.pickedUpAt ?? []).includes(pickupVisitKey(step.nodeKey, step.trip))
       })
@@ -439,6 +449,8 @@ export function deriveRouteStops(
       ref: c.ref,
       commodity: o.commodity,
       scu: o.scuAmount,
+      pickupIndex: -1,
+      counted: true,
       boxStr: listBreakdown(boxes),
       boxCount: boxes.length,
       destination: o.destination,

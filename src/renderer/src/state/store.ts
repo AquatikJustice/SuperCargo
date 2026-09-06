@@ -348,6 +348,8 @@ interface StoreState {
     patch: { commodity?: string; destination?: string; pickups?: string[] }
   ) => void
   deleteObjective: (contractId: string, objectiveId: string) => void
+  /** SCU counted at one pickup of a multi-pickup objective; null clears it back to uncounted */
+  setPickupScu: (contractId: string, objectiveId: string, index: number, scu: number | null) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
   setContractReward: (contractId: string, reward: number) => void
   setObjectivesDelivered: (
@@ -1677,6 +1679,25 @@ export const useStore = create<StoreState>((set, get) => {
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))
       if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
+      scheduleReroute()
+    },
+
+    setPickupScu: (contractId, objectiveId, index, scu) => {
+      const contracts = get().contracts.map((c) => {
+        if (c.id !== contractId) return c
+        return {
+          ...c,
+          objectives: c.objectives.map((o) => {
+            if (o.id !== objectiveId || !o.pickups?.length) return o
+            const next = Array.from({ length: o.pickups.length }, (_, i) => o.pickupScu?.[i] ?? null)
+            next[index] = scu === null ? null : Math.max(0, Math.min(o.scuAmount, Math.round(scu)))
+            return { ...o, pickupScu: next }
+          })
+        }
+      })
+      commit(contracts)
+      // a real count changes what the tail can carry
+      set({ isRouteAuto: true })
       scheduleReroute()
     },
 

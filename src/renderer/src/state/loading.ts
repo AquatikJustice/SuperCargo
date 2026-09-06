@@ -4,6 +4,9 @@ import { boxBreakdown, calculateBoxes, boxList, listBreakdown } from '@shared/bo
 export type { RouteLoadLine, LoadingStep } from '@shared/types'
 import type { PackBox, LoadEvent } from '@shared/packer'
 import { activeContracts, destinationsInOrder } from './manifest'
+import { pickupAmounts } from '@shared/pickups'
+
+const normLoc = (v: string): string => v.toLowerCase().replace(/[^a-z0-9]+/g, '')
 import type { RoutePlan, StepRef } from './route'
 
 const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
@@ -84,11 +87,12 @@ export function buildRouteLoadingPlan(
       }
     }
   }
-  const lineFor = (ref: StepRef, trip: number): RouteLoadLine | null => {
+  const lineFor = (ref: StepRef, trip: number, label = ''): RouteLoadLine | null => {
     const found = byObjective.get(ref.objectiveId)
     if (!found) return null
     const { c, o } = found
     const span = tripSpan.get(o.id) ?? [trip]
+    const puIndex = (o.pickups ?? []).findIndex((n) => normLoc(n) === normLoc(label))
     // reconstruct boxes for older models
     const loadBoxes = ref.boxes ?? boxList(calculateBoxes(ref.scu, c.maxBoxSize))
     return {
@@ -102,6 +106,8 @@ export function buildRouteLoadingPlan(
       totalBreakdown: boxBreakdown(o.boxes),
       destination: o.destination,
       multiPickup: (o.pickups?.length ?? 0) > 1,
+      pickupIndex: puIndex,
+      counted: puIndex < 0 || pickupAmounts(o)[puIndex] !== null,
       objectiveId: o.id,
       contractId: c.id,
       tripPos: Math.max(1, span.indexOf(trip) + 1),
@@ -111,7 +117,7 @@ export function buildRouteLoadingPlan(
 
   const stops: RouteLoadStop[] = []
   for (const s of plan.steps) {
-    const loads = s.loadRefs.map((r) => lineFor(r, s.trip)).filter((l): l is RouteLoadLine => !!l)
+    const loads = s.loadRefs.map((r) => lineFor(r, s.trip, s.label)).filter((l): l is RouteLoadLine => !!l)
     const drops = s.dropRefs.map((r) => lineFor(r, s.trip)).filter((l): l is RouteLoadLine => !!l)
     if (!loads.length && !drops.length) continue
     stops.push({
