@@ -175,6 +175,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
         onClick={() => setOpen((o) => !o)}
         icon={<CrewIcon active={inCrew} />}
         label={label}
+        tag="BETA"
         compact={narrow}
         active={inCrew}
       />
@@ -670,12 +671,14 @@ function ChromeButton({
   onClick,
   icon,
   label,
+  tag,
   compact,
   active
 }: {
   onClick: () => void
   icon: React.ReactNode
   label: string
+  tag?: string
   compact?: boolean
   active?: boolean
 }): React.ReactElement {
@@ -701,6 +704,20 @@ function ChromeButton({
     >
       {icon}
       {!compact && label}
+      {tag && (
+        <span
+          style={{
+            border: `1px solid ${C.amber}`,
+            color: C.amber,
+            fontSize: 9,
+            letterSpacing: '0.12em',
+            padding: '1px 4px',
+            lineHeight: 1.3
+          }}
+        >
+          {tag}
+        </span>
+      )}
     </Btn>
   )
 }
