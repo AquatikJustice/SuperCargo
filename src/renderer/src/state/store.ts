@@ -529,7 +529,7 @@ export const useStore = create<StoreState>((set, get) => {
     }, 400)
   }
 
-  // the overlay has no crew link, so it gets what this window shows
+  // overlay has no crew link of its own
   const mirrorOverlay = (member: boolean): void => {
     if (isCompactWindow) return
     const st = get()
