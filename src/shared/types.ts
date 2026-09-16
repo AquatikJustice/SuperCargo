@@ -676,6 +676,14 @@ export type UpdateState =
   | { kind: 'downloaded'; version: string }
   | { kind: 'error'; message: string }
 
+/** main window to overlay: the overlay has no crew link of its own */
+export interface CrewMirror {
+  doc: ManifestDoc
+  ship: string
+  installedModules: string[]
+  member: boolean
+}
+
 export interface CrewSnapshot {
   /** members drop anything not newer */
   rev: number

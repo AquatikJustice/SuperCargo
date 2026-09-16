@@ -123,6 +123,11 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   const [entry, setEntry] = useState('')
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState<'start' | 'join' | null>(null)
+  // mounted before settings load
+  useEffect(() => {
+    if (open) setName(settings.crewName ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const seenAt = useStore((s) => s.crewSeenAt)
   const [, tick] = useState(0)

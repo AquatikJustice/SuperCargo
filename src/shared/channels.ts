@@ -30,6 +30,8 @@ export const IPC = {
   compactHide: 'compact:hide',
   compactResize: 'compact:resize',
   loadingStateSet: 'loading:set',
+  crewMirror: 'crew:mirror',
+  crewMirrorAsk: 'crew:mirrorAsk',
 
   ocrListDisplays: 'ocr:listDisplays',
   ocrEngineInfo: 'ocr:engineInfo',
@@ -78,6 +80,8 @@ export const IPC = {
   evtManifestChanged: 'evt:manifest:changed', // saved by another window
   evtCompactState: 'evt:compact:state',
   evtLoadingState: 'evt:loading:state', // main window's loading-mode step
+  evtCrewMirror: 'evt:crew:mirror', // what a crew member's main window shows
+  evtCrewMirrorAsk: 'evt:crew:mirrorAsk', // overlay just opened
   evtCrewSnapshot: 'evt:crew:snapshot', // leader's run, for a crew member to render
   evtCrewStatus: 'evt:crew:status', // crew link up/down
   evtCrewMembers: 'evt:crew:members', // who's actually on the channel

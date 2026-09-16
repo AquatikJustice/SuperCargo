@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot, CrewMember } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot, CrewMember, CrewMirror } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -604,6 +604,8 @@ function registerIpc(): void {
     positionCompact()
   })
   // mirror loading walkthrough to overlay
+  ipcMain.on(IPC.crewMirror, (e, m: CrewMirror) => broadcast(IPC.evtCrewMirror, m, e.sender.id))
+  ipcMain.on(IPC.crewMirrorAsk, (e) => broadcast(IPC.evtCrewMirrorAsk, null, e.sender.id))
   ipcMain.on(IPC.loadingStateSet, (e, s: { active: boolean; idx: number }) => {
     broadcast(IPC.evtLoadingState, s, e.sender.id)
   })

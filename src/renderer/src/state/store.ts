@@ -27,6 +27,7 @@ import type {
   BoxSizeReport,
   CrewState,
   CrewMember,
+  CrewMirror,
   ManifestDoc,
   CrewSnapshot
 } from '@shared/types'
@@ -491,7 +492,7 @@ let crewPlan = ''
 let crewPins: Record<string, LoadedPin> = {}
 let leaderIdx: number | null = null
 
-let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
+let preCrew: { doc: ManifestDoc; loadingActive: boolean; loadingIdx: number; settings: AppSettings } | null = null
 
 export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
@@ -526,6 +527,38 @@ export const useStore = create<StoreState>((set, get) => {
         })
         .then((ok) => set((p) => ({ crew: { ...p.crew, connected: ok, lastAt: ok ? Date.now() : p.crew.lastAt } })))
     }, 400)
+  }
+
+  // the overlay has no crew link, so it gets what this window shows
+  const mirrorOverlay = (member: boolean): void => {
+    if (isCompactWindow) return
+    const st = get()
+    const ship = st.settings.activeShip
+    window.supercargo.mirrorCrew({ doc: manifestDoc(), ship, installedModules: st.settings.installedModules[ship] ?? [], member })
+    window.supercargo.setLoadingState({ active: st.loadingActive, idx: st.loadingIdx })
+  }
+
+  const applyDoc = (doc: ManifestDoc): void => {
+    set({
+      runId: doc.runId,
+      contracts: doc.contracts,
+      order: doc.order,
+      stopOrder: doc.stopOrder ?? [],
+      startLocation: doc.startLocation ?? '',
+      currentLocation: doc.currentLocation ?? '',
+      isRouteAuto: doc.isRouteAuto ?? true,
+      looseBoxes: doc.loose ?? [],
+      looseSpots: doc.looseSpots ?? {},
+      looseAt: doc.looseAt ?? {},
+      deferredObjectives: doc.deferred ?? [],
+      grabbedObjectives: doc.grabbed ?? [],
+      storAlls: doc.storAlls ?? {},
+      dismissedMissions: doc.dismissed ?? [],
+      loadedPins: doc.loadedPins ?? {},
+      loadingSteps: doc.loadingSteps ?? null,
+      loadingBoxes: doc.loadingBoxes ?? null,
+      layout: doc.layout ?? null
+    })
   }
 
   const manifestDoc = (): ManifestDoc => {
@@ -1143,6 +1176,7 @@ export const useStore = create<StoreState>((set, get) => {
           crew: { ...st.crew, connected: true, lastAt: Date.now() }
         }))
         scheduleReroute(doc.stopOrder ?? [])
+        mirrorOverlay(true)
       }))
       track(window.supercargo.onCrewStatus((s) => {
         set((st) => ({ crew: { ...st.crew, connected: s.up, error: s.error } }))
@@ -1154,29 +1188,21 @@ export const useStore = create<StoreState>((set, get) => {
       // apply without persisting, avoids ping-pong
       track(window.supercargo.onManifestChanged((doc) => {
         if (get().crew.role === 'member') return
-        set({
-          runId: doc.runId,
-          contracts: doc.contracts,
-          order: doc.order,
-          stopOrder: doc.stopOrder ?? [],
-          startLocation: doc.startLocation ?? '',
-          currentLocation: doc.currentLocation ?? '',
-          isRouteAuto: doc.isRouteAuto ?? true,
-          looseBoxes: doc.loose ?? [],
-          looseSpots: doc.looseSpots ?? {},
-          looseAt: doc.looseAt ?? {},
-          deferredObjectives: doc.deferred ?? [],
-          grabbedObjectives: doc.grabbed ?? [],
-          storAlls: doc.storAlls ?? {},
-          dismissedMissions: doc.dismissed ?? [],
-          loadedPins: doc.loadedPins ?? {},
-          // overlay renders the main walk verbatim
-          loadingSteps: doc.loadingSteps ?? null,
-          loadingBoxes: doc.loadingBoxes ?? null,
-          layout: doc.layout ?? null
-        })
+        applyDoc(doc)
         // mirror main's order, don't re-optimize
         scheduleReroute(doc.stopOrder ?? [])
+      }))
+      track(window.supercargo.onCrewMirror((m: CrewMirror) => {
+        applyDoc(m.doc)
+        set((st) => ({
+          crew: m.member ? { ...NO_CREW, role: 'member' } : NO_CREW,
+          settings: {
+            ...st.settings,
+            activeShip: m.ship,
+            installedModules: { ...st.settings.installedModules, [m.ship]: m.installedModules }
+          }
+        }))
+        scheduleReroute(m.doc.stopOrder ?? [])
       }))
       track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
       // overlay reflects opacity/scale changes made in the main window's settings
@@ -1196,6 +1222,8 @@ export const useStore = create<StoreState>((set, get) => {
             : null
         set({ ocrResult: r, ocrStatus: 'idle', captureOpen: true, captureTargetId: target })
       }))
+      track(window.supercargo.onCrewMirrorAsk(() => get().crew.role === 'member' && mirrorOverlay(true)))
+      if (isCompactWindow) window.supercargo.askCrewMirror()
       void get().refreshOcrEngine()
       // backfill what the watcher missed
       void get().scanSession()
@@ -1310,8 +1338,9 @@ export const useStore = create<StoreState>((set, get) => {
       leaderIdx = null
       // stash before the leader's run lands
       preCrew = {
-        contracts: get().contracts,
-        order: get().order,
+        doc: manifestDoc(),
+        loadingActive: get().loadingActive,
+        loadingIdx: get().loadingIdx,
         settings: get().settings
       }
       const res = await window.supercargo
@@ -1331,9 +1360,11 @@ export const useStore = create<StoreState>((set, get) => {
       else await window.supercargo.leaveCrew()
       set({ crew: NO_CREW, crewSeenAt: 0 })
       if (preCrew) {
-        set({ contracts: preCrew.contracts, order: preCrew.order, settings: preCrew.settings, layout: null })
+        applyDoc(preCrew.doc)
+        set({ settings: preCrew.settings, loadingActive: preCrew.loadingActive, loadingIdx: preCrew.loadingIdx, crewBoxes: [] })
         preCrew = null
-        scheduleReroute()
+        scheduleReroute(get().stopOrder)
+        mirrorOverlay(false)
       }
     },
 

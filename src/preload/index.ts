@@ -26,6 +26,7 @@ import type {
   DataSyncResult,
   BoxSizeReport,
   CrewSnapshot,
+  CrewMirror,
   CrewMember
 } from '@shared/types'
 
@@ -93,6 +94,10 @@ const api = {
     ipcRenderer.send(IPC.loadingStateSet, s),
   onLoadingState: (cb: (s: { active: boolean; idx: number }) => void): Unsubscribe =>
     on(IPC.evtLoadingState, cb),
+  mirrorCrew: (m: CrewMirror): void => ipcRenderer.send(IPC.crewMirror, m),
+  onCrewMirror: (cb: (m: CrewMirror) => void): Unsubscribe => on(IPC.evtCrewMirror, cb),
+  askCrewMirror: (): void => ipcRenderer.send(IPC.crewMirrorAsk),
+  onCrewMirrorAsk: (cb: () => void): Unsubscribe => on(IPC.evtCrewMirrorAsk, cb),
   onManifestChanged: (cb: (doc: ManifestDoc) => void): Unsubscribe =>
     on(IPC.evtManifestChanged, cb),
   onSettings: (cb: (s: AppSettings) => void): Unsubscribe => on(IPC.evtSettings, cb),
