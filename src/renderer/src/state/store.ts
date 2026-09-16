@@ -463,6 +463,34 @@ function crewLock(actions: StoreState, get: () => StoreState): StoreState {
   return out as unknown as StoreState
 }
 
+// what the crew plans around; steps, ticks and turn-ins don't count
+function planSig(doc: ManifestDoc): string {
+  const objectives = doc.contracts.flatMap((c) =>
+    c.objectives.map((o) => [o.id, o.scuAmount, o.destination, o.boxes, o.pickups, o.pickupScu])
+  )
+  const steps = (doc.loadingSteps ?? []).map((s) => [
+    s.nodeKey,
+    s.trip,
+    s.kind,
+    s.boundFor,
+    s.lines.map((l) => [l.objectiveId, l.scu, l.breakdown])
+  ])
+  const boxes = (doc.loadingBoxes ?? []).map((b) => [b.id, b.size])
+  return JSON.stringify([doc.order, doc.stopOrder, objectives, steps, boxes, doc.loose, doc.looseSpots, doc.deferred, doc.grabbed, doc.storAlls])
+}
+
+// pins come and go as the leader steps; only a box that shifted sideways was moved by hand
+function pinsMoved(prev: Record<string, LoadedPin>, next: Record<string, LoadedPin>): boolean {
+  return Object.entries(next).some(([key, p]) => {
+    const q = prev[key]
+    return !!q && (q.gridId !== p.gridId || q.x !== p.x || q.z !== p.z || !!q.rotated !== !!p.rotated)
+  })
+}
+
+let crewPlan = ''
+let crewPins: Record<string, LoadedPin> = {}
+let leaderIdx: number | null = null
+
 let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
 
 export const useStore = create<StoreState>((set, get) => {
@@ -1073,6 +1101,13 @@ export const useStore = create<StoreState>((set, get) => {
       // never touches disk
       track(window.supercargo.onCrewSnapshot((snap: CrewSnapshot) => {
         const doc = snap.manifest
+        const plan = planSig(doc)
+        const pins = doc.loadedPins ?? {}
+        const changed = plan !== crewPlan || pinsMoved(crewPins, pins)
+        const lastLeaderIdx = leaderIdx
+        crewPlan = plan
+        crewPins = pins
+        leaderIdx = snap.loadingIdx
         set((st) => ({
           runId: doc.runId,
           contracts: doc.contracts,
@@ -1091,7 +1126,11 @@ export const useStore = create<StoreState>((set, get) => {
           loadingSteps: doc.loadingSteps ?? null,
           loadingBoxes: doc.loadingBoxes ?? null,
           loadingActive: snap.loadingIdx !== null,
-          loadingIdx: snap.loadingIdx ?? 0,
+          // a member off looking elsewhere stays put unless the plan itself changed
+          loadingIdx:
+            changed || st.loadingIdx === lastLeaderIdx
+              ? snap.loadingIdx ?? 0
+              : Math.min(st.loadingIdx, Math.max(0, (doc.loadingSteps?.length ?? 1) - 1)),
           // as placed, hand-moves included
           layout: { locked: true, boxes: snap.boxes },
           // their ship; nothing persists in a crew
@@ -1266,6 +1305,9 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     joinCrew: async (code) => {
+      crewPlan = ''
+      crewPins = {}
+      leaderIdx = null
       // stash before the leader's run lands
       preCrew = {
         contracts: get().contracts,
