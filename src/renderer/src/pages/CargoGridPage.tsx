@@ -19,7 +19,7 @@ import { fixtureMap, planHold } from '@shared/hold'
 import { packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView, LoadedPin, StorAllCrate, BoxAllocation } from '@shared/types'
-import { Btn, ScuInput } from '../components/ui'
+import { Btn, ScuInput, useCanEdit } from '../components/ui'
 import BoxEditModal from '../components/BoxEditModal'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
@@ -896,6 +896,7 @@ export default function CargoGridPage(): React.ReactElement {
   // what the leader sees, hand-moves included
   const setCrewBoxes = useStore((s) => s.setCrewBoxes)
   const crewRole = useStore((s) => s.crew.role)
+  const canEdit = crewRole !== 'member'
   useEffect(() => {
     if (crewRole !== 'leader') return
     const snap = loading && loadingPack ? loadingPack.snaps[loadIdx] : null
@@ -1844,7 +1845,7 @@ export default function CargoGridPage(): React.ReactElement {
 
   const startDrag = (key: string, pl: Placement, g: CargoGrid, e: ThreeEvent): void => {
     // read-only for crew
-    if (crewRole === 'member') return
+    if (!canEdit) return
     const ne = e.nativeEvent
     if (ne.ctrlKey || ne.metaKey || ne.shiftKey) {
       setSel((s) => {
@@ -2208,6 +2209,7 @@ export default function CargoGridPage(): React.ReactElement {
               key={`${currentLoad?.kind ?? 'done'}-${loadIdx}`}
               step={currentLoad}
               steps={loadSteps}
+              readOnly={!canEdit}
               objColors={objColor}
               loose={looseNow}
               setAside={setAside}
@@ -2276,6 +2278,10 @@ export default function CargoGridPage(): React.ReactElement {
               }}
               onUnmark={(ids) => unmarkTurnIn(ids)}
               onLoaded={() => {
+                if (!canEdit) {
+                  setLoadIdx((i) => Math.min(i + 1, loadSteps.length - 1))
+                  return
+                }
                 // ticks manifest pickups and locks each box where the plan put it
                 if (currentLoad?.kind === 'load') {
                   const key = pickupVisitKey(currentLoad.nodeKey, currentLoad.trip)
@@ -2303,6 +2309,10 @@ export default function CargoGridPage(): React.ReactElement {
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {
+                if (!canEdit) {
+                  setLoadIdx((i) => Math.max(0, i - 1))
+                  return
+                }
                 // re-opens the step you land on; the back-movement effect unwinds the rest
                 const prev = loadSteps[loadIdx - 1]
                 if (prev?.kind === 'load')
@@ -2357,7 +2367,7 @@ export default function CargoGridPage(): React.ReactElement {
           }}
           style={{ position: 'relative', flex: 1, minHeight: portrait ? 170 : 320, border: `1px solid ${C.line}`, borderRadius: 6, overflow: 'hidden', background: 'radial-gradient(ellipse at 50% 40%, #06090b, #000)' }}
         >
-        {loading && (shiftHeld || marquee) && (
+        {loading && canEdit && (shiftHeld || marquee) && (
           <div
             onPointerDown={onMarqueeDown}
             onPointerMove={onMarqueeMove}
@@ -2380,7 +2390,7 @@ export default function CargoGridPage(): React.ReactElement {
             )}
           </div>
         )}
-        {loading && (
+        {loading && canEdit && (
           <Btn
             onClick={() => {
               if (!confirmReset) {
@@ -2412,7 +2422,7 @@ export default function CargoGridPage(): React.ReactElement {
             {confirmReset ? 'CONFIRM RESET' : 'RESET ROUTE'}
           </Btn>
         )}
-        {loading && (
+        {loading && canEdit && (
           <Btn
             onClick={() => setShelfOpen((v) => !v)}
             title="Park Stor-All crates for personal storage"
@@ -2441,7 +2451,7 @@ export default function CargoGridPage(): React.ReactElement {
             {dropNotice}
           </div>
         )}
-        {loading && shelfOpen && (
+        {loading && canEdit && shelfOpen && (
           <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 4, display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(8,12,16,0.94)', border: `1px solid ${C.lineStrong}`, borderRadius: 6, padding: 10, maxWidth: 190 }}>
             <span style={{ fontFamily: F.display, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', color: STOR_ORANGE }}>
               STOR-ALL
@@ -2464,7 +2474,7 @@ export default function CargoGridPage(): React.ReactElement {
             </span>
           </div>
         )}
-        {loading && (
+        {loading && canEdit && (
           <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 4, pointerEvents: 'none', background: 'rgba(8,12,16,0.82)', border: `1px solid ${C.lineFaint}`, borderRadius: 6, padding: '8px 11px', fontFamily: F.mono, fontSize: 10.5, lineHeight: 1.7, color: C.dim, display: 'flex', flexDirection: 'column' }}>
             {[
               ['Drag', 'move a box'],
@@ -2479,7 +2489,7 @@ export default function CargoGridPage(): React.ReactElement {
             ))}
           </div>
         )}
-        {loading && (
+        {loading && canEdit && (
           <Btn
             onClick={() => void updateSettings({ spaceDeliveryPiles: !spaceDeliveryPiles })}
             title="Experimental: leave a gap between cargo for different stops, when there's room"
@@ -2506,7 +2516,7 @@ export default function CargoGridPage(): React.ReactElement {
             </span>
           </Btn>
         )}
-        {!loading && (
+        {!loading && canEdit && (
           <div
             style={{
               position: 'absolute',
@@ -2914,7 +2924,8 @@ function LoadingPanel({
   onEditBoxes,
   onRepack,
   onExit,
-  onRestart
+  onRestart,
+  readOnly
 }: {
   step: LoadingStep | undefined
   steps: LoadingStep[]
@@ -2947,6 +2958,7 @@ function LoadingPanel({
   onRepack: () => void
   onExit: () => void
   onRestart: () => void
+  readOnly: boolean
 }): React.ReactElement {
   const isDrop = step?.kind === 'drop'
   const { series, peak } = useMemo(() => loadProfile(steps), [steps])
@@ -3005,8 +3017,8 @@ function LoadingPanel({
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
           {navBtn('BACK', onBack, idx === 0)}
-          {navBtn('START OVER', onRestart)}
-          {navBtn('EXIT', onExit)}
+          {!readOnly && navBtn('START OVER', onRestart)}
+          {!readOnly && navBtn('EXIT', onExit)}
         </span>
       </div>
     )
@@ -3043,14 +3055,16 @@ function LoadingPanel({
 
   return (
     <div style={{ position: 'relative', border: `1px solid ${C.acc}`, borderRadius: 6, background: C.accFill, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Btn
-        onClick={onExit}
-        title="Exit loading mode"
-        style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.lineStrong}`, background: 'rgba(0,0,0,0.25)', color: C.dim, fontFamily: F.display, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}
-        hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
-      >
-        ✕
-      </Btn>
+      {!readOnly && (
+        <Btn
+          onClick={onExit}
+          title="Exit loading mode"
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.lineStrong}`, background: 'rgba(0,0,0,0.25)', color: C.dim, fontFamily: F.display, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}
+          hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
+        >
+          ✕
+        </Btn>
+      )}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: '14px 44px 10px 16px', flex: 'none' }}>
         <span style={{ fontFamily: F.display, fontSize: 12, letterSpacing: '0.18em', color: C.acc }}>
           STEP {steps[0]?.start ? idx : idx + 1} / {steps[0]?.start ? total - 1 : total}
@@ -3061,14 +3075,16 @@ function LoadingPanel({
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
           {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} ` : ''}{step.label}
         </span>
-        <Btn
-          onClick={onRepack}
-          title="Boxes missing or doubled up? Re-plan this step without moving"
-          style={{ marginLeft: 'auto', border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', padding: '5px 10px', cursor: 'pointer' }}
-          hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
-        >
-          REPACK
-        </Btn>
+        {!readOnly && (
+          <Btn
+            onClick={onRepack}
+            title="Boxes missing or doubled up? Re-plan this step without moving"
+            style={{ marginLeft: 'auto', border: `1px solid ${C.lineStrong}`, background: 'transparent', color: C.dim, fontFamily: F.display, fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', padding: '5px 10px', cursor: 'pointer' }}
+            hoverStyle={{ color: C.text, border: `1px solid ${C.acc}` }}
+          >
+            REPACK
+          </Btn>
+        )}
       </div>
 
       <div style={{ padding: '0 16px 10px', flex: 'none' }}>
@@ -3132,7 +3148,7 @@ function LoadingPanel({
                       key={l.objectiveId}
                       line={l}
                       color={objColors.get(l.objectiveId)}
-                      onEdit={isCurrent ? () => onEditBoxes(l) : undefined}
+                      onEdit={isCurrent && !readOnly ? () => onEditBoxes(l) : undefined}
                       showTell={i === 0 || s.lines[i - 1].contractId !== l.contractId}
                     />
                   ) : !isFinalChunk(l) ? (
@@ -3143,7 +3159,7 @@ function LoadingPanel({
                 )}
               </div>
               {!load && <GrabOffGrid loose={loose} dropIds={s.dropIds} />}
-              {load && isCurrent && (
+              {load && isCurrent && !readOnly && (
                 <PickupDecision
                   decision={bucketDecision(setAside, unplaced, new Set(s.loadIds))}
                   destLabel={destLabelOf(s.boundFor)}
@@ -3159,7 +3175,7 @@ function LoadingPanel({
         })}
       </div>
 
-      {isLoad && grab && (
+      {isLoad && grab && !readOnly && (
         <div style={{ margin: '0 16px', padding: '10px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.12em', color: C.amber }}>
             ALSO AT THIS LOCATION
@@ -3181,7 +3197,7 @@ function LoadingPanel({
           </Btn>
         </div>
       )}
-      {isLoad && grabbedHere.length > 0 && (
+      {isLoad && grabbedHere.length > 0 && !readOnly && (
         <div style={{ padding: '0 16px 8px', fontFamily: F.mono, fontSize: 10.5, color: C.dim, flex: 'none' }}>
           grabbed early cargo is in this load{' '}
           <span style={{ color: C.amber, cursor: 'pointer' }} onClick={() => onUngrab(grabbedHere)}>
@@ -3189,7 +3205,7 @@ function LoadingPanel({
           </span>
         </div>
       )}
-      {deferred.length > 0 && (
+      {deferred.length > 0 && !readOnly && (
         <div style={{ margin: '0 16px', padding: '9px 0 8px', borderTop: `1px solid ${C.lineFaint}`, flex: 'none' }}>
           <div style={{ fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', color: C.ghost, marginBottom: 7 }}>
             COMING BACK LATER
@@ -3206,7 +3222,7 @@ function LoadingPanel({
           </div>
         </div>
       )}
-      {blockKind && (
+      {blockKind && !readOnly && (
         <div style={{ margin: '0 16px', padding: '9px 11px', border: `1px solid ${C.amber}`, borderRadius: 5, background: 'rgba(201,176,126,0.08)', flex: 'none' }}>
           <span style={{ fontFamily: F.body, fontSize: 12, lineHeight: 1.5, color: C.amber }}>
             {blockKind === 'overload'
@@ -3217,7 +3233,12 @@ function LoadingPanel({
       )}
       <div style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', flex: 'none', borderTop: `1px solid ${C.lineFaint}` }}>
         {arrowBtn('‹', onBack, idx === 0)}
-        {isLoad ? (
+        {readOnly ? (
+          <>
+            <span style={{ flex: 1 }} />
+            {arrowBtn('›', onLoaded, idx >= total - 1)}
+          </>
+        ) : isLoad ? (
           <Btn
             onClick={onLoaded}
             disabled={blockAdvance}
@@ -3323,10 +3344,15 @@ function LoadLineRow({
 // only the terminal knows this number
 function WalkScuCount({ line }: { line: RouteLoadLine }): React.ReactElement {
   const setPickupScu = useStore((s) => s.setPickupScu)
+  const canEdit = useCanEdit()
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.14em', color: C.amber }}>SCU HERE</span>
-      <ScuInput onSave={(n) => setPickupScu(line.contractId, line.objectiveId, line.pickupIndex, n)} />
+      {canEdit ? (
+        <ScuInput onSave={(n) => setPickupScu(line.contractId, line.objectiveId, line.pickupIndex, n)} />
+      ) : (
+        <span style={{ fontFamily: F.mono, fontSize: 13, color: C.amber }}>?</span>
+      )}
       <span style={{ fontFamily: F.mono, fontSize: 11, color: C.dim }}>of {line.totalScu}</span>
     </span>
   )

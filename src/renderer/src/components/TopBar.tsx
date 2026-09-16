@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { useNarrow } from '../state/useViewport'
 import { C, F, GLOW } from '../theme'
-import { Btn, WriteOnly } from './ui'
+import { Btn, WriteOnly, useCanEdit } from './ui'
 import Typeahead from './Typeahead'
 import { shipCapacity } from '@shared/shipModules'
 import { hasGridMarkup } from '@shared/cargoGrids'
@@ -83,7 +83,11 @@ export default function TopBar(): React.ReactElement {
             )}
           </div>
         </div>
-        {!narrow && <RunChip />}
+        {!narrow && (
+          <WriteOnly>
+            <RunChip />
+          </WriteOnly>
+        )}
         <ShipPicker narrow={narrow} />
       </div>
 
@@ -520,6 +524,7 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const ships = useStore((s) => s.ships)
   const gridFacesSyncedAt = useStore((s) => s.gridFacesSyncedAt)
   const updateSettings = useStore((s) => s.updateSettings)
+  const canEdit = useCanEdit()
   const { open, setOpen, ref } = useOutsideClose<HTMLDivElement>()
   const shipNames = useMemo(() => ships.map((s) => s.name), [ships])
   // recompute when markup syncs
@@ -544,8 +549,8 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
     >
       {!narrow && <span style={labelStyle}>SHIP</span>}
       <Btn
-        onClick={() => setOpen((o) => !o)}
-        title="Change active ship / cargo modules"
+        onClick={() => canEdit && setOpen((o) => !o)}
+        title={canEdit ? 'Change active ship / cargo modules' : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -556,12 +561,12 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
           fontFamily: F.body,
           fontSize: 14,
           padding: '5px 11px',
-          cursor: 'pointer',
+          cursor: canEdit ? 'pointer' : 'default',
           whiteSpace: 'nowrap',
           minWidth: 0,
           overflow: 'hidden'
         }}
-        hoverStyle={{ border: `1px solid ${C.acc}`, textShadow: GLOW }}
+        hoverStyle={canEdit ? { border: `1px solid ${C.acc}`, textShadow: GLOW } : undefined}
       >
         {activeNeedsGrid && (
           <span title="Cargo grid not mapped for loading yet" style={{ color: '#e8b13a', fontSize: 13, lineHeight: 1, flex: 'none' }}>
@@ -570,17 +575,19 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
         )}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{shipName}</span>
         {!narrow && <span style={{ fontFamily: F.mono, fontSize: 12, color: C.dim, flex: 'none' }}>{scu} SCU</span>}
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={C.acc}
-          strokeWidth="2.4"
-          style={{ transform: open ? 'rotate(180deg)' : 'none', flex: 'none' }}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        {canEdit && (
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={C.acc}
+            strokeWidth="2.4"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', flex: 'none' }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        )}
       </Btn>
 
       {open && (

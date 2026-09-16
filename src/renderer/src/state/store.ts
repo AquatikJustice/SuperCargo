@@ -398,6 +398,10 @@ interface StoreState {
   refreshOcrEngine: () => Promise<void>
 }
 
+function leaderShip(own: AppSettings, shown: AppSettings): AppSettings {
+  return { ...own, activeShip: shown.activeShip, installedModules: shown.installedModules }
+}
+
 function nextOrder(contracts: HaulingContract[], prevOrder: string[]): string[] {
   return destinationsInOrder(contracts, prevOrder)
 }
@@ -423,6 +427,41 @@ if (import.meta.hot) {
 
 // member's own run, parked during a crew
 const NO_CREW: CrewState = { role: null, code: '', connected: false, lastAt: 0, members: [] }
+
+// the only actions a crew member keeps
+const MEMBER_OK = new Set([
+  'init',
+  'setView',
+  'setLoadingIdx',
+  'setGroupBy',
+  'toggleBoxMath',
+  'openCompact',
+  'closeCompact',
+  'closeCapture',
+  'dismissNotice',
+  'setCrewBoxes',
+  'startCrew',
+  'joinCrew',
+  'leaveCrew',
+  'updateSettings',
+  'checkForUpdates',
+  'clearOcr',
+  'refreshOcrEngine',
+  // their own history, not the crew's run
+  'updateHistoryReward',
+  'clearHistory',
+  'deleteRun'
+])
+
+function crewLock(actions: StoreState, get: () => StoreState): StoreState {
+  const out: Record<string, unknown> = { ...actions }
+  for (const [k, v] of Object.entries(actions)) {
+    if (typeof v !== 'function' || MEMBER_OK.has(k)) continue
+    const fn = v as (...args: unknown[]) => unknown
+    out[k] = (...args: unknown[]) => (get().crew.role === 'member' ? undefined : fn(...args))
+  }
+  return out as unknown as StoreState
+}
 
 let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
 
@@ -749,7 +788,7 @@ export const useStore = create<StoreState>((set, get) => {
     drainShare(contract.id)
   }
 
-  return {
+  return crewLock({
     ready: false,
     view: 'manifest',
     groupBy: 'destination',
@@ -916,7 +955,7 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
       }))
-      track(window.supercargo.onContractShare((e) => onShare(e)))
+      track(window.supercargo.onContractShare((e) => get().crew.role !== 'member' && onShare(e)))
       track(window.supercargo.onGridFaces((r) => {
         setGridFaces(r.gridFaces)
         set({ gridFacesSyncedAt: r.syncedAt || String(Date.now()) })
@@ -926,6 +965,8 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onWatcherStatus((s) => set({ watcher: s })))
       track(window.supercargo.onUpdate((u) => set({ update: u })))
       track(window.supercargo.onContractAccepted((e: ContractAcceptedEvent) => {
+        // a member's own log can't touch the leader's run
+        if (get().crew.role === 'member') return
         const { contracts, dismissedMissions } = get()
         // dedup relog re-emits
         if (contracts.some((c) => c.id === e.missionId)) return
@@ -967,6 +1008,7 @@ export const useStore = create<StoreState>((set, get) => {
         }
       }))
       track(window.supercargo.onObjective((e: ObjectiveEvent) => {
+        if (get().crew.role === 'member') return
         const { contracts } = get()
         const idx = contracts.findIndex((c) => c.id === e.missionId)
         if (idx < 0) return
@@ -1002,6 +1044,7 @@ export const useStore = create<StoreState>((set, get) => {
         }
       }))
       track(window.supercargo.onContractEnded((e: ContractEndedEvent) => {
+        if (get().crew.role === 'member') return
         const { contracts } = get()
         const contract = contracts.find((c) => c.id === e.missionId)
         if (!contract) return
@@ -1025,7 +1068,7 @@ export const useStore = create<StoreState>((set, get) => {
         set({ history })
         persistHistory(history)
       }))
-      track(window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null })))
+      track(window.supercargo.onOpenCapture(() => get().crew.role !== 'member' && set({ captureOpen: true, captureTargetId: null })))
 
       // never touches disk
       track(window.supercargo.onCrewSnapshot((snap: CrewSnapshot) => {
@@ -1071,6 +1114,7 @@ export const useStore = create<StoreState>((set, get) => {
 
       // apply without persisting, avoids ping-pong
       track(window.supercargo.onManifestChanged((doc) => {
+        if (get().crew.role === 'member') return
         set({
           runId: doc.runId,
           contracts: doc.contracts,
@@ -1097,13 +1141,14 @@ export const useStore = create<StoreState>((set, get) => {
       }))
       track(window.supercargo.onCompactState((s) => set({ compactOpen: s.open })))
       // overlay reflects opacity/scale changes made in the main window's settings
-      track(window.supercargo.onSettings((s) => set({ settings: s })))
+      track(window.supercargo.onSettings((s) => set((st) => ({ settings: st.crew.role === 'member' ? leaderShip(s, st.settings) : s }))))
 
       track(window.supercargo.onOcrStatus((s) =>
         set({ ocrStatus: (s as StoreState['ocrStatus']) ?? 'idle' })
       ))
       track(window.supercargo.onOcrWait((w) => set({ ocrWait: w.active ? w : null })))
       track(window.supercargo.onOcrResult((r) => {
+        if (get().crew.role === 'member') return
         // capture came back, hold stays until the user acts
         clearCaptureNet()
         const target =
@@ -1175,6 +1220,14 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     updateSettings: async (patch) => {
+      if (get().crew.role === 'member') {
+        // view prefs only; the hold stays the leader's
+        if (patch.activeShip !== undefined || patch.installedModules !== undefined) return
+        const own = await window.supercargo.setSettings(patch)
+        if (preCrew) preCrew = { ...preCrew, settings: own }
+        set((st) => ({ settings: leaderShip(own, st.settings) }))
+        return
+      }
       const prev = get().settings
       const settings = await window.supercargo.setSettings(patch)
       set({ settings })
@@ -1971,5 +2024,5 @@ export const useStore = create<StoreState>((set, get) => {
         /* engine info is best-effort */
       }
     }
-  }
+  }, get)
 })
