@@ -118,7 +118,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   const [name, setName] = useState(settings.crewName ?? '')
   const [entry, setEntry] = useState('')
   const [copied, setCopied] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'start' | 'join' | null>(null)
 
   const seenAt = useStore((s) => s.crewSeenAt)
   const [, tick] = useState(0)
@@ -152,19 +152,23 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
     if (name.trim() !== (settings.crewName ?? '')) await updateSettings({ crewName: name.trim() })
   }
 
+  const named = name.trim().length > 0
+  const canJoin = named && entry.trim().length >= 4 && !busy
+
   const start = async (): Promise<void> => {
-    setBusy(true)
+    if (!named || busy) return
+    setBusy('start')
     await saveName()
     await startCrew()
-    setBusy(false)
+    setBusy(null)
   }
 
   const join = async (): Promise<void> => {
-    if (entry.trim().length < 4) return
-    setBusy(true)
+    if (!canJoin) return
+    setBusy('join')
     await saveName()
     await joinCrew(entry)
-    setBusy(false)
+    setBusy(null)
     if (useStore.getState().crew.role !== 'member') return
     setEntry('')
     setOpen(false)
@@ -217,10 +221,11 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
                 />
                 <Btn
                   onClick={() => void join()}
-                  style={{ ...crewBtn, width: 'auto' }}
-                  hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}
+                  disabled={!canJoin}
+                  style={{ ...crewBtn, width: 'auto', ...(canJoin ? null : off) }}
+                  hoverStyle={canJoin ? { border: `1px solid ${C.acc}`, color: C.text } : undefined}
                 >
-                  JOIN
+                  {busy === 'join' ? 'JOINING...' : 'JOIN'}
                 </Btn>
               </div>
               {crew.error && (
@@ -228,8 +233,13 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               )}
 
               <div style={{ height: 1, background: C.lineSoft, margin: '18px 0 14px' }} />
-              <Btn onClick={() => void start()} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
-                {busy ? 'STARTING...' : 'START A CREW'}
+              <Btn
+                onClick={() => void start()}
+                disabled={!named || !!busy}
+                style={{ ...crewBtn, ...(named && !busy ? null : off) }}
+                hoverStyle={named && !busy ? { border: `1px solid ${C.acc}`, color: C.text } : undefined}
+              >
+                {busy === 'start' ? 'STARTING...' : 'START A CREW'}
               </Btn>
             </>
           ) : (
@@ -239,21 +249,34 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
               </div>
               {crew.role === 'leader' ? (
                 <>
-                  <div
-                    style={{
-                      fontFamily: F.mono,
-                      fontSize: 22,
-                      letterSpacing: '0.22em',
-                      color: C.acc,
-                      textShadow: GLOW,
-                      padding: '4px 0 12px'
-                    }}
-                  >
-                    {crew.code}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 4px' }}>
+                    <span
+                      style={{
+                        fontFamily: F.mono,
+                        fontSize: 22,
+                        letterSpacing: '0.22em',
+                        color: C.acc,
+                        textShadow: GLOW
+                      }}
+                    >
+                      {crew.code}
+                    </span>
+                    <Btn
+                      onClick={copy}
+                      title="Copy to clipboard"
+                      style={{
+                        display: 'flex',
+                        padding: 5,
+                        background: 'transparent',
+                        border: `1px solid ${C.lineStrong}`,
+                        color: copied ? C.green : C.dim,
+                        cursor: 'pointer'
+                      }}
+                      hoverStyle={{ border: `1px solid ${C.acc}`, color: copied ? C.green : C.text }}
+                    >
+                      <CopyIcon done={copied} />
+                    </Btn>
                   </div>
-                  <Btn onClick={copy} style={crewBtn} hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text }}>
-                    {copied ? 'COPIED' : 'COPY CODE'}
-                  </Btn>
                   <div style={{ ...labelStyle, margin: '18px 0 7px' }}>
                     {crew.members.length} CONNECTED
                   </div>
@@ -320,6 +343,8 @@ const crewInput: React.CSSProperties = {
   outline: 'none'
 }
 
+const off: React.CSSProperties = { opacity: 0.4, cursor: 'default' }
+
 const crewBtn: React.CSSProperties = {
   border: `1px solid ${C.lineStrong}`,
   background: 'transparent',
@@ -332,6 +357,21 @@ const crewBtn: React.CSSProperties = {
   cursor: 'pointer',
   width: '100%',
   textAlign: 'center'
+}
+
+function CopyIcon({ done }: { done: boolean }): React.ReactElement {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      {done ? (
+        <path d="M5 12l5 5L20 7" />
+      ) : (
+        <>
+          <rect x="9" y="9" width="11" height="11" rx="1.5" />
+          <path d="M5 15V5.5A1.5 1.5 0 0 1 6.5 4H15" />
+        </>
+      )}
+    </svg>
+  )
 }
 
 function CrewIcon({ active }: { active: boolean }): React.ReactElement {
