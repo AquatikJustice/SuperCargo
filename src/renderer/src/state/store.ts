@@ -463,7 +463,7 @@ function crewLock(actions: StoreState, get: () => StoreState): StoreState {
   return out as unknown as StoreState
 }
 
-// what the crew plans around; steps, ticks and turn-ins don't count
+// steps, ticks and turn-ins aren't plan changes
 function planSig(doc: ManifestDoc): string {
   const objectives = doc.contracts.flatMap((c) =>
     c.objectives.map((o) => [o.id, o.scuAmount, o.destination, o.boxes, o.pickups, o.pickupScu])
@@ -479,7 +479,7 @@ function planSig(doc: ManifestDoc): string {
   return JSON.stringify([doc.order, doc.stopOrder, objectives, steps, boxes, doc.loose, doc.looseSpots, doc.deferred, doc.grabbed, doc.storAlls])
 }
 
-// pins come and go as the leader steps; only a box that shifted sideways was moved by hand
+// only a sideways shift is a hand move
 function pinsMoved(prev: Record<string, LoadedPin>, next: Record<string, LoadedPin>): boolean {
   return Object.entries(next).some(([key, p]) => {
     const q = prev[key]
@@ -1126,7 +1126,7 @@ export const useStore = create<StoreState>((set, get) => {
           loadingSteps: doc.loadingSteps ?? null,
           loadingBoxes: doc.loadingBoxes ?? null,
           loadingActive: snap.loadingIdx !== null,
-          // a member off looking elsewhere stays put unless the plan itself changed
+          // off-step members stay put unless the plan changed
           loadingIdx:
             changed || st.loadingIdx === lastLeaderIdx
               ? snap.loadingIdx ?? 0
