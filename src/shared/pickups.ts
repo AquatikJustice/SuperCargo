@@ -13,12 +13,3 @@ export function pickupAmounts(o: DeliveryObjective): (number | null)[] {
   return out
 }
 
-export function uncountedScu(o: DeliveryObjective): number {
-  const amounts = pickupAmounts(o)
-  if (!amounts.length || !amounts.some((v) => v === null)) return 0
-  return Math.max(0, o.scuAmount - amounts.reduce<number>((a, v) => a + (v ?? 0), 0))
-}
-
-export function hasUncounted(o: DeliveryObjective): boolean {
-  return pickupAmounts(o).some((v) => v === null)
-}

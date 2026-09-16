@@ -409,7 +409,7 @@ function startWaitCapture(missionId: string, info: Omit<OcrWaitState, 'active' |
     try {
       result = await runOcrTracked()
     } catch {
-      result = null
+      // stays null
     } finally {
       ocrBusy = false
     }

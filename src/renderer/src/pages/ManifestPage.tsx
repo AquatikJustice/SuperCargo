@@ -6,7 +6,7 @@ import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals
 import { buildLoadingSteps, loadProfile } from '../state/loading'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
-import { Btn, useCanEdit } from '../components/ui'
+import { Btn, ScuInput, useCanEdit } from '../components/ui'
 import LoadBar from '../components/LoadBar'
 import Typeahead from '../components/Typeahead'
 import TurnInModal from '../components/TurnInModal'
@@ -567,32 +567,9 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
 // game only shows the contract total
 function ScuCount({ item, disabled }: { item: PickupItem; disabled: boolean }): React.ReactElement {
   const setPickupScu = useStore((s) => s.setPickupScu)
-  const [val, setVal] = useState('')
-  const save = (): void => {
-    const n = parseInt(val, 10)
-    if (!Number.isNaN(n) && n >= 0) setPickupScu(item.contractId, item.objectiveId, item.pickupIndex, n)
-  }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-      <input
-        value={val}
-        disabled={disabled}
-        onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-        onBlur={save}
-        onKeyDown={(e) => e.key === 'Enter' && save()}
-        placeholder="?"
-        style={{
-          width: 54,
-          background: 'transparent',
-          border: `1px solid ${C.amber}`,
-          color: C.amber,
-          fontFamily: F.mono,
-          fontSize: 15,
-          textAlign: 'right',
-          padding: '3px 5px',
-          outline: 'none'
-        }}
-      />
+      <ScuInput big disabled={disabled} onSave={(n) => setPickupScu(item.contractId, item.objectiveId, item.pickupIndex, n)} />
       <span style={{ fontSize: 11, color: C.dim, fontFamily: F.mono }}>SCU</span>
     </div>
   )

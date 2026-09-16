@@ -1,4 +1,3 @@
-
 export interface ParsedTitle {
   rank: string
   haulType: string

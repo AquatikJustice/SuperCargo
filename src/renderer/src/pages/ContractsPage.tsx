@@ -37,7 +37,7 @@ export default function ContractsPage(): React.ReactElement {
   const setObjectiveScu = useStore((s) => s.setObjectiveScu)
   const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   const editContract = useStore((s) => s.editContract)
-    const editObjective = useStore((s) => s.editObjective)
+  const editObjective = useStore((s) => s.editObjective)
   const deleteObjective = useStore((s) => s.deleteObjective)
   const route = useStore((s) => s.route)
   const setPickedUp = useStore((s) => s.setPickedUp)
@@ -94,23 +94,23 @@ export default function ContractsPage(): React.ReactElement {
         subtitle={`${derived.length} tracked`}
         right={
           <WriteOnly>
-          <Btn
-            onClick={() => openCapture()}
-            style={{
-              border: `1px solid rgba(255,255,255,0.18)`,
-              background: 'transparent',
-              color: C.body,
-              fontFamily: F.display,
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: '0.14em',
-              padding: '8px 14px',
-              cursor: 'pointer'
-            }}
-            hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text, textShadow: GLOW }}
-          >
-            + ADD CONTRACT
-          </Btn>
+            <Btn
+              onClick={() => openCapture()}
+              style={{
+                border: `1px solid rgba(255,255,255,0.18)`,
+                background: 'transparent',
+                color: C.body,
+                fontFamily: F.display,
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: '0.14em',
+                padding: '8px 14px',
+                cursor: 'pointer'
+              }}
+              hoverStyle={{ border: `1px solid ${C.acc}`, color: C.text, textShadow: GLOW }}
+            >
+              + ADD CONTRACT
+            </Btn>
           </WriteOnly>
         }
       />
@@ -385,59 +385,59 @@ export default function ContractsPage(): React.ReactElement {
                     )}
 
                     <WriteOnly>
-                    <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
-                      <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
-                      {c.dataSource !== 'manual' && (
-                        <ActionBtn label="RESCAN" color={C.acc} onClick={() => rescanContract(c.id)} />
-                      )}
-                      {c.dataSource === 'manual' ? (
-                        // no mission id on a hand-added contract, so it can't auto-file (#21)
-                        <>
-                          <Btn
-                            onClick={() => {
-                              if (confirmFile !== c.id) {
-                                setConfirmFile(c.id)
-                                return
-                              }
-                              fileCompleted(c.id)
-                              setConfirmFile(null)
-                            }}
-                            style={{
-                              border: `1px solid ${confirmFile === c.id ? C.amber : 'rgba(255,255,255,0.16)'}`,
-                              background: confirmFile === c.id ? 'rgba(230,182,94,0.12)' : 'transparent',
-                              color: confirmFile === c.id ? C.amber : C.dim,
-                              fontFamily: F.display,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              letterSpacing: '0.14em',
-                              padding: '7px 13px',
-                              cursor: 'pointer'
-                            }}
-                            hoverStyle={{ border: `1px solid ${C.green}`, color: confirmFile === c.id ? C.amber : C.green }}
-                          >
-                            {confirmFile === c.id ? 'CONFIRM FILE COMPLETE' : 'MARK COMPLETE'}
-                          </Btn>
-                          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-                            manual contracts don't file from the game log, close it out here when it's done
-                          </span>
-                        </>
-                      ) : c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
-                        <>
-                          <ActionBtn label="FILE TO HISTORY" color={C.green} onClick={() => fileCompleted(c.id)} />
-                          <ActionBtn
-                            label="↩ UNDO COMPLETE"
-                            color={C.amber}
-                            onClick={() => unmarkTurnIn(c.objectives.map((o) => o.objectiveId))}
-                          />
-                          <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
-                            or it files itself once the game finishes the contract
-                          </span>
-                        </>
-                      ) : (
-                        <ActionBtn label="COMPLETE" color={C.green} onClick={() => completeContract(c.id)} />
-                      )}
-                      <ActionBtn label="ABANDON" color={C.red} onClick={() => abandonContract(c.id)} />
-                    </div>
+                      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
+                        <ActionBtn label="ADD OBJECTIVES" color={C.acc} onClick={() => openCapture(c.id)} />
+                        {c.dataSource !== 'manual' && (
+                          <ActionBtn label="RESCAN" color={C.acc} onClick={() => rescanContract(c.id)} />
+                        )}
+                        {c.dataSource === 'manual' ? (
+                          // no mission id on a hand-added contract, so it can't auto-file (#21)
+                          <>
+                            <Btn
+                              onClick={() => {
+                                if (confirmFile !== c.id) {
+                                  setConfirmFile(c.id)
+                                  return
+                                }
+                                fileCompleted(c.id)
+                                setConfirmFile(null)
+                              }}
+                              style={{
+                                border: `1px solid ${confirmFile === c.id ? C.amber : 'rgba(255,255,255,0.16)'}`,
+                                background: confirmFile === c.id ? 'rgba(230,182,94,0.12)' : 'transparent',
+                                color: confirmFile === c.id ? C.amber : C.dim,
+                                fontFamily: F.display,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                letterSpacing: '0.14em',
+                                padding: '7px 13px',
+                                cursor: 'pointer'
+                              }}
+                              hoverStyle={{ border: `1px solid ${C.green}`, color: confirmFile === c.id ? C.amber : C.green }}
+                            >
+                              {confirmFile === c.id ? 'CONFIRM FILE COMPLETE' : 'MARK COMPLETE'}
+                            </Btn>
+                            <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
+                              manual contracts don't file from the game log, close it out here when it's done
+                            </span>
+                          </>
+                        ) : c.objectives.length > 0 && c.objectives.every((o) => o.turnedInScu !== undefined) ? (
+                          <>
+                            <ActionBtn label="FILE TO HISTORY" color={C.green} onClick={() => fileCompleted(c.id)} />
+                            <ActionBtn
+                              label="↩ UNDO COMPLETE"
+                              color={C.amber}
+                              onClick={() => unmarkTurnIn(c.objectives.map((o) => o.objectiveId))}
+                            />
+                            <span style={{ fontFamily: F.body, fontSize: 12, color: C.dim }}>
+                              or it files itself once the game finishes the contract
+                            </span>
+                          </>
+                        ) : (
+                          <ActionBtn label="COMPLETE" color={C.green} onClick={() => completeContract(c.id)} />
+                        )}
+                        <ActionBtn label="ABANDON" color={C.red} onClick={() => abandonContract(c.id)} />
+                      </div>
                     </WriteOnly>
                   </div>
                 )}

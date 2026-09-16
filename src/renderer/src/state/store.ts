@@ -422,6 +422,8 @@ if (import.meta.hot) {
 }
 
 // member's own run, parked during a crew
+const NO_CREW: CrewState = { role: null, code: '', connected: false, lastAt: 0, members: [] }
+
 let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
 
 export const useStore = create<StoreState>((set, get) => {
@@ -430,8 +432,7 @@ export const useStore = create<StoreState>((set, get) => {
     if (isCompactWindow) return
     // never save the leader's run as theirs
     if (get().crew.role === 'member') return
-    const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
-    const doc: ManifestDoc = { runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls }
+    const doc = manifestDoc()
     void window.supercargo.saveManifest(doc)
     pushCrew(doc)
   }
@@ -773,7 +774,7 @@ export const useStore = create<StoreState>((set, get) => {
     dismissedMissions: [],
     scanQueue: [],
     scanReviewOpen: false,
-    crew: { role: null, code: '', connected: false, lastAt: 0, members: [] },
+    crew: NO_CREW,
     crewBoxes: [],
     crewSeenAt: 0,
     history: [],
@@ -1204,7 +1205,7 @@ export const useStore = create<StoreState>((set, get) => {
     startCrew: async () => {
       const code = await window.supercargo.startCrew(get().settings.crewName)
       if (!code) {
-        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [], error: "Couldn't reach the crew server" } })
+        set({ crew: { ...NO_CREW, error: "Couldn't reach the crew server" } })
         return
       }
       set({ crew: { role: 'leader', code, connected: true, lastAt: Date.now(), members: [] } })
@@ -1221,7 +1222,7 @@ export const useStore = create<StoreState>((set, get) => {
       const res = await window.supercargo.joinCrew(code, get().settings.crewName)
       if (!res.ok) {
         preCrew = null
-        set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [], error: res.error } })
+        set({ crew: { ...NO_CREW, error: res.error } })
         return
       }
       set({ crew: { role: 'member', code: code.trim().toUpperCase(), connected: true, lastAt: Date.now(), members: [] } })
@@ -1231,7 +1232,7 @@ export const useStore = create<StoreState>((set, get) => {
       const { role } = get().crew
       if (role === 'leader') await window.supercargo.endCrew()
       else await window.supercargo.leaveCrew()
-      set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [] }, crewSeenAt: 0 })
+      set({ crew: NO_CREW, crewSeenAt: 0 })
       if (preCrew) {
         set({ contracts: preCrew.contracts, order: preCrew.order, settings: preCrew.settings, layout: null })
         preCrew = null

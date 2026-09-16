@@ -19,7 +19,7 @@ import { fixtureMap, planHold } from '@shared/hold'
 import { packRun } from '@shared/walkPack'
 import { BOX_DIMS } from '@shared/boxGeometry'
 import type { FrozenBox, GridView, LoadedPin, StorAllCrate, BoxAllocation } from '@shared/types'
-import { Btn } from '../components/ui'
+import { Btn, ScuInput } from '../components/ui'
 import BoxEditModal from '../components/BoxEditModal'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import Placeholder from '../components/Placeholder'
@@ -956,7 +956,6 @@ export default function CargoGridPage(): React.ReactElement {
     return loadingPack.snaps[at].loose
   }, [loading, loadingPack, loadIdx])
   const offGrid = useMemo(() => looseSummary(looseNow), [looseNow])
-  // heavy once off-grid cargo is a real slice of the hold, not a box or two
 
   // replan must never change what's visible at the same step; log what moved if it does
   const blinkRef = useRef<{ idx: number; ids: Set<string>; pins: number; loose: number; steps: number } | null>(null)
@@ -3324,32 +3323,10 @@ function LoadLineRow({
 // only the terminal knows this number
 function WalkScuCount({ line }: { line: RouteLoadLine }): React.ReactElement {
   const setPickupScu = useStore((s) => s.setPickupScu)
-  const [val, setVal] = useState('')
-  const save = (): void => {
-    const n = parseInt(val, 10)
-    if (!Number.isNaN(n) && n >= 0) setPickupScu(line.contractId, line.objectiveId, line.pickupIndex, n)
-  }
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span style={{ fontFamily: F.display, fontSize: 10, letterSpacing: '0.14em', color: C.amber }}>SCU HERE</span>
-      <input
-        value={val}
-        onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-        onBlur={save}
-        onKeyDown={(e) => e.key === 'Enter' && save()}
-        placeholder="?"
-        style={{
-          width: 52,
-          background: 'transparent',
-          border: `1px solid ${C.amber}`,
-          color: C.amber,
-          fontFamily: F.mono,
-          fontSize: 13,
-          textAlign: 'right',
-          padding: '2px 5px',
-          outline: 'none'
-        }}
-      />
+      <ScuInput onSave={(n) => setPickupScu(line.contractId, line.objectiveId, line.pickupIndex, n)} />
       <span style={{ fontFamily: F.mono, fontSize: 11, color: C.dim }}>of {line.totalScu}</span>
     </span>
   )

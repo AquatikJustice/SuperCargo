@@ -28,10 +28,6 @@ function newCode(): string {
   return out
 }
 
-export function crewCode(): string {
-  return code
-}
-
 // who's actually connected
 function watchPresence(ch: RealtimeChannel): void {
   ch.on('presence', { event: 'sync' }, () => {

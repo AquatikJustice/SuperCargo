@@ -181,7 +181,7 @@ export function deriveStops(contracts: HaulingContract[], order: string[]): Stop
   })
 }
 
-const normLoc = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+export const normLoc = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 export function deriveStopsWithPickups(
   contracts: HaulingContract[],

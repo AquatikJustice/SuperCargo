@@ -241,8 +241,6 @@ function chunkToCapacity(boxes: number[], cap: number): number[][] {
   return bins
 }
 
-// balance boxes across pickup terminals
-
 export function buildRouteModel(
   contracts: HaulingContract[],
   locations: Location[],

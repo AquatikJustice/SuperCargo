@@ -3,10 +3,8 @@ import { boxBreakdown, calculateBoxes, boxList, listBreakdown } from '@shared/bo
 
 export type { RouteLoadLine, LoadingStep } from '@shared/types'
 import type { PackBox, LoadEvent } from '@shared/packer'
-import { activeContracts, destinationsInOrder } from './manifest'
+import { activeContracts, destinationsInOrder, normLoc } from './manifest'
 import { pickupAmounts } from '@shared/pickups'
-
-const normLoc = (v: string): string => v.toLowerCase().replace(/[^a-z0-9]+/g, '')
 import type { RoutePlan, StepRef } from './route'
 
 const undelivered = (c: HaulingContract): HaulingContract['objectives'] =>
