@@ -11,7 +11,7 @@ interface.
 
 ## Download
 
-Grab the latest build (**v0.8.3**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
+Grab the latest build (**v0.9.0**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
 
 - **Windows installer** (`SuperCargo-Setup-*.exe`) installs and auto-updates.
 - **Windows portable** (`SuperCargo-Portable-*.exe`) is a single exe with no install.
@@ -49,13 +49,16 @@ If you hit problems, please open an issue with your distro and what happened.
 - **OCR capture.** Reads the mobiGlas contract screen to fill in objectives, pickups, max box size,
   and reward for you to confirm. Can also scan the game log to catch contracts you accepted while
   the app was closed.
-- **Game-bug aware.** Knows the current multi-pickup contract bug (all cargo spawns at the final
-  listed pickup, and broken slots really sit at Nyx Gateway) and plans those contracts correctly on
-  its own, with a badge and a toggle.
+- **Multi-pickup contracts.** Every pickup on a split haul shows up as its own stop. The game only
+  gives a total for these, so you enter what's actually waiting when you arrive, and the plan
+  adjusts from there.
 - **Community contract data.** Known contracts arrive with their box sizes already confirmed, no
   scan needed, and the list grows from anonymous community corrections.
 - **Shared contracts.** Shares show up from the log with your split of the reward, and the full
   payout comes back automatically when the sharer leaves the contract.
+- **Crew Mode (beta).** Start a crew and paste the code into chat. Everyone who joins sees your
+  route, manifest, and cargo grid as you work, and can look around on their own. You see who's
+  connected.
 - **Edit anything.** Change a contract after you add it. Pickup, reward, rank, max box size, and
   each objective's commodity, amount, and destination are all editable inline.
 - **Turn-in tracking.** On submit, record a full, partial, or no turn-in per stop, including partial
