@@ -1,6 +1,7 @@
 // one row per crew, leader writes, members watch
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
+import WebSocket from 'ws'
 import type { CrewSnapshot, CrewMember, CrewRole } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
@@ -18,7 +19,13 @@ let onStatus: ((up: boolean, error?: string) => void) | null = null
 let onMembers: ((m: CrewMember[]) => void) | null = null
 
 function db(): SupabaseClient {
-  if (!client) client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  // electron's node 20 has no global WebSocket
+  if (!client) {
+    client = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: false },
+      realtime: { transport: WebSocket as unknown as typeof globalThis.WebSocket }
+    })
+  }
   return client
 }
 

@@ -165,6 +165,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
     await saveName()
     await joinCrew(entry)
     setBusy(false)
+    if (useStore.getState().crew.role !== 'member') return
     setEntry('')
     setOpen(false)
   }

@@ -1203,7 +1203,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     startCrew: async () => {
-      const code = await window.supercargo.startCrew(get().settings.crewName)
+      const code = await window.supercargo.startCrew(get().settings.crewName).catch(() => null)
       if (!code) {
         set({ crew: { ...NO_CREW, error: "Couldn't reach the crew server" } })
         return
@@ -1219,7 +1219,9 @@ export const useStore = create<StoreState>((set, get) => {
         order: get().order,
         settings: get().settings
       }
-      const res = await window.supercargo.joinCrew(code, get().settings.crewName)
+      const res = await window.supercargo
+        .joinCrew(code, get().settings.crewName)
+        .catch(() => ({ ok: false, error: "Couldn't reach the crew server" }))
       if (!res.ok) {
         preCrew = null
         set({ crew: { ...NO_CREW, error: res.error } })
