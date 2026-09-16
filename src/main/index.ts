@@ -340,7 +340,7 @@ async function runOcrTracked(): Promise<OcrResult> {
 // pushed back over ipc so the renderer can merge it in
 async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   if (ocrBusy) return
-  // bare hotkey during a shared-accept wait means "the screen is up, snap now"
+  // hotkey mid-wait: screen's up, snap now
   if (!targetMissionId && waitCapture) {
     waitCapture.snapNow()
     return
@@ -367,8 +367,7 @@ async function runOcrAndPush(targetMissionId?: string): Promise<void> {
   }
 }
 
-// shared accepts snap blind (the user is nowhere near the contract screen),
-// so keep retrying until a shot actually parses as one
+// shared accept fires before mobiGlas is open
 let waitCapture: {
   missionId: string
   timer: ReturnType<typeof setTimeout> | null
@@ -684,7 +683,7 @@ function registerIpc(): void {
   // only for genuinely-new hauling contracts
   ipcMain.on(IPC.ocrRequestCapture, (_e, missionId: unknown, wait: unknown) => {
     const id = typeof missionId === 'string' ? missionId : undefined
-    // a plain request (recapture) supersedes any pending wait
+    // recapture cancels the wait
     stopWaitCapture()
     if (id && wait && typeof wait === 'object') {
       startWaitCapture(id, wait as Omit<OcrWaitState, 'active' | 'missionId'>)

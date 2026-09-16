@@ -47,12 +47,10 @@ export function Btn({ hoverStyle, style, ...rest }: BtnProps): React.ReactElemen
   )
 }
 
-/** false for a crew member: their app mirrors the leader and changes nothing */
 export function useCanEdit(): boolean {
   return useStore((s) => s.crew.role !== 'member')
 }
 
-/** anything that would change the run; a crew member simply doesn't get it */
 export function WriteOnly({ children }: { children: React.ReactNode }): React.ReactElement | null {
   return useCanEdit() ? <>{children}</> : null
 }

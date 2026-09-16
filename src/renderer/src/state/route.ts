@@ -330,7 +330,7 @@ export function buildRouteModel(
       })
       const pickups = rawPickups.filter((_, i) => keep[i])
       const amounts = rawAmounts.filter((_, i) => keep[i])
-      // an uncounted stop gets no boxes; it still has to be visited, and the count lands there
+      // uncounted stop still gets visited
       const maxBox = Math.max(...o.boxes.map((b) => b.scuSize), 1)
       const perPickup =
         pickups.length === 1

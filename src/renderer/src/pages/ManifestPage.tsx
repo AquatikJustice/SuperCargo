@@ -564,7 +564,7 @@ function PickupSection({ items, showBoxMath, label, onEditBoxes }: { items: Pick
   )
 }
 
-// the game never says how much sits at each stop of a split haul, so it gets typed in on arrival
+// game only shows the contract total
 function ScuCount({ item, disabled }: { item: PickupItem; disabled: boolean }): React.ReactElement {
   const setPickupScu = useStore((s) => s.setPickupScu)
   const [val, setVal] = useState('')

@@ -117,7 +117,6 @@ const api = {
   onOcrResult: (cb: (r: OcrResult) => void): Unsubscribe => on(IPC.evtOcrResult, cb),
   onOcrStatus: (cb: (s: string) => void): Unsubscribe => on(IPC.evtOcrStatus, cb),
   onOcrWait: (cb: (w: OcrWaitState) => void): Unsubscribe => on(IPC.evtOcrWait, cb),
-  // wait = keep retrying until the contract screen shows (shared accepts)
   requestOcrCapture: (missionId: string, wait?: Omit<OcrWaitState, 'active'>): void =>
     ipcRenderer.send(IPC.ocrRequestCapture, missionId, wait),
 

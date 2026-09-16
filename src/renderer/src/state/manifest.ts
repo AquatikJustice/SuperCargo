@@ -36,9 +36,8 @@ export interface PickupItem {
   destination: string
   /** loads from multiple places */
   split: boolean
-  /** which of the objective's pickups this stop is; -1 when it isn't a split haul */
+  /** -1 = not a split haul */
   pickupIndex: number
-  /** false = nobody has counted what's actually here */
   counted: boolean
   /** pickup stop's node key */
   pickupKey?: string
@@ -115,7 +114,7 @@ export interface DerivedContract {
   generator?: string
   /** hand-set display name; wins over the generator-derived party */
   contractor?: string
-  /** distinct pickup per objective (own pickup, else contract pickup); >1 = split across places */
+  /** >1 = loads from several places */
   pickupLocations: string[]
 }
 

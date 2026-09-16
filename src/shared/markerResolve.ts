@@ -50,7 +50,7 @@ export function backfillDestinations(
   return out
 }
 
-// only log source for multi-pickup stops; a shared Z (both Pyro gates) comes back null
+// both Pyro gates share a Z, null there
 export function resolvePickups(pickups: MarkerPoint[], locations: Location[]): (string | null)[] {
   if (!locations.length) return pickups.map(() => null)
   return [...pickups]
@@ -58,14 +58,14 @@ export function resolvePickups(pickups: MarkerPoint[], locations: Location[]): (
     .map((p) => locationByZ(p.z, locations).location)
 }
 
-// slot indices are per contract, so only a lone objective can claim the pickup markers
+// slots are per contract, not per objective
 function pickupFill(c: HaulingContract, locations: Location[]): string[] | null {
   if (!c.markerPickups?.length || c.objectives.length !== 1 || c.objectives[0].pickups?.length) return null
   const names = resolvePickups(c.markerPickups, locations)
   return names.every((n): n is string => !!n) ? names : null
 }
 
-// recover stops the game logged as a bare system (or left blank) from the objective marker coords
+// fill in stops the log left as a bare system
 export function applyMarkerBackfill(contracts: HaulingContract[], locations: Location[]): HaulingContract[] {
   if (!locations.length) return contracts
   let changed = false

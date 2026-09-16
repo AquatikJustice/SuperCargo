@@ -517,9 +517,7 @@ function preferContractSystem(objs: OcrObjective[], locations: Location[]): OcrO
     if (!m.match || !/\([^)]*\)\s*$/.test(m.match)) return m
     if (sysOf(m.match) === system) return m
     const base = m.match.replace(/\s*\([^)]*\)\s*$/, '').toLowerCase()
-    // a same-base sibling in the contract system means this is a paired name (the gateways),
-    // which differ only by the tag; the contract wins even when the read spelled one, since
-    // that's the read the tag is least trustworthy on. no sibling = trust the read as-is
+    // paired gateways differ only by tag, trust the contract
     const sibling = locations.find((l) => l.system === system && l.name.toLowerCase().startsWith(base + ' ('))
     return sibling ? { ...m, match: sibling.name } : m
   }

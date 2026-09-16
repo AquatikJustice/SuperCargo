@@ -15,7 +15,7 @@ import Typeahead from '../components/Typeahead'
 const COLS = '1fr 160px 130px 110px 96px 28px'
 // long names ellipsize, not widen
 const OBJ_COLS = '20px 58px minmax(0,1fr) minmax(0,1.4fr) 200px 64px 84px 84px 26px'
-// pickup column inserted before destination when a contract loads from more than one place
+// only when it loads from 2+ places
 const OBJ_COLS_PICKUP = '20px 58px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 170px 64px 84px 84px 26px'
 
 const statusColor: Record<string, string> = {

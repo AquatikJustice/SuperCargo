@@ -34,7 +34,6 @@ function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
 const pickupValue = (p: MatchResult): string | null =>
   p.match ?? (isBrokenSlotToken(p.input) ? p.input : null)
 
-// a hauling screen the reader whiffed on, vs a genuinely non-contract page
 const looksLikeContract = (text: string): boolean => {
   const t = text.toLowerCase()
   return /\bhaul/.test(t) && /\bscu\b/.test(t) && /\b(?:deliver|collect)\b/.test(t)
@@ -56,7 +55,7 @@ function rowFromOcr(o: OcrObjective): ObjRow {
   }
 }
 
-// log-named slots win; the panel read covers the ones a shared Z left blank
+// log names win, OCR fills the gaps
 function mergePickups(marked: (string | null)[], read?: string[]): string[] {
   const spare = (read ?? []).filter((r) => !marked.some((m) => m?.toLowerCase() === r.trim().toLowerCase()))
   return marked.map((m) => m ?? spare.shift() ?? '')
@@ -126,7 +125,7 @@ export default function CaptureModal(): React.ReactElement | null {
   const [contributed, setContributed] = useState(false)
   const [calibrating, setCalibrating] = useState(false)
 
-  // auto-recapture budget for a contract screen that read blank; reset when the user snaps by hand
+  // reset when snapped by hand
   const autoRetry = useRef(0)
   const userCapture = (): void => {
     autoRetry.current = 0
@@ -188,7 +187,7 @@ export default function CaptureModal(): React.ReactElement | null {
     } else {
       setRawEdit(ocrResult.rawText)
     }
-    // markers belong to the contract, not an objective, so only a lone row can take them
+    // markers are per contract, not per row
     if (markerPickups.length) {
       const marked = resolvePickups(markerPickups, locations)
       setRows((rs) => (rs.length === 1 ? [{ ...rs[0], pickups: mergePickups(marked, rs[0].pickups) }] : rs))
@@ -197,7 +196,7 @@ export default function CaptureModal(): React.ReactElement | null {
     if (ocrResult.reward) setReward(ocrResult.reward)
   }, [ocrResult])
 
-  // read blank on an obvious contract screen (glare, faint objectives): grab fresh frames a few times
+  // glare can blank a read, try again
   useEffect(() => {
     if (!open || !ocrResult?.ok || ocrStatus !== 'idle' || ocrWait?.active) return
     const blank = ocrResult.objectives.length === 0 && !target?.objectives?.length

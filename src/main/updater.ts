@@ -41,7 +41,7 @@ export function initUpdater(getWindow: () => BrowserWindow | null): void {
 }
 
 export async function checkForUpdates(): Promise<void> {
-  // tester builds sit beside the real install; the public feed isn't theirs to follow
+  // prerelease builds don't follow the public feed
   if (app.getVersion().includes('-')) return
   try {
     await updater().checkForUpdates()

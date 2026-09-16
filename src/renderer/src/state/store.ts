@@ -191,7 +191,7 @@ function reportBoxOutcome(c: HaulingContract, status: HistoryStatus): void {
   window.supercargo.reportBoxSizes(report)
 }
 
-// 4.10 fixed the multi-pickup spawn bug, so contracts saved under the collapse get their stops back
+// 4.10 fixed the spawn bug, undo the collapse
 function uncollapsePickups(c: HaulingContract): HaulingContract {
   type Collapsed = DeliveryObjective & { originalPickups?: string[] }
   if (!c.objectives.some((o) => (o as Collapsed).originalPickups)) return c
@@ -243,9 +243,9 @@ interface StoreState {
   scanQueue: ScannedContract[]
   scanReviewOpen: boolean
   crew: CrewState
-  /** leader's boxes as the grid currently has them; what a crew member renders */
+  /** leader's boxes as currently placed */
   crewBoxes: FrozenBox[]
-  /** epoch ms of the leader's last snapshot; drives the stale warning */
+  /** epoch ms, for the stale warning */
   crewSeenAt: number
   history: HistoryEntry[]
   appVersion: string
@@ -348,7 +348,7 @@ interface StoreState {
     patch: { commodity?: string; destination?: string; pickups?: string[] }
   ) => void
   deleteObjective: (contractId: string, objectiveId: string) => void
-  /** SCU counted at one pickup of a multi-pickup objective; null clears it back to uncounted */
+  /** null = back to uncounted */
   setPickupScu: (contractId: string, objectiveId: string, index: number, scu: number | null) => void
   setObjectiveDeliveredScu: (contractId: string, objectiveId: string, deliveredScu: number) => void
   setContractReward: (contractId: string, reward: number) => void
@@ -421,14 +421,14 @@ if (import.meta.hot) {
   })
 }
 
-// a member's own run, parked while crew mode paints the leader's over the top
+// member's own run, parked during a crew
 let preCrew: { contracts: HaulingContract[]; order: string[]; settings: AppSettings } | null = null
 
 export const useStore = create<StoreState>((set, get) => {
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
-    // crew member's view is on loan; it never becomes their saved run
+    // never save the leader's run as theirs
     if (get().crew.role === 'member') return
     const { runId, contracts, order, stopOrder, layout, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, looseBoxes, looseSpots, looseAt, deferredObjectives, grabbedObjectives, dismissedMissions, storAlls } = get()
     const doc: ManifestDoc = { runId, contracts, order, stopOrder, layout: layout ?? undefined, startLocation, currentLocation, isRouteAuto, loadedPins, loadingActive, loadingIdx, loadingSteps, loadingBoxes, loose: looseBoxes, looseSpots, looseAt, deferred: deferredObjectives, grabbed: grabbedObjectives, dismissed: dismissedMissions, storAlls }
@@ -436,7 +436,7 @@ export const useStore = create<StoreState>((set, get) => {
     pushCrew(doc)
   }
 
-  // coalesced: a step forward writes pins, ticks and a re-solve, send one snapshot
+  // a step forward writes several times, send once
   let crewTimer: ReturnType<typeof setTimeout> | null = null
   const pushCrew = (doc?: ManifestDoc): void => {
     const st = get()
@@ -834,7 +834,7 @@ export const useStore = create<StoreState>((set, get) => {
             ? { ...c, objectivesSettled: true }
             : c
         )
-      // markers name multi-pickup stops the old collapse threw away
+      // markers name stops the collapse dropped
       const restored = applyMarkerBackfill(active, locRoster?.locations ?? [])
       const ended = manifest.contracts.filter((c) => c.status !== 'active')
       // one-time sweep of entries recorded before abandons stopped counting
@@ -944,8 +944,7 @@ export const useStore = create<StoreState>((set, get) => {
         // OCR-held contracts announce themselves when they resolve, not now
         if (!willOcr) announce(contract.id)
         scheduleReroute()
-        // an accept preceded by a share means the user hit [ from the prompt,
-        // nowhere near the contract screen; capture has to wait for it
+        // share then accept: not on the contract screen yet
         const sharedAccept = (pendingShare.get(e.missionId) ?? []).some((s) => s.kind === 'shared')
         // a MissionShared/PlayerJoined that beat the accept applies now
         drainShare(contract.id)
@@ -1027,7 +1026,7 @@ export const useStore = create<StoreState>((set, get) => {
       }))
       track(window.supercargo.onOpenCapture(() => set({ captureOpen: true, captureTargetId: null })))
 
-      // crew member: paint the leader's run, never touch disk
+      // never touches disk
       track(window.supercargo.onCrewSnapshot((snap: CrewSnapshot) => {
         const doc = snap.manifest
         set((st) => ({
@@ -1049,9 +1048,9 @@ export const useStore = create<StoreState>((set, get) => {
           loadingBoxes: doc.loadingBoxes ?? null,
           loadingActive: snap.loadingIdx !== null,
           loadingIdx: snap.loadingIdx ?? 0,
-          // the leader's boxes as placed, so a hand-move shows up here too
+          // as placed, hand-moves included
           layout: { locked: true, boxes: snap.boxes },
-          // render their ship, not ours; settings are never persisted while in a crew
+          // their ship; nothing persists in a crew
           settings: {
             ...st.settings,
             activeShip: snap.ship,
@@ -1213,7 +1212,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     joinCrew: async (code) => {
-      // stash it before the leader's run paints over the top
+      // stash before the leader's run lands
       preCrew = {
         contracts: get().contracts,
         order: get().order,
@@ -1233,7 +1232,6 @@ export const useStore = create<StoreState>((set, get) => {
       if (role === 'leader') await window.supercargo.endCrew()
       else await window.supercargo.leaveCrew()
       set({ crew: { role: null, code: '', connected: false, lastAt: 0, members: [] }, crewSeenAt: 0 })
-      // hand the member their own manifest back
       if (preCrew) {
         set({ contracts: preCrew.contracts, order: preCrew.order, settings: preCrew.settings, layout: null })
         preCrew = null

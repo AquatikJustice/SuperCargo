@@ -1,11 +1,11 @@
-// crew mode transport: leader owns one row, members subscribe and render it read-only
+// one row per crew, leader writes, members watch
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import type { CrewSnapshot, CrewMember, CrewRole } from '@shared/types'
 import { SUPABASE_URL, SUPABASE_KEY } from './telemetry'
 
 const TABLE = 'crew_sessions'
-// pasted into chat; unambiguous alphabet is for whoever retypes it
+// no lookalikes, for anyone retyping it
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXYZ23456789'
 const CODE_LEN = 8
 
@@ -32,7 +32,7 @@ export function crewCode(): string {
   return code
 }
 
-/** presence: everyone on the channel announces a name, so the leader sees who actually turned up */
+// who's actually connected
 function watchPresence(ch: RealtimeChannel): void {
   ch.on('presence', { event: 'sync' }, () => {
     const seen = ch.presenceState<{ name: string; role: CrewRole }>()
@@ -60,7 +60,7 @@ async function announce(ch: RealtimeChannel, name: string, role: CrewRole): Prom
   })
 }
 
-/** a free code, or null if we couldn't reach the server at all */
+/** null = server unreachable */
 export async function startCrew(
   name: string,
   handlers: { members: (m: CrewMember[]) => void; status: (up: boolean, error?: string) => void }
@@ -79,7 +79,7 @@ export async function startCrew(
       await announce(channel, name, 'leader')
       return code
     }
-    // 23505 = someone already holds that code, roll again
+    // 23505 = code taken, reroll
     if (error.code !== '23505') return null
   }
   return null
@@ -111,12 +111,12 @@ export async function joinCrew(
   onStatus = handlers.status
   onMembers = handlers.members
 
-  // subscribe first: a fetch-then-subscribe order drops any update landing in between
+  // subscribe first or updates slip through the gap
   channel = db()
     .channel(`crew:${code}`, { config: { presence: { key: '' } } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: TABLE, filter: `code=eq.${code}` }, (msg) => {
       const next = (msg.new as { payload: CrewSnapshot | null }).payload
-      // out-of-order delivery would rewind the crew's view
+      // stale push, ignore
       if (next && next.rev > rev) {
         rev = next.rev
         onSnapshot?.(next)
@@ -125,7 +125,7 @@ export async function joinCrew(
   watchPresence(channel)
   await announce(channel, name, 'member')
 
-  // catch-up read; the rev check above makes an overlap with a pushed update harmless
+  // catch up; rev check dedupes
   const { data, error } = await db().from(TABLE).select('payload').eq('code', code).maybeSingle()
   if (error || !data) {
     await leaveCrew()
@@ -151,7 +151,7 @@ export async function leaveCrew(): Promise<void> {
   onMembers = null
 }
 
-/** leader closing up: drop the row so the code stops resolving */
+// kills the code for everyone
 export async function endCrew(): Promise<void> {
   if (code) await db().from(TABLE).delete().eq('code', code)
   await leaveCrew()

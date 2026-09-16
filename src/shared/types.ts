@@ -20,9 +20,9 @@ export interface BoxAllocation {
   count: number
 }
 
-/** an objective marker's coords, pulled from the CreateMarker log line */
+/** from the CreateMarker log line */
 export interface MarkerPoint {
-  /** slot index within the mission (pickup_<uuid>_N / dropoff_<uuid>_N) */
+  /** the N in pickup_<uuid>_N */
   index: number
   x: number
   y: number
@@ -36,7 +36,7 @@ export interface DeliveryObjective {
   destination: string
   /** empty = use contract pickup */
   pickups?: string[]
-  /** SCU counted at each pickup, parallel to pickups; null/absent = not counted yet */
+  /** parallel to pickups; null = not counted */
   pickupScu?: (number | null)[]
   destinationFull?: string
   boxes: BoxAllocation[]
@@ -93,7 +93,7 @@ export interface HaulingContract {
   originalMaxBoxSize?: number
   /** dropoff marker coords from the log, for recovering a destination the game left unresolved */
   markerDropoffs?: MarkerPoint[]
-  /** pickup marker coords from the log, in slot order; the only source for multi-pickup stops */
+  /** in slot order */
   markerPickups?: MarkerPoint[]
 }
 
@@ -150,7 +150,7 @@ export interface AppSettings {
   /** keep + upload each confirmed capture to train the shared OCR model */
   contributeTrainingData: boolean
   telemetryClientId: string
-  /** what the crew leader sees in the member list; not an account, just a label */
+  /** just a label, not an account */
   crewName: string
 
   /** anonymous usage snapshot on launch; on by default */
@@ -263,9 +263,8 @@ export interface RouteLoadLine {
   totalBreakdown: string
   destination: string
   multiPickup: boolean
-  /** which of the objective's pickups this stop is; -1 when it isn't a split haul */
+  /** -1 = not a split haul */
   pickupIndex: number
-  /** false = nobody has counted what's actually here */
   counted: boolean
   objectiveId: string
   contractId: string
@@ -636,7 +635,7 @@ export interface OcrResult {
   targetMissionId?: string
 }
 
-/** shared accept: capture holds until the contract is actually on screen */
+/** shared accept, hold for the screen */
 export interface OcrWaitState {
   active: boolean
   missionId?: string
@@ -677,20 +676,18 @@ export type UpdateState =
   | { kind: 'downloaded'; version: string }
   | { kind: 'error'; message: string }
 
-/** everything a crew member's app needs to render the leader's run, positions included */
 export interface CrewSnapshot {
-  /** bumped on every publish; a follower ignores anything not newer than what it has */
+  /** members drop anything not newer */
   rev: number
-  /** name the leader set, for a member's own display */
   leader: string
   ship: string
   installedModules: string[]
   manifest: ManifestDoc
-  /** boxes where the leader's grid actually has them, hand-moves included */
+  /** as placed, hand-moves included */
   boxes: FrozenBox[]
-  /** which walk step the leader is on; null = not in loading mode */
+  /** null = not in loading mode */
   loadingIdx: number | null
-  /** flags a crew member on a different build or data set, whose grid would render wrong */
+  /** mismatched build renders the grid wrong */
   appVersion: string
   gridFacesHash: string
 }
@@ -700,16 +697,15 @@ export type CrewRole = 'leader' | 'member'
 export interface CrewMember {
   name: string
   role: CrewRole
-  /** presence key, so two people sharing a name still count separately */
+  /** two people can share a name */
   id: string
 }
 
 export interface CrewState {
   role: CrewRole | null
   code: string
-  /** false once a publish or fetch fails; the member's view is stale */
   connected: boolean
-  /** epoch ms of the last snapshot applied, for the staleness readout */
+  /** epoch ms */
   lastAt: number
   members: CrewMember[]
   error?: string

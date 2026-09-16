@@ -798,7 +798,7 @@ export default function CargoGridPage(): React.ReactElement {
     pins: Map<string, Placement>
     source: PackBox[]
   } | null>(null)
-  // ticked pickups: cargo physically on the ship, so it loads at step 0 and its pins are untouchable
+  // already aboard, pins never move
   const aboardObjectives = useMemo(
     () =>
       new Set(
@@ -1648,7 +1648,7 @@ export default function CargoGridPage(): React.ReactElement {
       g: [...grabbedObjectives].sort(),
       l: [...looseBoxes].sort(),
       c: crates.map((c) => c.size).sort((a, b) => a - b),
-      // route order + what's being hauled, so a reorder or a new/removed contract re-solves
+      // reorders and new contracts re-solve too
       o: order,
       k: contracts
         .filter((c) => !c.pendingOcr)
@@ -1656,7 +1656,7 @@ export default function CargoGridPage(): React.ReactElement {
         .sort()
     })
   const lastSolvedSig = useRef('')
-  // hand-rearranging doesn't re-solve mid-step (that would lag every drag); it's cashed in on step forward
+  // re-solving per drag lags, wait for step forward
   const layoutDirty = useRef(false)
   useEffect(() => {
     if (loading) lastSolvedSig.current = compositionSig()
@@ -1715,7 +1715,7 @@ export default function CargoGridPage(): React.ReactElement {
       n++
     }
     setFrozenSteps(combined)
-    // hold the cursor on the same logical step; a rebuilt list must not scroll it forward
+    // rebuilt list shouldn't move the cursor
     const anchor = combined.findIndex(
       (f) => f.kind === cur.kind && f.nodeKey === cur.nodeKey && f.trip === cur.trip && f.boundFor === cur.boundFor
     )
@@ -1731,8 +1731,7 @@ export default function CargoGridPage(): React.ReactElement {
       )
   }
 
-  // a new/removed contract or a reorder mid-load re-solves the tail from where the ship sits
-  // (defer/grab/stash keep re-solving on step-ahead as before, so their timing is untouched)
+  // add/remove/reorder mid-load re-solves the tail
   useEffect(() => {
     if (!loading) return
     const sig = compositionSig()
@@ -1845,7 +1844,7 @@ export default function CargoGridPage(): React.ReactElement {
   }
 
   const startDrag = (key: string, pl: Placement, g: CargoGrid, e: ThreeEvent): void => {
-    // a crew member is watching the leader's hold, not arranging their own
+    // read-only for crew
     if (crewRole === 'member') return
     const ne = e.nativeEvent
     if (ne.ctrlKey || ne.metaKey || ne.shiftKey) {
@@ -2053,8 +2052,7 @@ export default function CargoGridPage(): React.ReactElement {
   useEffect(() => {
     if (!loading || !frozenSteps) return
     for (const [key, p] of Object.entries(loadedPins)) {
-      // already loaded: a re-plan can renumber its trip out from under the key, but the box is still
-      // sitting there, so it keeps its pin
+      // re-plan can renumber the trip, box is still aboard
       if (aboardObjectives.has(key.split('#')[0])) continue
       // unknown key = squatter; ahead-of-cursor pins are the rewind's job, don't race the re-solve
       if (!stepPos.byPickup.has(p.pickupKey)) clearLoadedPin(key)
@@ -2270,7 +2268,7 @@ export default function CargoGridPage(): React.ReactElement {
               turnedIn={turnedIn}
               onTurnIn={(entries) => {
                 turnInDestination(entries)
-                // step forward once every objective at this drop is accounted for
+                // advance once the whole drop is handled
                 const cur = loadSteps[loadIdx]
                 if (cur?.kind === 'drop') {
                   const done = new Set(entries.map((e) => e.objectiveId))
@@ -2299,7 +2297,7 @@ export default function CargoGridPage(): React.ReactElement {
                     addLoadedPins(pins)
                   }
                 }
-                // step forward is the checkpoint: what you rearranged is now the layout the tail plans against
+                // rearranged layout counts from here
                 const sig = compositionSig()
                 if (sig !== lastSolvedSig.current || layoutDirty.current) resolveTail()
                 lastSolvedSig.current = sig
@@ -3016,7 +3014,7 @@ function LoadingPanel({
   }
 
   const isLoad = step.kind === 'load'
-  // nothing to plan against until the split haul's cargo has been counted here
+  // can't pack what nobody's counted
   const uncounted = step.kind === 'load' && step.lines.some((l) => l.multiPickup && !l.counted)
   const blockAdvance = blockKind != null || uncounted
   const destLabel = destLabelOf(step.boundFor)
@@ -3282,7 +3280,7 @@ function LoadLineRow({
   line: LoadingStep['lines'][number]
   color?: string
   onEdit?: () => void
-  // repeats across a contract's commodities are one find-action; header shows once
+  // one find per contract, not per commodity
   showTell?: boolean
 }): React.ReactElement {
   return (
@@ -3323,7 +3321,7 @@ function LoadLineRow({
   )
 }
 
-// split haul, and nobody has counted this stop yet; the terminal is the only place it exists
+// only the terminal knows this number
 function WalkScuCount({ line }: { line: RouteLoadLine }): React.ReactElement {
   const setPickupScu = useStore((s) => s.setPickupScu)
   const [val, setVal] = useState('')

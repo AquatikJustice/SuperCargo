@@ -129,7 +129,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
   }, [crew.role])
 
   const inCrew = crew.role !== null
-  // a leader who force-quits leaves the row up, so silence is the only tell
+  // force-quit leader leaves the row up
   const staleFor = crew.role === 'member' && seenAt ? Date.now() - seenAt : 0
   const stale = staleFor > 60_000
   const label =
@@ -147,7 +147,7 @@ function CrewControl({ narrow }: { narrow: boolean }): React.ReactElement {
     setTimeout(() => setCopied(false), 1400)
   }
 
-  // the name rides along at join time, so it has to be saved before either call
+  // name is sent on join, save it first
   const saveName = async (): Promise<void> => {
     if (name.trim() !== (settings.crewName ?? '')) await updateSettings({ crewName: name.trim() })
   }

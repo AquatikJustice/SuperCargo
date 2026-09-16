@@ -5,8 +5,7 @@ export interface ParsedTitle {
   pickup: string
 }
 
-// a broken cross-system slot shows "LocationNAddress" in the details list; the read stays raw
-// so the review screen shows what the game printed instead of a wrong guess
+// broken slot token stays raw so it's fixable
 const PLACEHOLDER_RE = /^(?:location|destination)\s*\d*\s*address\s*\d*$/i
 
 export function isBrokenSlotToken(s: string): boolean {
@@ -79,7 +78,7 @@ export function contractParty(generator?: string): string {
   return generator
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
-    // some orgs already end in "Hauling" then get the "_Hauling" suffix ("LingFamilyHauling_Hauling")
+    // LingFamilyHauling_Hauling doubles up
     .replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1')
     .replace(/\s+/g, ' ')
     .trim()

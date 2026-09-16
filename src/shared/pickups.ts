@@ -1,10 +1,6 @@
 import type { DeliveryObjective } from './types'
 
-/**
- * SCU counted at each pickup, parallel to o.pickups. null = nobody has counted it yet.
- * The game only ever shows a contract total, so the split is unknowable until someone
- * stands at the terminal, except when one stop is left: that one is subtraction.
- */
+// game only shows a total; last unknown stop is subtraction
 export function pickupAmounts(o: DeliveryObjective): (number | null)[] {
   const n = o.pickups?.length ?? 0
   if (n === 0) return []
@@ -17,7 +13,6 @@ export function pickupAmounts(o: DeliveryObjective): (number | null)[] {
   return out
 }
 
-/** SCU on the contract that nobody has pinned to a stop yet */
 export function uncountedScu(o: DeliveryObjective): number {
   const amounts = pickupAmounts(o)
   if (!amounts.length || !amounts.some((v) => v === null)) return 0
