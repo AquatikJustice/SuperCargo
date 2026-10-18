@@ -447,12 +447,19 @@ export function computeRoutePlan(
     if (leoIdx !== undefined) cityToLeo.set(i, leoIdx)
   })
 
-  // saved key order, new stops last
+  // a mid-walk re-plan starts from wherever the ship is, not the depot
+  const startNode = startKey !== undefined ? model.nodes.findIndex((n) => n.key === startKey) : -1
+
+  // saved key order, new stops last; new work where the ship sits goes first
   let fixedOrder: number[] | undefined
   if (manualOrder && manualOrder.length) {
     const byKey = new Map(model.nodes.map((n, i) => [n.key, i]))
     const seq: number[] = []
     const used = new Set<number>()
+    if (startNode >= 0 && !manualOrder.includes(model.nodes[startNode].key)) {
+      seq.push(startNode)
+      used.add(startNode)
+    }
     for (const key of manualOrder) {
       const idx = byKey.get(key)
       if (idx !== undefined && !used.has(idx)) {
@@ -463,9 +470,6 @@ export function computeRoutePlan(
     for (let i = 0; i < model.nodes.length; i++) if (!used.has(i)) seq.push(i)
     fixedOrder = seq
   }
-
-  // a mid-walk re-plan starts from wherever the ship is, not the depot
-  const startNode = startKey !== undefined ? model.nodes.findIndex((n) => n.key === startKey) : -1
 
   const result = planRoute({
     n: model.nodes.length,

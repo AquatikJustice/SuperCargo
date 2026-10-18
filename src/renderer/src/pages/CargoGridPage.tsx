@@ -1993,7 +1993,8 @@ export default function CargoGridPage(): React.ReactElement {
       // re-plan can renumber the trip, box is still aboard
       if (aboardObjectives.has(key.split('#')[0])) continue
       // unknown key = squatter; ahead-of-cursor pins are the rewind's job, don't race the re-solve
-      if (!stepPos.byPickup.has(p.pickupKey)) clearLoadedPin(key)
+      // a re-opened pickup can come back renumbered, same boxes
+      if (!stepPos.byPickup.has(p.pickupKey) && !stepPos.byObjective.has(key.split('#')[0])) clearLoadedPin(key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, frozenSteps, stepPos, loadedPins, aboardObjectives])
@@ -2008,6 +2009,8 @@ export default function CargoGridPage(): React.ReactElement {
     for (const p of snap.placements) active.add(boxKey(p.box))
     for (const u of snap.unplaced) active.add(boxKey(u))
     for (const b of snap.loose) active.add(boxKey(b))
+    // still to load is not delivered; a re-opened pickup keeps its spots
+    for (const step of loadingPack.stepBoxes.slice(loadIdx + 1)) for (const b of step) active.add(boxKey(b))
     for (const key of Object.keys(loadedPins)) if (!active.has(key)) clearLoadedPin(key)
     const moved: Record<string, LoadedPin> = {}
     for (const p of snap.placements) {

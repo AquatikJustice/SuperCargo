@@ -1609,22 +1609,16 @@ export const useStore = create<StoreState>((set, get) => {
           })
         }
       })
-      // un-ticking puts those boxes back on the dock; their spots unlock
-      if (!picked) {
-        const pins = get().loadedPins
-        const keep = Object.entries(pins).filter(
-          ([key, p]) => !(key.startsWith(`${objectiveId}#`) && p.pickupKey === pickupKey)
-        )
-        if (keep.length !== Object.keys(pins).length) set({ loadedPins: Object.fromEntries(keep) })
-      } else {
+      // un-ticking keeps the pins: the boxes are still where they were loaded
+      if (picked) {
         // you're where you loaded; drop the trip suffix ('manual' = no routed stop, position unknown)
         const nk = pickupKey.includes('#') ? pickupKey.slice(0, pickupKey.lastIndexOf('#')) : pickupKey
         if (nk && nk !== 'manual' && nk !== get().currentLocation) set({ currentLocation: nk })
       }
       commit(updated)
-      // un-ticked cargo the plan thought aboard needs its pickup routed again
+      // un-ticked cargo the plan thought aboard needs its pickup routed again, same stop order
       if (!picked && !get().route?.steps.some((s) => s.loadRefs.some((r) => r.objectiveId === objectiveId))) {
-        scheduleReroute()
+        scheduleReroute(get().stopOrder)
       }
     },
 
@@ -1811,7 +1805,8 @@ export const useStore = create<StoreState>((set, get) => {
       const pins = get().loadedPins
       const kept = Object.fromEntries(Object.entries(pins).filter(([k]) => !k.startsWith(objectiveId + '#')))
       if (Object.keys(kept).length !== Object.keys(pins).length) set({ loadedPins: kept })
-      scheduleReroute()
+      // box sizes don't change the stops
+      scheduleReroute(get().stopOrder)
     },
 
     setPickupScu: (contractId, objectiveId, index, scu) => {
