@@ -267,7 +267,7 @@ export function buildRouteModel(
     nodes.push({
       key: 'depot',
       label: startLoc.name,
-      code: startLoc.code || split.code,
+      code: split.code,
       region: split.region,
       uexId: startLoc.uexId,
       x: startLoc.x,
@@ -295,7 +295,8 @@ export function buildRouteModel(
       nodes.push({
         key,
         label: loc?.name || raw.trim(),
-        code: loc?.code || split.code,
+        // a location's code is a UEX nickname, not a station code
+        code: loc ? splitDestination(loc.name).code : split.code,
         region: split.region,
         uexId: loc?.uexId,
         x: loc?.x,

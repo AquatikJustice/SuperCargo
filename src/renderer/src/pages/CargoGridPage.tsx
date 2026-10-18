@@ -3008,7 +3008,7 @@ function LoadingPanel({
           STOP {stopNum} / {stopTotal}
         </span>
         <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 600, color: C.text, textShadow: GLOW }}>
-          {step.code && step.code.toLowerCase() !== step.label.toLowerCase() ? `${step.code} ` : ''}{step.label}
+          {step.label}
         </span>
         {!readOnly && (
           <Btn
