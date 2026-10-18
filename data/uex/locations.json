@@ -171,6 +171,17 @@
       "body": "Yela"
     },
     {
+      "name": "Area18",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 18586917330.719185,
+      "y": -22152033653.831776,
+      "z": -262094.438106,
+      "system": "stanton"
+    },
+    {
       "name": "Arid Reach",
       "code": "Shop Arid Reach",
       "maxContainerSize": 0,
@@ -996,6 +1007,17 @@
       "system": "nyx"
     },
     {
+      "name": "Lorville",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 12850128103.83473,
+      "y": -752434.615701,
+      "z": 572120.273853,
+      "system": "stanton"
+    },
+    {
       "name": "Loveridge Mineral Reserve",
       "code": "",
       "maxContainerSize": 0,
@@ -1152,6 +1174,17 @@
     },
     {
       "name": "NB Int. Spaceport",
+      "code": "",
+      "maxContainerSize": 0,
+      "uexId": 0,
+      "hasElevator": true,
+      "x": 22462605975.476906,
+      "y": 37186164329.143265,
+      "z": 743654.685314,
+      "system": "stanton"
+    },
+    {
+      "name": "New Babbage",
       "code": "",
       "maxContainerSize": 0,
       "uexId": 0,
