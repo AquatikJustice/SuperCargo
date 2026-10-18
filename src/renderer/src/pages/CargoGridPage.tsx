@@ -7,10 +7,10 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
-import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, withStartStep, type LoadingStep } from '../state/loading'
-import { firstTripBudget, computeRoutePlan } from '../state/route'
+import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, followRouteSteps, loadProfile, stepsSig, withStartStep, type LoadingStep } from '../state/loading'
+import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
-import { gridsFor, shipFrame, shipAnchored, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
+import { gridsFor, shipFrame, shipAnchored, offGridFor, type CargoGrid } from '@shared/cargoGrids'
 import type { BayDir, RouteLoadLine } from '@shared/types'
 import { packCargo, provePeel, type Placement, type PackBox } from '@shared/packer'
 import { setAsideToUnload, looseSummary, bucketDecision, type SetAside, type BucketDecision } from '@shared/loadout'
@@ -620,7 +620,6 @@ export default function CargoGridPage(): React.ReactElement {
   const contracts = useStore((s) => s.contracts)
   const order = useStore((s) => s.order)
   const route = useStore((s) => s.route)
-  const locations = useStore((s) => s.locations)
   const startLocation = useStore((s) => s.startLocation)
   const activeShip = useStore((s) => s.settings.activeShip)
   const installedModules = useStore((s) => s.settings.installedModules)
@@ -671,6 +670,7 @@ export default function CargoGridPage(): React.ReactElement {
   const loadIdx = useStore((s) => s.loadingIdx)
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
   const setPickedUp = useStore((s) => s.setPickedUp)
+  const replan = useStore((s) => s.replan)
   const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   // freeze while walking
   const frozenSteps = useStore((s) => s.loadingSteps)
@@ -710,8 +710,7 @@ export default function CargoGridPage(): React.ReactElement {
     const boxSig = new Map<string, number[]>()
     for (const b of frozenBoxes ?? []) if (b.objectiveId) (boxSig.get(b.objectiveId) ?? boxSig.set(b.objectiveId, []).get(b.objectiveId)!).push(b.size)
     if (!matches(sig(boxSig))) setFrozenBoxes(applyDropSeq(packBoxes(contracts, order, true) as PackBox[]))
-    if (!matches(sig(stepBoxesOf(frozenSteps))) && matches(sig(stepBoxesOf(liveSteps))))
-      setFrozenSteps(withStartStep(liveSteps, startLocation))
+    if (!matches(sig(stepBoxesOf(frozenSteps))) && matches(sig(stepBoxesOf(liveSteps)))) followRoute()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, frozenSteps, frozenBoxes, contracts, order, liveSteps, startLocation])
   const deferredObjectives = useStore((s) => s.deferredObjectives)
@@ -1641,71 +1640,13 @@ export default function CargoGridPage(): React.ReactElement {
     setGhost(computeGhost(shipX, shipZ))
   }
 
-  // route re-solves only when pickups/stash/crates change, not on rearranging boxes
-  const compositionSig = (): string =>
-    JSON.stringify({
-      d: [...deferredObjectives].sort(),
-      g: [...grabbedObjectives].sort(),
-      l: [...looseBoxes].sort(),
-      c: crates.map((c) => c.size).sort((a, b) => a - b),
-      // reorders and new contracts re-solve too
-      o: order,
-      k: contracts
-        .filter((c) => !c.pendingOcr)
-        .flatMap((c) => c.objectives.map((ob) => `${ob.id}|${ob.scuAmount}|${ob.destination}`))
-        .sort()
-    })
-  const lastSolvedSig = useRef('')
-  // re-solving per drag lags, wait for step forward
-  const layoutDirty = useRef(false)
-  useEffect(() => {
-    if (loading) lastSolvedSig.current = compositionSig()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading])
-
-  // derailed plan gets tossed: stops ahead re-solve from where the ship sits, walked steps kept as history
-  const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
+  // walk follows the manifest's route, never its own
+  const followRoute = (force = false): void => {
     const cur = loadSteps[loadIdx]
-    if (!loading || !frozenSteps || !cur) return
-    layoutDirty.current = false
-    const aboard = new Set<string>()
-    // seed aboard from the live snap not pins, else a delivered box's stale pin re-boards it
-    const curIds = new Set(cur.kind === 'load' ? cur.loadIds : [])
-    for (const p of loadingPack?.snaps[loadIdx]?.placements ?? []) {
-      const oid = p.box.objectiveId
-      if (oid && !(replanCurrent && curIds.has(oid))) aboard.add(oid)
-    }
-    if (!replanCurrent && cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
-    const tailRoute = computeRoutePlan(
-      contracts.filter((c) => !c.pendingOcr),
-      locations,
-      gridCapacity(activeShip, installed),
-      cur.label,
-      loadableGrids(activeShip, installed),
-      undefined,
-      deferredObjectives,
-      aboard,
-      cur.nodeKey,
-      fx ?? fixtures
-    )
-    if (!tailRoute) return
-    let tail = buildLoadingSteps(contracts, tailRoute, order)
-    const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : loadIdx + 1)
-    if (!replanCurrent) {
-      // tail re-plans this visit's remaining work; what the open card covers would walk twice
-      const visitIds = new Set([...cur.loadIds, ...cur.dropIds])
-      while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => visitIds.has(l.objectiveId)))
-        tail = tail.slice(1)
-    }
-    // visit keys must stay unique across the splice
-    const tripBase = Math.max(0, ...prefix.map((s) => s.trip)) + 1
-    tail = tail.map((s) => ({ ...s, trip: s.trip + tripBase }))
-    // tail's leading steps at this node are the current visit; a fresh trip there orphans pins made here
-    for (const s of tail) {
-      if (s.nodeKey !== cur.nodeKey) break
-      s.trip = cur.trip
-    }
-    const combined = prefix.concat(tail)
+    if (!loading || !frozenSteps || !cur || !route) return
+    const { steps: combined, started } = followRouteSteps(loadSteps, loadIdx, buildLoadingSteps(contracts, route, order), contracts)
+    const shown = filterDeferredSteps(combined, new Set(deferredObjectives), (id) => tickedObj.has(id), new Set(grabbedObjectives))
+    if (!force && stepsSig(shown) === stepsSig(loadSteps)) return
     // depth order follows the new drop order
     const dn = new Map<string, number>()
     let n = 0
@@ -1716,10 +1657,12 @@ export default function CargoGridPage(): React.ReactElement {
     }
     setFrozenSteps(combined)
     // rebuilt list shouldn't move the cursor
-    const anchor = combined.findIndex(
-      (f) => f.kind === cur.kind && f.nodeKey === cur.nodeKey && f.trip === cur.trip && f.boundFor === cur.boundFor
-    )
-    if (anchor >= 0 && anchor !== loadIdx) setLoadIdx(anchor)
+    if (started) {
+      const anchor = shown.findIndex(
+        (f) => f.kind === cur.kind && f.nodeKey === cur.nodeKey && f.trip === cur.trip && f.boundFor === cur.boundFor
+      )
+      if (anchor >= 0 && anchor !== loadIdx) setLoadIdx(anchor)
+    } else if (loadIdx > shown.length - 1) setLoadIdx(Math.max(0, shown.length - 1))
     // re-seat existing boxes into the new drop order
     const nextBoxes = frozenBoxes
     if (nextBoxes)
@@ -1731,15 +1674,11 @@ export default function CargoGridPage(): React.ReactElement {
       )
   }
 
-  // add/remove/reorder mid-load re-solves the tail
+  // manifest re-planned, walk follows
   useEffect(() => {
-    if (!loading) return
-    const sig = compositionSig()
-    if (sig === lastSolvedSig.current) return
-    lastSolvedSig.current = sig
-    resolveTail()
+    followRoute()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, order, contracts])
+  }, [loading, route])
 
   // does the open step's own cargo have a box with no seat?
   const curUnfit = useMemo(() => {
@@ -1758,7 +1697,7 @@ export default function CargoGridPage(): React.ReactElement {
     if (!loading || !loadingPack || drag) return
     if (!curUnfit || negotiatedStep.current === loadIdx) return
     negotiatedStep.current = loadIdx
-    resolveTail(undefined, true)
+    replan()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, loadingPack, curUnfit, drag, loadIdx])
 
@@ -1829,7 +1768,6 @@ export default function CargoGridPage(): React.ReactElement {
           if (Object.keys(pins).length) {
             for (const key of Object.keys(pins)) if (looseBoxes.includes(key)) setBoxLoose(key, false)
             addLoadedPins(pins)
-            layoutDirty.current = true
           }
         }
         if (ghost.members) setSel(new Set())
@@ -2302,10 +2240,6 @@ export default function CargoGridPage(): React.ReactElement {
                     addLoadedPins(pins)
                   }
                 }
-                // rearranged layout counts from here
-                const sig = compositionSig()
-                if (sig !== lastSolvedSig.current || layoutDirty.current) resolveTail()
-                lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
               onBack={() => {
@@ -2330,10 +2264,8 @@ export default function CargoGridPage(): React.ReactElement {
                   setEditBoxes({ contractId: c.id, objectiveId: o.id, commodity: o.commodity, scu: o.scuAmount, boxes: o.boxes })
               }}
               onRepack={() => {
-                // manual escape hatch for a desynced layout: re-plan this step in place
-                negotiatedStep.current = loadIdx
-                resolveTail(undefined, true)
-                lastSolvedSig.current = compositionSig()
+                // manual escape hatch for a desynced layout
+                followRoute(true)
               }}
               onExit={exitLoading}
               onRestart={() => {

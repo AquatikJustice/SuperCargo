@@ -322,6 +322,8 @@ interface StoreState {
   fileCompleted: (id: string) => void
   setContractStatus: (id: string, status: HaulingContract['status']) => void
   resetRouteToAuto: () => void
+  /** re-plan, same stop order */
+  replan: () => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
   lockLayout: (boxes: FrozenBox[]) => void
   unlockLayout: () => void
@@ -1011,7 +1013,8 @@ export const useStore = create<StoreState>((set, get) => {
         const cur = get().contracts
         const bf = applyMarkerBackfill(cur, r.locations)
         if (bf !== cur) commit(bf)
-        scheduleReroute() // new coords, new route
+        // new coords alone aren't a wrench; a recovered drop is
+        scheduleReroute(bf !== cur ? undefined : get().stopOrder)
       }))
       track(window.supercargo.onCommodities((r) => {
         set({ commodities: r.commodities })
@@ -1020,7 +1023,7 @@ export const useStore = create<StoreState>((set, get) => {
       track(window.supercargo.onGridFaces((r) => {
         setGridFaces(r.gridFaces)
         set({ gridFacesSyncedAt: r.syncedAt || String(Date.now()) })
-        scheduleReroute()
+        scheduleReroute(get().stopOrder)
       }))
 
       track(window.supercargo.onWatcherStatus((s) => set({ watcher: s })))
@@ -1514,6 +1517,8 @@ export const useStore = create<StoreState>((set, get) => {
       set({ isRouteAuto: true })
       scheduleReroute()
     },
+
+    replan: () => scheduleReroute(get().stopOrder),
 
     startNewRun: () => {
       const { runId, history, contracts } = get()

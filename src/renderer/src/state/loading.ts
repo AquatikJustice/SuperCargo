@@ -365,6 +365,55 @@ export function filterDeferredSteps(
 }
 
 // drops lag a step
+// walked steps stay put, the rest comes from the route
+export function followRouteSteps(
+  steps: LoadingStep[],
+  idx: number,
+  routeSteps: LoadingStep[],
+  contracts: HaulingContract[]
+): { steps: LoadingStep[]; started: boolean } {
+  const objs = contracts.flatMap((c) => c.objectives)
+  const ticked = new Set(objs.filter((o) => o.pickedUpAt?.length).map((o) => o.id))
+  const turnedIn = new Set(objs.filter((o) => o.turnedInScu !== undefined).map((o) => o.id))
+  const cur = steps[idx]
+  const started = !cur || !!cur.start || cur.loadIds.some((id) => ticked.has(id)) || cur.dropIds.some((id) => turnedIn.has(id))
+  const boxesOf = new Map(objs.map((o) => [o.id, boxList(o.boxes)] as const))
+  const lineCount = new Map<string, number>()
+  for (const s of steps) for (const id of s.loadIds) lineCount.set(id, (lineCount.get(id) ?? 0) + 1)
+  // box edit corrects a one-visit load
+  const prefix = steps.slice(0, started ? idx + 1 : idx).map((s) => {
+    if (s.kind !== 'load') return s
+    const lines = s.lines.map((l) => {
+      const boxes = boxesOf.get(l.objectiveId)
+      return boxes && lineCount.get(l.objectiveId) === 1 && boxes.join() !== l.loadBoxes.join() ? { ...l, loadBoxes: boxes } : l
+    })
+    return lines.some((l, i) => l !== s.lines[i]) ? { ...s, lines } : s
+  })
+  const loadedAt = new Set(prefix.flatMap((s) => s.loadIds.map((id) => `${s.nodeKey}|${id}`)))
+  const dropped = new Set(prefix.flatMap((s) => s.dropIds))
+  const pickedAt = new Map<string, Set<string>>()
+  for (const o of objs)
+    if (o.pickedUpAt?.length) pickedAt.set(o.id, new Set(o.pickedUpAt.map((k) => k.slice(0, k.lastIndexOf('#')))))
+  const done = (s: LoadingStep, id: string): boolean =>
+    s.kind === 'load'
+      ? loadedAt.has(`${s.nodeKey}|${id}`) || !!pickedAt.get(id)?.has(s.nodeKey)
+      : dropped.has(id) || turnedIn.has(id)
+  const tail: LoadingStep[] = []
+  for (const s of routeSteps) {
+    const lines = s.lines.filter((l) => !done(s, l.objectiveId))
+    if (!lines.length) continue
+    if (lines.length === s.lines.length) tail.push(s)
+    else {
+      const ids = lines.map((l) => l.objectiveId)
+      tail.push({ ...s, lines, loadIds: s.kind === 'load' ? ids : [], dropIds: s.kind === 'drop' ? ids : [] })
+    }
+  }
+  return { steps: prefix.concat(tail), started }
+}
+
+export const stepsSig = (steps: LoadingStep[]): string =>
+  JSON.stringify(steps.map((s) => [s.kind, s.nodeKey, s.trip, s.boundFor, s.lines.map((l) => [l.objectiveId, l.scu, l.loadBoxes])]))
+
 export function buildLoadEvents(
   loadSteps: LoadingStep[],
   source: PackBox[],
