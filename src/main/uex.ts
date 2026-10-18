@@ -26,7 +26,7 @@ function cachePath(file: string): string {
   return path.join(app.getPath('userData'), file)
 }
 
-// working-tree file the markup writes
+// dev reads the checked-out data, not the synced cache
 export function workingTreeData(file: string): string | null {
   if (app.isPackaged) return null
   const candidates = [
@@ -38,7 +38,8 @@ export function workingTreeData(file: string): string | null {
 
 export function loadCachedRoster(): ShipRoster | null {
   try {
-    const j = JSON.parse(fs.readFileSync(cachePath(VEHICLES_FILE), 'utf8')) as Partial<ShipRoster>
+    const file = workingTreeData('ships.json') ?? cachePath(VEHICLES_FILE)
+    const j = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<ShipRoster>
     if (Array.isArray(j.ships)) {
       return {
         ships: withModules((j.ships as Ship[]).filter((s) => isRosterShip(s.name))),
@@ -53,7 +54,8 @@ export function loadCachedRoster(): ShipRoster | null {
 
 export function loadCachedLocations(): LocationRoster | null {
   try {
-    const j = JSON.parse(fs.readFileSync(cachePath(LOCATIONS_FILE), 'utf8')) as Partial<LocationRoster>
+    const file = workingTreeData('locations.json') ?? cachePath(LOCATIONS_FILE)
+    const j = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<LocationRoster>
     if (Array.isArray(j.locations)) {
       return {
         // dedup keeps coords
@@ -69,7 +71,8 @@ export function loadCachedLocations(): LocationRoster | null {
 
 export function loadCachedCommodities(): CommodityRoster | null {
   try {
-    const j = JSON.parse(fs.readFileSync(cachePath(COMMODITIES_FILE), 'utf8')) as Partial<CommodityRoster>
+    const file = workingTreeData('commodities.json') ?? cachePath(COMMODITIES_FILE)
+    const j = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<CommodityRoster>
     if (Array.isArray(j.commodities)) {
       return {
         // old caches carry SHPA1-7
