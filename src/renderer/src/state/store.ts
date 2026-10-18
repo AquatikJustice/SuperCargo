@@ -324,6 +324,8 @@ interface StoreState {
   resetRouteToAuto: () => void
   /** re-plan, same stop order */
   replan: () => void
+  /** the walk went back to this stop */
+  setCurrentLocation: (nodeKey: string) => void
   toggleObjectiveDelivered: (contractId: string, objectiveId: string) => void
   lockLayout: (boxes: FrozenBox[]) => void
   unlockLayout: () => void
@@ -1116,8 +1118,8 @@ export const useStore = create<StoreState>((set, get) => {
           pendingEnds.delete(e.missionId)
           archive(finalizeDelivery(contract), 'completed')
           commit(contracts.filter((c) => c.id !== e.missionId))
-          set({ isRouteAuto: true })
-          scheduleReroute()
+          // the plan worked, keep its order
+          scheduleReroute(get().stopOrder)
           return
         }
         // coalesce against a disconnect wipe
@@ -1519,6 +1521,11 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     replan: () => scheduleReroute(get().stopOrder),
+    setCurrentLocation: (nodeKey) => {
+      if (nodeKey === get().currentLocation) return
+      set({ currentLocation: nodeKey })
+      persist()
+    },
 
     startNewRun: () => {
       const { runId, history, contracts } = get()

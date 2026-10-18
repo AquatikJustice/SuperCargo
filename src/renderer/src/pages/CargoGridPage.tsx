@@ -671,6 +671,7 @@ export default function CargoGridPage(): React.ReactElement {
   const setLoadIdx = useStore((s) => s.setLoadingIdx)
   const setPickedUp = useStore((s) => s.setPickedUp)
   const replan = useStore((s) => s.replan)
+  const setCurrentLocation = useStore((s) => s.setCurrentLocation)
   const setObjectiveBoxes = useStore((s) => s.setObjectiveBoxes)
   // freeze while walking
   const frozenSteps = useStore((s) => s.loadingSteps)
@@ -2252,6 +2253,8 @@ export default function CargoGridPage(): React.ReactElement {
                 }
                 // re-opens the step you land on; the back-movement effect unwinds the rest
                 const prev = loadSteps[loadIdx - 1]
+                // back at that stop, so the re-plan starts there instead of queueing a revisit
+                if (prev && !prev.start) setCurrentLocation(prev.nodeKey)
                 if (prev?.kind === 'load')
                   for (const oid of prev.loadIds) {
                     const cid = objMeta.get(oid)?.contractId
