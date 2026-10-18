@@ -340,6 +340,14 @@ function buildLocations(locations, starmap, trade) {
   const gateways = buildGateways(trade, entities)
   out.push(...gateways)
 
+  // UEX and trade_locations miss most cities; the starmap has each as a landing zone
+  for (const city of new Set(Object.values(SPACEPORT_CITY))) {
+    if (out.some((l) => norm(l.name) === norm(city))) continue
+    const l = { name: city, code: '', maxContainerSize: 0, uexId: 0, hasElevator: true }
+    attachCoords(l)
+    out.push(l)
+  }
+
   // spaceports inherit their city's coords
   const byNorm = new Map(out.map((l) => [norm(l.name), l]))
   for (const l of out) {
