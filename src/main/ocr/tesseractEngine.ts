@@ -34,6 +34,24 @@ export class TesseractEngine implements OcrEngine {
     return path.join(app.getPath('userData'), 'tessdata')
   }
 
+  private cachedData(): string {
+    return path.join(this.tessdataDir(), 'eng.traineddata')
+  }
+
+  private bundledData(): string | undefined {
+    return [
+      path.join(process.resourcesPath, 'tessdata', 'eng.traineddata.gz'),
+      path.join(app.getAppPath(), 'node_modules', '@tesseract.js-data', 'eng', '4.0.0_best_int', 'eng.traineddata.gz')
+    ].find((p) => fs.existsSync(p))
+  }
+
+  // Electron makes tesseract.js fetch langPath; the cache reads off disk
+  private seedCache(): void {
+    fs.mkdirSync(this.tessdataDir(), { recursive: true })
+    const bundled = this.bundledData()
+    if (bundled && !fs.existsSync(this.cachedData())) fs.copyFileSync(bundled, this.cachedData())
+  }
+
   async isAvailable(): Promise<boolean> {
     if (this.loadFailed) return false
     try {
@@ -46,7 +64,7 @@ export class TesseractEngine implements OcrEngine {
 
   async assetsReady(): Promise<boolean> {
     try {
-      return fs.existsSync(path.join(this.tessdataDir(), 'eng.traineddata'))
+      return fs.existsSync(this.cachedData()) || !!this.bundledData()
     } catch {
       return false
     }
@@ -58,15 +76,25 @@ export class TesseractEngine implements OcrEngine {
 
     this.loading = (async () => {
       try {
-        const cachePath = this.tessdataDir()
-        fs.mkdirSync(cachePath, { recursive: true })
+        this.seedCache()
         const tesseract = (await import('tesseract.js')) as unknown as TessModule
         const createWorker = tesseract.createWorker ?? tesseract.default?.createWorker
         if (!createWorker) throw new Error('tesseract.js missing createWorker')
-        const worker: TessWorker = await createWorker('eng', 1, {
-          cachePath,
-          gzip: true
-        })
+        // createWorker never settles on a bad language load
+        let fail: (e: unknown) => void = () => {}
+        const failed = new Promise<never>((_, reject) => (fail = reject))
+        const worker: TessWorker = await Promise.race([
+          createWorker('eng', 1, {
+            cachePath: this.tessdataDir(),
+            gzip: true,
+            // else it rethrows outside our try
+            errorHandler: (e: unknown) => {
+              console.error('[ocr] tesseract worker error:', e)
+              fail(e)
+            }
+          }),
+          failed
+        ])
         // psm 3 stops column text bleeding (the everus bug)
         await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: '3' })
         this.worker = worker
