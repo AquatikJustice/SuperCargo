@@ -1158,14 +1158,17 @@ export default function CargoGridPage(): React.ReactElement {
       const boxes = visit.flatMap((v, vi) => loadingPack.stepBoxes[k + vi] ?? []).filter((bx) => bx.objectiveId && idSet.has(bx.objectiveId))
       const scu = boxes.reduce((sum, bx) => sum + bx.size, 0)
       if (!scu) return null
+      // what the grid can't seat can ride off grid, if the ship has the room
+      const stash = offPad ? offPad.w * offPad.l * offPad.h : 0
       for (let i = loadIdx; i < k; i++) {
-        const aboard = loadingPack.snaps[i]?.placements.reduce((sum, p) => sum + p.box.size, 0) ?? 0
-        if (aboard + scu > result.capacity) return null
+        const snap = loadingPack.snaps[i]
+        const aboard = (snap?.placements.reduce((sum, p) => sum + p.box.size, 0) ?? 0) + (snap?.loose.reduce((sum, b) => sum + b.size, 0) ?? 0)
+        if (aboard + scu > result.capacity + stash) return null
       }
       return { ids, scu, count: boxes.length, stepNo: k + 1 }
     }
     return null
-  }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result])
+  }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result, offPad])
 
   // if it fits, a return-visit pickup just joins the stop; card only asks when the stack would get ugly
   const grabbedOnce = useRef('')
@@ -1663,6 +1666,22 @@ export default function CargoGridPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
+  // grab cards queued behind the open step at this visit
+  const grabCardsEnd = (): number => {
+    const cur = loadSteps[loadIdx]
+    let end = loadIdx + 1
+    while (
+      cur &&
+      end < loadSteps.length &&
+      loadSteps[end].nodeKey === cur.nodeKey &&
+      loadSteps[end].kind === 'load' &&
+      loadSteps[end].loadIds.length > 0 &&
+      loadSteps[end].loadIds.every((id) => grabbedObjectives.includes(id))
+    )
+      end++
+    return end
+  }
+
   // derailed plan gets tossed: stops ahead re-solve from where the ship sits, walked steps kept as history
   const resolveTail = (fx?: Map<string, Placement>, replanCurrent = false): void => {
     const cur = loadSteps[loadIdx]
@@ -1676,6 +1695,10 @@ export default function CargoGridPage(): React.ReactElement {
       if (oid && !(replanCurrent && curIds.has(oid))) aboard.add(oid)
     }
     if (!replanCurrent && cur.kind === 'load') for (const id of cur.loadIds) aboard.add(id)
+    // grab cards here board now, not on a return trip
+    const end = replanCurrent ? loadIdx + 1 : grabCardsEnd()
+    const grabbedHere = loadSteps.slice(loadIdx + 1, end).flatMap((s) => s.loadIds)
+    for (const id of grabbedHere) aboard.add(id)
     const tailRoute = computeRoutePlan(
       contracts.filter((c) => !c.pendingOcr),
       locations,
@@ -1686,14 +1709,16 @@ export default function CargoGridPage(): React.ReactElement {
       deferredObjectives,
       aboard,
       cur.nodeKey,
-      fx ?? fixtures
+      fx ?? fixtures,
+      undefined,
+      looseBoxes.length ? new Map(looseBoxes.map((k) => [k, looseAt[k] ?? ''])) : undefined
     )
     if (!tailRoute) return
     let tail = buildLoadingSteps(contracts, tailRoute, order)
-    const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : loadIdx + 1)
+    const prefix = loadSteps.slice(0, replanCurrent ? loadIdx : end)
     if (!replanCurrent) {
       // tail re-plans this visit's remaining work; what the open card covers would walk twice
-      const visitIds = new Set([...cur.loadIds, ...cur.dropIds])
+      const visitIds = new Set([...cur.loadIds, ...cur.dropIds, ...grabbedHere])
       while (tail.length && tail[0].nodeKey === cur.nodeKey && tail[0].lines.every((l) => visitIds.has(l.objectiveId)))
         tail = tail.slice(1)
     }
@@ -2304,7 +2329,9 @@ export default function CargoGridPage(): React.ReactElement {
                 }
                 // rearranged layout counts from here
                 const sig = compositionSig()
-                if (sig !== lastSolvedSig.current || layoutDirty.current) resolveTail()
+                // unsaved grab cards follow the ticks back otherwise
+                const unbaked = loadSteps.slice(loadIdx + 1, grabCardsEnd()).some((s) => !frozenSteps?.includes(s))
+                if (sig !== lastSolvedSig.current || layoutDirty.current || unbaked) resolveTail()
                 lastSolvedSig.current = sig
                 setLoadIdx((i) => i + 1)
               }}
