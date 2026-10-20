@@ -7,7 +7,7 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
-import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, withStartStep, type LoadingStep } from '../state/loading'
+import { aboardAt, buildLoadingSteps, buildLoadEvents, filterDeferredSteps, loadProfile, withStartStep, type LoadingStep } from '../state/loading'
 import { firstTripBudget, computeRoutePlan } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, shipAnchored, offGridFor, gridCapacity, loadableGrids, type CargoGrid } from '@shared/cargoGrids'
@@ -2989,7 +2989,7 @@ function LoadingPanel({
 }): React.ReactElement {
   const isDrop = step?.kind === 'drop'
   const { series, peak } = useMemo(() => loadProfile(steps), [steps])
-  const aboard = done || !series.length ? 0 : series[Math.max(0, Math.min(idx, series.length - 1))]
+  const aboard = done ? 0 : aboardAt(steps, series, idx, turnedIn)
   // split bucket: last trip only
   const isFinalChunk = (l: LoadingStep['lines'][number]): boolean => l.tripPos >= l.tripTotal
   const dropLines = isDrop ? step!.lines.filter(isFinalChunk) : []

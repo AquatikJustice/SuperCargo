@@ -3,7 +3,7 @@ import type { BoxAllocation } from '@shared/types'
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, fmtDistance } from '../theme'
 import { deriveStopsWithPickups, deriveRouteStops, deriveContracts, deriveTotals, activeContracts, offGridByObjective, type Stop, type StopItem, type PickupItem, type OffGridTally } from '../state/manifest'
-import { buildLoadingSteps, loadProfile } from '../state/loading'
+import { aboardAt, buildLoadingSteps, filterDeferredSteps, loadProfile } from '../state/loading'
 import { gridCapacity } from '@shared/cargoGrids'
 import PageHeader, { PAGE_PADDING } from '../components/PageHeader'
 import { Btn, ScuInput, useCanEdit } from '../components/ui'
@@ -26,6 +26,9 @@ export default function ManifestPage(): React.ReactElement {
   const route = useStore((s) => s.route)
   const loadingActive = useStore((s) => s.loadingActive)
   const loadingIdx = useStore((s) => s.loadingIdx)
+  const walk = useStore((s) => s.loadingSteps)
+  const deferredObjectives = useStore((s) => s.deferredObjectives)
+  const grabbedObjectives = useStore((s) => s.grabbedObjectives)
   const openCapture = useStore((s) => s.openCapture)
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
@@ -61,10 +64,22 @@ export default function ManifestPage(): React.ReactElement {
   const capMax = gridCapacity(activeShip, installedModules[activeShip])
   const storAlls = useStore((s) => s.storAlls)
   const reserved = (storAlls[activeShip] ?? []).reduce((a, c) => a + c.size, 0)
-  const loadSteps = useMemo(() => (route ? buildLoadingSteps(contracts, route, order) : []), [route, contracts, order])
+  // mid-walk the cursor indexes the walk, not the route
+  const loadSteps = useMemo(() => {
+    if (loadingActive && walk) {
+      const ticked = new Set(contracts.flatMap((c) => c.objectives.filter((o) => o.pickedUpAt?.length).map((o) => o.id)))
+      return filterDeferredSteps(walk, new Set(deferredObjectives), (id) => ticked.has(id), new Set(grabbedObjectives))
+    }
+    return route ? buildLoadingSteps(contracts, route, order) : []
+  }, [loadingActive, walk, deferredObjectives, grabbedObjectives, route, contracts, order])
   const { series, peak } = useMemo(() => loadProfile(loadSteps), [loadSteps])
+  const turnedIn = useMemo(() => {
+    const r: Record<string, number> = {}
+    for (const c of contracts) for (const o of c.objectives) if (o.turnedInScu !== undefined) r[o.id] = o.turnedInScu
+    return r
+  }, [contracts])
   // 0 until you're actually walking the load
-  const aboard = loadingActive && series.length ? series[Math.max(0, Math.min(loadingIdx, series.length - 1))] : 0
+  const aboard = loadingActive ? aboardAt(loadSteps, series, loadingIdx, turnedIn) : 0
 
   if (totals.contracts === 0) {
     return (
