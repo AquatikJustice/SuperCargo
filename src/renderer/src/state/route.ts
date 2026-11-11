@@ -247,7 +247,8 @@ export function buildRouteModel(
   startLocation?: string,
   capacity?: number,
   bays?: CargoGrid[],
-  fixtures?: ReadonlyMap<string, Placement>
+  fixtures?: ReadonlyMap<string, Placement>,
+  offGrid?: ReadonlyMap<string, string>
 ): RouteModel {
   if (fixtures?.size && capacity && capacity > 0) {
     let scu = 0
@@ -335,17 +336,42 @@ export function buildRouteModel(
         pickups.length === 1
           ? [boxList(o.boxes)]
           : amounts.map((a) => (a == null ? [] : boxList(calculateBoxes(a, maxBox))))
+      const parked = offGrid?.size
+        ? boxList(o.boxes).flatMap((size, slot) => {
+            const at = offGrid.get(`${o.id}#${slot}`)
+            return at === undefined ? [] : [{ size, node: at.slice(0, at.lastIndexOf('#')) }]
+          })
+        : []
       pickups.forEach((pu, i) => {
         const pickupNode = nodeFor(pu || '(unknown pickup)', false)
         if (pickupNode === destNode) return
-        const boxes = perPickup[i]
+        // off-grid boxes still travel, they just take no grid room
+        const want = parked.filter((p) => pickups.length === 1 || p.node === nodes[pickupNode].key).map((p) => p.size)
+        const off: number[] = []
+        const boxes = perPickup[i].filter((b) => {
+          const k = want.indexOf(b)
+          if (k < 0) return true
+          want.splice(k, 1)
+          off.push(b)
+          return false
+        })
         const addJob = (b: number[]): void => {
-          const s = b.reduce((a, v) => a + v, 0)
-          jobs.push({ pickup: pickupNode, dest: destNode, scu: s, boxes: b })
-          jobInfo.push({ pickupNode, destNode, scu: s, boxes: b, commodity: o.commodity, contractId: c.id, objectiveId: o.id })
+          const full = off.length ? [...b, ...off.splice(0)] : b
+          jobs.push({ pickup: pickupNode, dest: destNode, scu: b.reduce((a, v) => a + v, 0), boxes: b })
+          jobInfo.push({
+            pickupNode,
+            destNode,
+            scu: full.reduce((a, v) => a + v, 0),
+            boxes: full,
+            commodity: o.commodity,
+            contractId: c.id,
+            objectiveId: o.id
+          })
         }
         // split by what one load can actually take
-        if (bays && bays.length) {
+        if (!boxes.length && off.length) {
+          addJob([])
+        } else if (bays && bays.length) {
           for (const chunk of chunkToFit(boxes, capacity ?? 0, bays, fixtures)) addJob(chunk)
         } else if (capacity && capacity > 0 && boxes.reduce((a, v) => a + v, 0) > capacity) {
           for (const chunk of chunkToCapacity(boxes, capacity)) addJob(chunk)
@@ -421,16 +447,22 @@ export function computeRoutePlan(
   deferred?: string[],
   aboard?: ReadonlySet<string>,
   startKey?: string,
-  fixtures?: ReadonlyMap<string, Placement>
+  fixtures?: ReadonlyMap<string, Placement>,
+  grabbed?: ReadonlySet<string>,
+  offGrid?: ReadonlyMap<string, string>
 ): RoutePlan | null {
   locations = withCityCoords(locations)
-  const model = buildRouteModel(contracts, locations, startLocation, capacity, bays, fixtures)
+  const model = buildRouteModel(contracts, locations, startLocation, capacity, bays, fixtures, offGrid)
   if (model.nodes.length < 2 || model.jobs.length === 0) return null
   const { dist, usedReal } = buildDistMatrix(model.nodes, locations)
 
   // already aboard: no pickup visit, and deferral doesn't apply
   const aboardJobs = aboard?.size
     ? new Set(model.jobInfo.flatMap((j, i) => (aboard.has(j.objectiveId) ? [i] : [])))
+    : undefined
+
+  const grabbedJobs = grabbed?.size
+    ? new Set(model.jobInfo.flatMap((j, i) => (grabbed.has(j.objectiveId) && !aboardJobs?.has(i) ? [i] : [])))
     : undefined
 
   // objectives the user sent to a later trip -> their job indices
@@ -483,6 +515,7 @@ export function computeRoutePlan(
     cityToLeo,
     deferred: deferredJobs,
     aboard: aboardJobs,
+    grabbed: grabbedJobs,
     fixtures
   })
 

@@ -32,6 +32,8 @@ export interface RouteInput {
   deferred?: Set<number>
   /** job indices already physically aboard: pickups happened, only deliveries remain */
   aboard?: Set<number>
+  /** job indices the user grabbed early: they load at their pickup's first visit, room or not */
+  grabbed?: Set<number>
   /** permanent crates parked in the hold; their space is never plannable */
   fixtures?: ReadonlyMap<string, Placement>
 }
@@ -418,6 +420,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
   const baseUnfittable = all.filter((j) => j.scu > cap && !aboardSet.has(j.idx)).map((j) => j.idx)
   const byIdx = new Map(all.filter((j) => j.scu <= cap || aboardSet.has(j.idx)).map((j) => [j.idx, j]))
   const seeded = [...aboardSet].flatMap((i) => byIdx.get(i) ?? [])
+  const grabbed = input.grabbed ?? new Set<number>()
   const cityToLeo = input.cityToLeo
   // LEO to the cities below it
   const leoCities = new Map<number, number[]>()
@@ -470,7 +473,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
         if (!(gateDeferred && deferred.has(idx))) locs.add((byIdx.get(idx) as IJob).pickup)
 
       // nearest stop where something happens
-      let best: { L: number; drops: IJob[]; loads: IJob[] } | null = null
+      let best: { L: number; drops: IJob[]; loads: IJob[]; forced: IJob[] } | null = null
       let bestD = Infinity
       for (const L of locs) {
         const drops = aboard.filter((j) => j.dest === L)
@@ -480,14 +483,15 @@ function planMultiTrip(input: RouteInput): RouteResult {
           .filter((j) => j.pickup === L)
           .filter((j) => !(gateDeferred && deferred.has(j.idx)))
           .sort((a, b) => b.scu - a.scu)
+        const forced = here.filter((j) => grabbed.has(j.idx))
         const loads: IJob[] = []
         for (const j of here) {
-          if (j.scu <= free) {
+          if (!grabbed.has(j.idx) && j.scu <= free) {
             loads.push(j)
             free -= j.scu
           }
         }
-        if (!drops.length && !loads.length) continue
+        if (!drops.length && !loads.length && !forced.length) continue
         // defer drops with cargo still inbound
         let penalty = 0
         if (drops.length) {
@@ -507,7 +511,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
         const d = dist[cur][L] + penalty
         if (d < bestD) {
           bestD = d
-          best = { L, drops, loads }
+          best = { L, drops, loads, forced }
         }
       }
       if (!best) break
@@ -525,7 +529,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
         const keep = best.loads.slice()
         while (keep.length && !oracle.canTake(oracleJobs(keep), rankOf, dropping)) keep.shift()
         // nothing fits: drop unfittable, else deliver first
-        if (!keep.length && !best.drops.length) {
+        if (!keep.length && !best.drops.length && !best.forced.length) {
           if (!aboard.length) {
             const small = best.loads[best.loads.length - 1]
             unfittable.push(small.idx)
@@ -544,10 +548,11 @@ function planMultiTrip(input: RouteInput): RouteResult {
           best = {
             L: L2,
             drops: aboard.filter((j) => j.dest === L2),
-            loads: []
+            loads: [],
+            forced: []
           }
         } else {
-          best = { L: best.L, drops: best.drops, loads: keep }
+          best = { L: best.L, drops: best.drops, loads: keep, forced: best.forced }
         }
       }
 
@@ -565,17 +570,20 @@ function planMultiTrip(input: RouteInput): RouteResult {
       }
 
       const pickJobs: number[] = []
-      if (best.loads.length) {
+      const boarding = [...best.loads, ...best.forced]
+      if (boarding.length) {
         if (started && load === 0) trip++
         started = true
         if (oracle) {
-          const ranked = [...new Set([...aboard, ...best.loads].map((j) => j.dest))].sort(
+          const ranked = [...new Set([...aboard, ...boarding].map((j) => j.dest))].sort(
             (a, b) => dist[best!.L][a] - dist[best!.L][b]
           )
           const rankMap = new Map(ranked.map((d, i) => [d, i]))
-          oracle.take(oracleJobs(best.loads), (dest) => rankMap.get(dest) ?? ranked.length)
+          const rankOf = (dest: number): number => rankMap.get(dest) ?? ranked.length
+          if (best.loads.length) oracle.take(oracleJobs(best.loads), rankOf)
+          if (best.forced.length) oracle.take(oracleJobs(best.forced), rankOf, best.loads.length > 0)
         }
-        for (const j of best.loads) {
+        for (const j of boarding) {
           load += j.scu
           aboard.push(j)
           pending.delete(j.idx)
@@ -598,8 +606,8 @@ function planMultiTrip(input: RouteInput): RouteResult {
       const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), { fixtures: input.fixtures })
       const bad = new Set<number>()
       for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
-      // an aboard job can't load later; it's already on the ship
-      for (const i of aboardSet) bad.delete(i)
+      // aboard jobs are already on the ship, grabbed ones load now regardless
+      for (const i of [...aboardSet, ...grabbed]) bad.delete(i)
       if (bad.size < best.homeless) best = { walk, homeless: bad.size }
       if (!bad.size || round >= 2) break
       for (const i of bad) late.add(i)
@@ -640,6 +648,7 @@ function planManual(input: RouteInput): RouteResult {
   const byIdx = new Map(all.filter((j) => j.scu <= cap || aboardSet.has(j.idx)).map((j) => [j.idx, j]))
   const pending = new Set(byIdx.keys())
   const seeded = [...aboardSet].flatMap((i) => byIdx.get(i) ?? [])
+  const grabbed = input.grabbed ?? new Set<number>()
   for (const j of seeded) pending.delete(j.idx)
   const aboard: IJob[] = [...seeded]
   const oracle = input.bays ? holdOracle(input.bays) : null
@@ -668,9 +677,10 @@ function planManual(input: RouteInput): RouteResult {
         .filter((j) => j.pickup === L)
         .filter((j) => !(gateDeferred && deferred.has(j.idx)))
         .sort((a, b) => b.scu - a.scu)
+      const forced = here.filter((j) => grabbed.has(j.idx))
       const loads: IJob[] = []
       for (const j of here) {
-        if (j.scu <= free) {
+        if (!grabbed.has(j.idx) && j.scu <= free) {
           loads.push(j)
           free -= j.scu
         }
@@ -680,9 +690,10 @@ function planManual(input: RouteInput): RouteResult {
         const dropping = new Set(drops.map((j) => j.idx))
         while (loads.length && !oracle.canTake(oracleJobs(loads), rankOf, dropping)) loads.shift()
       }
-      if (!drops.length && !loads.length) continue
+      if (!drops.length && !loads.length && !forced.length) continue
 
-      const took = new Set(loads.map((j) => j.idx))
+      const boarding = [...loads, ...forced]
+      const took = new Set(boarding.map((j) => j.idx))
       const deferJobs = here.filter((j) => !took.has(j.idx)).map((j) => j.idx)
 
       total += dist[cur][L]
@@ -698,11 +709,12 @@ function planManual(input: RouteInput): RouteResult {
         oracle?.release(dropJobs)
       }
       const pickJobs: number[] = []
-      if (loads.length) {
+      if (boarding.length) {
         if (started && load === 0) trip++
         started = true
-        oracle?.take(oracleJobs(loads), rankOf)
-        for (const j of loads) {
+        if (loads.length) oracle?.take(oracleJobs(loads), rankOf)
+        if (forced.length) oracle?.take(oracleJobs(forced), rankOf, loads.length > 0)
+        for (const j of boarding) {
           load += j.scu
           aboard.push(j)
           pending.delete(j.idx)

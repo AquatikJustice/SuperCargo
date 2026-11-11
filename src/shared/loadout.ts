@@ -48,6 +48,33 @@ export interface SetAside {
   blocked: PackBox[]
 }
 
+type Axis = 'x' | 'y' | 'z'
+type Way = { axis: Axis; dir: -1 | 1 }
+
+// every side cargo can leave by: doors and aisles off the floor's axis
+function waysOut(g: CargoGrid): Way[] {
+  const floorAxis = (g.floor ?? 'y-')[0]
+  const ways: Way[] = []
+  for (const [face, kind] of Object.entries(g.faces ?? {}))
+    if ((kind === 'exit' || kind === 'aisle') && face[0] !== floorAxis)
+      ways.push({ axis: face[0] as Axis, dir: face[1] === '+' ? 1 : -1 })
+  return ways.length ? ways : [g.exit ?? DEFAULT_EXIT]
+}
+
+const span = (p: Placement, axis: Axis): [number, number] =>
+  axis === 'x' ? [p.x, p.x + p.w] : axis === 'y' ? [p.y, p.y + p.h] : [p.z, p.z + p.l]
+
+// q sits between p and that way out, in p's lane
+function inPath(w: Way, p: Placement, q: Placement): boolean {
+  for (const a of ['x', 'y', 'z'] as Axis[]) {
+    if (a === w.axis) continue
+    const [p0, p1] = span(p, a)
+    const [q0, q1] = span(q, a)
+    if (!(p0 < q1 && q0 < p1)) return false
+  }
+  return w.dir === -1 ? span(q, w.axis)[0] < span(p, w.axis)[0] : span(q, w.axis)[0] > span(p, w.axis)[0]
+}
+
 // movers you lift aside to unload, not the trapped boxes; the honest shuffle count
 export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): SetAside {
   const byGrid = new Map<string, Placement[]>()
@@ -57,20 +84,19 @@ export function setAsideToUnload(grids: CargoGrid[], placements: Placement[]): S
   for (const g of grids) {
     const ps = byGrid.get(g.id)
     if (!ps) continue
-    const exit = g.exit ?? DEFAULT_EXIT
-    const onZ = exit.axis === 'z'
-    const depth = (p: Placement): number =>
-      onZ ? (exit.dir === -1 ? p.z : g.l - (p.z + p.l)) : exit.dir === -1 ? p.x : g.w - (p.x + p.w)
-    for (const p of ps)
-      for (const q of ps) {
-        if (q === p || q.box.stopIdx <= p.box.stopIdx || depth(q) >= depth(p)) continue
-        const yOver = p.y < q.y + q.h && q.y < p.y + p.h
-        const cross = onZ ? p.x < q.x + q.w && q.x < p.x + p.w : p.z < q.z + q.l && q.z < p.z + p.l
-        if (yOver && cross) {
-          movers.set(q.box.id, q.box)
-          blocked.set(p.box.id, p.box)
-        }
+    const ways = waysOut(g)
+    for (const p of ps) {
+      // dig out whichever way costs the fewest moves
+      let dig: Placement[] | null = null
+      for (const w of ways) {
+        const path = ps.filter((q) => q !== p && q.box.stopIdx > p.box.stopIdx && inPath(w, p, q))
+        if (!dig || path.length < dig.length) dig = path
+        if (!dig.length) break
       }
+      if (!dig?.length) continue
+      blocked.set(p.box.id, p.box)
+      for (const q of dig) movers.set(q.box.id, q.box)
+    }
   }
   const boxes = [...movers.values()]
   return {

@@ -604,7 +604,7 @@ export const useStore = create<StoreState>((set, get) => {
     deliveries: new Set(c.objectives.map((o) => o.destination)).size
   })
   const doReroute = async (seed?: string[]): Promise<void> => {
-    const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, storAlls } = get()
+    const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, grabbedObjectives, looseBoxes, looseAt, storAlls } = get()
     const installed = settings.installedModules[settings.activeShip]
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
@@ -626,7 +626,9 @@ export const useStore = create<StoreState>((set, get) => {
       deferredObjectives,
       aboard.size ? aboard : undefined,
       currentLocation || undefined,
-      crates?.length ? fixtureMap(crates) : undefined
+      crates?.length ? fixtureMap(crates) : undefined,
+      grabbedObjectives.length ? new Set(grabbedObjectives) : undefined,
+      looseBoxes.length ? new Map(looseBoxes.map((k) => [k, looseAt[k] ?? ''])) : undefined
     )
     set({ route: plan })
     if (notifyAdd && !isCompactWindow) {
@@ -1957,6 +1959,8 @@ export const useStore = create<StoreState>((set, get) => {
       if (grabbed === has) return
       set({ grabbedObjectives: grabbed ? [...cur, objectiveId] : cur.filter((id) => id !== objectiveId) })
       persist()
+      // the manifest drops or restores the return trip too
+      scheduleReroute(get().stopOrder)
     },
 
     setObjectiveDeferred: (objectiveId, deferred) => {

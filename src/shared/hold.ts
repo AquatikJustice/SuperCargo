@@ -1,6 +1,7 @@
 // one hold model for feasibility, grid, and walk; boxes only contend when aboard windows overlap
 
 import type { CargoGrid } from './cargoGrids'
+import type { BayDir } from './types'
 import { BOX_DIMS } from './boxGeometry'
 import type { PackBox, Placement, LoadEvent } from './packer'
 import type { LoadSnap } from './loadout'
@@ -75,6 +76,11 @@ interface BayCtx {
   upFlip: boolean
   /** stacks hug the high side of the cross axis */
   wallHigh: boolean
+  /** cargo can also leave out the low/high side (aisle or side door) */
+  openLo: boolean
+  openHi: boolean
+  /** or out a second door at the far end */
+  openFar: boolean
 }
 
 const axisLen = (g: CargoGrid, a: Axis): number => (a === 'x' ? g.w : a === 'y' ? g.h : g.l)
@@ -118,6 +124,7 @@ function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
   }
   const depth = exit.axis
   const cross = (['x', 'y', 'z'] as Axis[]).find((a) => a !== up && a !== depth)!
+  const open = (face: BayDir): boolean => grid.faces?.[face] === 'aisle' || grid.faces?.[face] === 'exit'
   return {
     idx,
     grid,
@@ -130,7 +137,10 @@ function bayCtx(grid: CargoGrid, idx: number, frame?: Frame): BayCtx {
     depthFlip: exit.dir === 1,
     up,
     upFlip,
-    wallHigh: wallIsHigh(grid, cross)
+    wallHigh: wallIsHigh(grid, cross),
+    openLo: open(`${cross}-`),
+    openHi: open(`${cross}+`),
+    openFar: open(`${depth}${exit.dir === 1 ? '-' : '+'}`)
   }
 }
 
@@ -193,14 +203,34 @@ const laneClash = (a: Slot, b: Slot): boolean =>
 const windowsOverlap = (a: Slot, b: Slot): boolean => a.load < b.drop && b.load < a.drop
 const containsWindow = (a: Slot, b: Slot): boolean => a.load <= b.load && a.drop >= b.drop
 
+// straight run to an open side at its own level
+function sideClear(bay: BayCtx, r: Slot, others: Slot[]): boolean {
+  if (!bay.openLo && !bay.openHi) return false
+  const row = others.filter((q) => spans(q.d, q.d + q.dl, r.d, r.d + r.dl) && spans(q.y, q.y + q.h, r.y, r.y + r.h))
+  return (bay.openLo && !row.some((q) => q.c < r.c)) || (bay.openHi && !row.some((q) => q.c > r.c))
+}
+
+const farClear = (bay: BayCtx, r: Slot, others: Slot[]): boolean =>
+  bay.openFar && !others.some((q) => laneClash(q, r) && q.d > r.d)
+
+// out of door order is fine if whichever leaves first has another way out
+function leavesAround(bay: BayCtx, rivals: Slot[], t: Slot, r: Slot, pad: number): boolean {
+  if (spans(t.d - pad, t.d + t.dl + pad, r.d, r.d + r.dl)) return false
+  const first = r.drop < t.drop ? r : t
+  const staying = rivals.concat(t).filter((q) => q !== first && q.load < first.drop && q.drop > first.drop)
+  return sideClear(bay, first, staying) || farClear(bay, first, staying)
+}
+
 interface Relax {
   build?: boolean
   peel?: boolean
   flank?: boolean
+  /** side aisles and far doors count as ways out */
+  aside?: boolean
 }
 
 // mirrors findSpot's strict rung, keep in lockstep; pinned rival binds physically only, no ordering
-function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false, relax: Relax = {}): boolean {
+function fits(bay: BayCtx, rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep = false, relax: Relax = {}): boolean {
   if (rivals.some((r) => cellsClash(t, r))) return false
   if (t.y > 0)
     for (let dc = 0; dc < t.cw; dc++)
@@ -225,11 +255,11 @@ function fits(rivals: Slot[], t: Slot, gap: number, aboardAtLoad: Slot[], keep =
       if (!r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl)) return false
       if (!laneClash(t, r) || (r.pinned && keep)) continue
       const pad = r.stop !== t.stop ? gap : 0
-      if (r.drop < t.drop && r.d + r.dl + pad > t.d) return false
-      if (r.drop > t.drop && t.d + t.dl + pad > r.d) return false
+      const inWay = (r.drop < t.drop && r.d + r.dl + pad > t.d) || (r.drop > t.drop && t.d + t.dl + pad > r.d)
+      if (inWay && !(relax.aside && leavesAround(bay, rivals, t, r, pad))) return false
     }
-  if (!relax.build && !canInsert(aboardAtLoad, t)) return false
-  if (!relax.build && !relax.flank && makesSandwich(rivals, t)) return false
+  if (!relax.build && !canInsert(bay, aboardAtLoad, t, !!relax.aside)) return false
+  if (!relax.build && !relax.flank && makesSandwich(bay, rivals, t, !!relax.aside)) return false
   return true
 }
 
@@ -270,7 +300,7 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   const test = (c: number, d: number, y: number, cwf: number, dlf: number): Slot | null => {
     if (c < 0 || c + cwf > bay.cw || d < d0 || d + dlf > bay.dl || y + dims.h > bay.h) return null
     const t: Slot = { ...probe, bay: bay.idx, c, d, y, cw: cwf, dl: dlf, h: dims.h }
-    return fits(rivals, t, gap, aboardAtLoad) && ownSupport(t) && sliceOwn(t) ? t : null
+    return fits(bay, rivals, t, gap, aboardAtLoad) && ownSupport(t) && sliceOwn(t) ? t : null
   }
 
   // every cell under the footprint is a strictly bigger box of this stop
@@ -337,9 +367,10 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   return narrow
 }
 
-// slide in at its level or lower into an open column; overhead cargo blocks it
-function canInsert(aboard: Slot[], t: Slot): boolean {
+// slide in at its level or from a side, else lower into an open column; overhead cargo blocks it
+function canInsert(bay: BayCtx, aboard: Slot[], t: Slot, aside = true): boolean {
   if (!aboard.some((r) => laneClash(t, r) && r.d < t.d)) return true
+  if (aside && (sideClear(bay, t, aboard) || farClear(bay, t, aboard))) return true
   return !aboard.some(
     (r) => spans(r.c, r.c + r.cw, t.c, t.c + t.cw) && spans(r.d, r.d + r.dl, t.d, t.d + t.dl) && r.y >= t.y + t.h
   )
@@ -361,7 +392,7 @@ const touches = (a: Slot, b: Slot): boolean => {
 }
 
 // game bug: flanked box won't release; don't complete a flank pair around a box leaving before t
-function makesSandwich(rivals: Slot[], t: Slot): boolean {
+function makesSandwich(bay: BayCtx, rivals: Slot[], t: Slot, aside: boolean): boolean {
   const side = (a: Slot, b: Slot, onC: boolean, lo: boolean): boolean => {
     const touch = onC
       ? (lo ? a.c + a.cw === b.c : a.c === b.c + b.cw) && spans(a.d, a.d + a.dl, b.d, b.d + b.dl)
@@ -376,7 +407,11 @@ function makesSandwich(rivals: Slot[], t: Slot): boolean {
       if (!tLo && !tHi) continue
       const otherSide = (lo: boolean): boolean =>
         rivals.some((q) => q !== r && (q.anchor || q.drop > r.drop) && side(q, r, onC, lo))
-      if ((tLo && (tHi || otherSide(false))) || (tHi && otherSide(true))) return true
+      if (!((tLo && (tHi || otherSide(false))) || (tHi && otherSide(true)))) continue
+      // flank bug looks fixed in game; a front-back pinch can still go out the side
+      const staying = (): Slot[] => rivals.concat(t).filter((q) => q !== r && q.load < r.drop && q.drop > r.drop)
+      if (aside && !onC && !r.anchor && sideClear(bay, r, staying())) continue
+      return true
     }
   }
   return false
@@ -439,12 +474,12 @@ function findSpot(
           for (const r of rivals) {
             if (!laneClash(t, r)) continue
             const pad = r.stop !== t.stop ? gap : 0
-            // earlier drop peels first, sits nearer the exit
-            if (r.drop < t.drop && r.d + r.dl + pad > t.d) { ok = false; break }
-            if (r.drop > t.drop && t.d + t.dl + pad > r.d) { ok = false; break }
+            // earlier drop peels first, sits nearer the exit, unless it has another way out
+            const inWay = (r.drop < t.drop && r.d + r.dl + pad > t.d) || (r.drop > t.drop && t.d + t.dl + pad > r.d)
+            if (inWay && !(relax.aside && leavesAround(bay, rivals, t, r, pad))) { ok = false; break }
           }
-        if (ok && !relax.build && !canInsert(aboardAtLoad, t)) ok = false
-        if (ok && !relax.build && !relax.flank && makesSandwich(rivals, t)) ok = false
+        if (ok && !relax.build && !canInsert(bay, aboardAtLoad, t, !!relax.aside)) ok = false
+        if (ok && !relax.build && !relax.flank && makesSandwich(bay, rivals, t, !!relax.aside)) ok = false
         if (!ok) continue
         // floor's scarce: stack high before claiming new floor; ties at equal depth go to the row-filling orientation
         let contacts = 0
@@ -569,9 +604,11 @@ function seatConceding(
   const rungs: Array<{ gap: number; relax: Relax; kind?: Concession['kind'] }> = [
     { gap, relax: {} },
     ...(gap > 0 ? [{ gap: 0, relax: {} }] : []),
-    { gap: 0, relax: { peel: true }, kind: 'peel' as const },
-    { gap: 0, relax: { peel: true, flank: true }, kind: 'flank' as const },
-    { gap: 0, relax: { peel: true, flank: true, build: true }, kind: 'build' as const }
+    // door order first; an aisle only before conceding
+    { gap: 0, relax: { aside: true } },
+    { gap: 0, relax: { peel: true, aside: true }, kind: 'peel' as const },
+    { gap: 0, relax: { peel: true, flank: true, aside: true }, kind: 'flank' as const },
+    { gap: 0, relax: { peel: true, flank: true, build: true, aside: true }, kind: 'build' as const }
   ]
   const placed: Slot[] = []
   const conceded: Concession[] = []
@@ -596,7 +633,7 @@ function seatConceding(
           const rivals = slots.concat(placed).filter((s) => s.bay === bay.idx && windowsOverlap(s, probe))
           // scanner finds a spot whenever one exists; deep stays off relaxed rungs, it traded placements for the anchor
           const s =
-            shaping && !rung.kind
+            shaping && !rung.kind && !rung.relax.aside
               ? scanSpot(bay, rivals, probe, rung.gap, 0, deep)
               : bestFace(bay, rivals, probe, rung.gap, rung.relax)?.slot ?? null
           if (s) {
@@ -626,14 +663,16 @@ interface Strand {
 }
 
 // can this drop set physically come out, given the flanking bug; unloads before loads, same-step pickups clear
-function extractIssues(slots: Slot[], step: number): Strand[] {
+function extractIssues(bays: BayCtx[], slots: Slot[], step: number): Strand[] {
   const aboard = slots.filter((s) => s.load < step && s.drop > step)
   const leaving = slots.filter((s) => s.drop === step)
   const out = new Set<Slot>()
   const present = (): Slot[] => aboard.concat(leaving).filter((s) => !out.has(s))
   const whyStuck = (r: Slot, others: Slot[]): string[] | null => {
     const blockers = new Set<string>()
-    if (others.some((q) => laneClash(q, r) && q.d < r.d)) {
+    const bay = bays[r.bay]
+    const aside = sideClear(bay, r, others)
+    if (others.some((q) => laneClash(q, r) && q.d < r.d) && !aside && !farClear(bay, r, others)) {
       // blocked at its level; lifts out the top unless something hangs over it
       const overCol = others.filter(
         (q) => spans(q.c, q.c + q.cw, r.c, r.c + r.cw) && spans(q.d, q.d + q.dl, r.d, r.d + r.dl) && q.y >= r.y + r.h
@@ -656,7 +695,7 @@ function extractIssues(slots: Slot[], step: number): Strand[] {
     for (const onC of [true, false]) {
       const lo = besides(true, onC)
       const hi = besides(false, onC)
-      if (lo.length && hi.length) for (const q of lo.concat(hi)) blockers.add(q.box.id)
+      if (lo.length && hi.length && (onC || !aside)) for (const q of lo.concat(hi)) blockers.add(q.box.id)
     }
     return blockers.size ? [...blockers] : null
   }
@@ -710,7 +749,11 @@ export function holdOracle(grids: CargoGrid[], fixtures?: ReadonlyMap<string, Pl
   }
   const byJob = new Map<number, Slot[]>()
   let seq = 0
-  const rungs: Array<{ gap: number; relax: Relax }> = [{ gap: 0, relax: {} }, { gap: 0, relax: { peel: true } }]
+  const rungs: Array<{ gap: number; relax: Relax }> = [
+    { gap: 0, relax: {} },
+    { gap: 0, relax: { aside: true } },
+    { gap: 0, relax: { peel: true, aside: true } }
+  ]
 
   const placeAll = (
     jobs: OracleJob[],
@@ -876,12 +919,13 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             let cost: Concession['kind'] | null = null
             const tiers: Array<[Relax, Concession['kind'] | null]> = [
               [{}, null],
-              [{ peel: true }, 'peel'],
-              [{ peel: true, flank: true }, 'flank'],
-              [{ peel: true, flank: true, build: true }, 'build']
+              [{ aside: true }, null],
+              [{ peel: true, aside: true }, 'peel'],
+              [{ peel: true, flank: true, aside: true }, 'flank'],
+              [{ peel: true, flank: true, build: true, aside: true }, 'build']
             ]
             for (const [rx, kind] of tiers)
-              if (fits(rivals, t, gap, support, true, rx)) {
+              if (fits(bay, rivals, t, gap, support, true, rx)) {
                 seat = t
                 cost = kind
                 break
@@ -889,7 +933,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             // supporter left: settle straight down in its own column before the ladder relocates it
             for (let y = 0; !seat && y < t.y; y++) {
               const s2 = { ...t, y }
-              if (fits(rivals, s2, gap, support, true)) seat = s2
+              if (fits(bay, rivals, s2, gap, support, true, { aside: true })) seat = s2
             }
             if (seat) {
               slots.push(seat)
@@ -901,16 +945,16 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
             if (debug) {
               const clash = rivals.find((r) => cellsClash(t, r))
               const row = rivals.find((r) => !r.anchor && !r.pinned && r.stop !== t.stop && spans(t.d, t.d + t.dl, r.d, r.d + r.dl))
-              const lane = rivals.find((r) => !(r.pinned) && laneClash(t, r) && ((r.drop < t.drop && r.d + r.dl > t.d) || (r.drop > t.drop && t.d + t.dl > r.d)))
+              const lane = rivals.find((r) => !(r.pinned) && laneClash(t, r) && ((r.drop < t.drop && r.d + r.dl > t.d) || (r.drop > t.drop && t.d + t.dl > r.d)) && !leavesAround(bay, rivals, t, r, 0))
               const why = clash
                 ? `clash ${clash.box.id}${clash.pinned ? '(pin)' : ''}@stop${clash.stop}`
                 : row
                   ? `row ${row.box.id}@stop${row.stop}`
                   : lane
                     ? `lane ${lane.box.id}@stop${lane.stop}`
-                    : !canInsert(support, t)
+                    : !canInsert(bay, support, t)
                       ? 'insert'
-                      : makesSandwich(rivals, t)
+                      : makesSandwich(bay, rivals, t, true)
                         ? 'sandwich'
                         : 'support'
               debug(`keep-fail ${box.id} stop=${stop} c${t.c} d${t.d} y${t.y}: ${why}`)
@@ -1223,7 +1267,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   for (const s of slots) if (!s.anchor && s.drop < NEVER && s.drop < events.length) dropSteps.add(s.drop)
   let extractOk = true
   for (const step of dropSteps) {
-    const stuck = extractIssues(slots, step).filter(
+    const stuck = extractIssues(bays, slots, step).filter(
       (st) => !conceded.has(st.id) && !st.blockers.some((b) => conceded.has(b))
     )
     if (stuck.length) {
@@ -1235,7 +1279,7 @@ export function planHold(grids: CargoGrid[], events: LoadEvent[], opts: HoldOpts
   for (const s of slots) {
     if (s.anchor || conceded.has(s.box.id)) continue
     const aboard = slots.filter((q) => q !== s && q.bay === s.bay && q.load < s.load && q.drop > s.load)
-    if (!canInsert(aboard, s)) {
+    if (!canInsert(bays[s.bay], aboard, s)) {
       buildOk = false
       issues.push(`box ${s.box.id} loads behind cargo already aboard`)
     }

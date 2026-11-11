@@ -228,6 +228,15 @@ export function loadProfile(steps: LoadingStep[]): { series: number[]; peak: num
   return { series, peak: series.length ? Math.max(start, ...series) : start }
 }
 
+// load steps read as loaded; drops come off per turn-in
+export function aboardAt(steps: LoadingStep[], series: number[], idx: number, turnedIn: Record<string, number>): number {
+  if (!series.length) return 0
+  const i = Math.max(0, Math.min(idx, series.length - 1))
+  const s = steps[i]
+  if (s?.kind !== 'drop') return series[i]
+  return series[i] + s.lines.reduce((a, l) => a + (turnedIn[l.objectiveId] === undefined ? l.scu : 0), 0)
+}
+
 export function buildLoadingSteps(
   contracts: HaulingContract[],
   plan: RoutePlan,

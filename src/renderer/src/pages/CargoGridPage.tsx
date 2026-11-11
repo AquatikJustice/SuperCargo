@@ -7,7 +7,7 @@ import jetbrainsFont from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin
 import { useStore } from '../state/store'
 import { C, F, GLOW, fmt, stopColor } from '../theme'
 import { packBoxes, pickupVisitKey, objectiveStops } from '../state/manifest'
-import { buildLoadingSteps, buildLoadEvents, filterDeferredSteps, followRouteSteps, loadProfile, stepsSig, withStartStep, type LoadingStep } from '../state/loading'
+import { aboardAt, buildLoadingSteps, buildLoadEvents, filterDeferredSteps, followRouteSteps, loadProfile, stepsSig, withStartStep, type LoadingStep } from '../state/loading'
 import { firstTripBudget } from '../state/route'
 import { splitDestination } from '../data/stations'
 import { gridsFor, shipFrame, shipAnchored, offGridFor, type CargoGrid } from '@shared/cargoGrids'
@@ -1158,14 +1158,17 @@ export default function CargoGridPage(): React.ReactElement {
       const boxes = visit.flatMap((v, vi) => loadingPack.stepBoxes[k + vi] ?? []).filter((bx) => bx.objectiveId && idSet.has(bx.objectiveId))
       const scu = boxes.reduce((sum, bx) => sum + bx.size, 0)
       if (!scu) return null
+      // what the grid can't seat can ride off grid, if the ship has the room
+      const stash = offPad ? offPad.w * offPad.l * offPad.h : 0
       for (let i = loadIdx; i < k; i++) {
-        const aboard = loadingPack.snaps[i]?.placements.reduce((sum, p) => sum + p.box.size, 0) ?? 0
-        if (aboard + scu > result.capacity) return null
+        const snap = loadingPack.snaps[i]
+        const aboard = (snap?.placements.reduce((sum, p) => sum + p.box.size, 0) ?? 0) + (snap?.loose.reduce((sum, b) => sum + b.size, 0) ?? 0)
+        if (aboard + scu > result.capacity + stash) return null
       }
       return { ids, scu, count: boxes.length, stepNo: k + 1 }
     }
     return null
-  }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result])
+  }, [loading, frozenSteps, currentLoad, loadingPack, loadIdx, loadSteps, tickedObj, deferredObjectives, grabbedObjectives, result, offPad])
 
   // if it fits, a return-visit pickup just joins the stop; card only asks when the stack would get ugly
   const grabbedOnce = useRef('')
@@ -2900,7 +2903,7 @@ function LoadingPanel({
 }): React.ReactElement {
   const isDrop = step?.kind === 'drop'
   const { series, peak } = useMemo(() => loadProfile(steps), [steps])
-  const aboard = done || !series.length ? 0 : series[Math.max(0, Math.min(idx, series.length - 1))]
+  const aboard = done ? 0 : aboardAt(steps, series, idx, turnedIn)
   // split bucket: last trip only
   const isFinalChunk = (l: LoadingStep['lines'][number]): boolean => l.tripPos >= l.tripTotal
   const dropLines = isDrop ? step!.lines.filter(isFinalChunk) : []
