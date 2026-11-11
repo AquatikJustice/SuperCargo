@@ -15,9 +15,18 @@ export interface ResolvedDropoff {
 // different frame and don't join). float print rounding is well under a meter, so a tight window.
 const Z_EPSILON = 1
 
+// a city and its spaceport share one point: one stop, the spaceport
+export function placeOf<T extends Location | null>(loc: T, locations: Location[]): T {
+  if (!loc || typeof loc.z !== 'number') return loc
+  const here = locations.filter((l) => l.x === loc.x && l.y === loc.y && l.z === loc.z)
+  if (here.length < 2) return loc
+  return (here.find((l) => /spaceport/i.test(l.name)) ?? here[0]) as T
+}
+
 export function locationByZ(z: number, locations: Location[]): { location: string | null; candidates: string[] } {
-  const names = locations.filter((l) => typeof l.z === 'number' && Math.abs(l.z - z) < Z_EPSILON).map((l) => l.name)
-  return { location: names.length === 1 ? names[0] : null, candidates: names }
+  const hits = locations.filter((l) => typeof l.z === 'number' && Math.abs(l.z - z) < Z_EPSILON)
+  const places = new Set(hits.map((l) => placeOf(l, locations).name))
+  return { location: places.size === 1 ? [...places][0] : null, candidates: hits.map((l) => l.name) }
 }
 
 export function resolveDropoffs(dropoffs: MarkerPoint[], locations: Location[]): ResolvedDropoff[] {
@@ -42,8 +51,12 @@ export function backfillDestinations(
 
   const resolved = resolveDropoffs(dropoffs, locations)
   const marked = [...new Set(resolved.map((r) => r.location).filter((n): n is string => !!n))]
-  const taken = new Set(destinations.filter((d) => !unresolved(d)).map(normalize))
-  const leftover = marked.filter((n) => !taken.has(normalize(n)))
+  const place = (n: string): string => {
+    const l = locations.find((x) => normalize(x.name) === normalize(n))
+    return normalize(l ? placeOf(l, locations).name : n)
+  }
+  const taken = new Set(destinations.filter((d) => !unresolved(d)).map(place))
+  const leftover = marked.filter((n) => !taken.has(place(n)))
   const holes = destinations.map((d, i) => (unresolved(d) ? i : -1)).filter((i) => i >= 0)
 
   if (holes.length === 1 && leftover.length === 1) out[holes[0]] = leftover[0]

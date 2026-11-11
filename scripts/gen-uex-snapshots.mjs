@@ -293,7 +293,8 @@ function buildLocations(locations, starmap, trade) {
     }
   }
   const attachCoords = (l) => {
-    const e = byName.get(norm(l.name)) || byName.get(norm(stripCode(l.name)))
+    // the starmap calls Checkmate Station plain "Checkmate"
+    const e = byName.get(norm(l.name)) || byName.get(norm(stripCode(l.name))) || byName.get(norm(l.name.replace(/ Station$/, '')))
     if (e) {
       l.x = e.x
       l.y = e.y
