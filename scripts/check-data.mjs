@@ -107,7 +107,8 @@ for (const f of faces) {
   if (bundled) continue
   for (const b of visible) {
     if (b.w === undefined || b.l === undefined || b.h === undefined) warnings.push(`${f.ship} / ${b.id}: no size, the app skips this bay`)
-    else if (b.maxSize === undefined) warnings.push(`${f.ship} / ${b.id}: no max box size, any box can go in`)
+    else if (b.maxSize === undefined && Math.max(0, ...(ship?.containerSizes ?? [])) < 32)
+      warnings.push(`${f.ship} / ${b.id}: no max box size, so 32s are allowed though the ship doesn't take them`)
     if (!Object.values(b.faces ?? {}).some((k) => k === 'exit' || k === 'aisle'))
       warnings.push(`${f.ship} / ${b.id}: no exit or aisle face, unload order can't be planned`)
   }
