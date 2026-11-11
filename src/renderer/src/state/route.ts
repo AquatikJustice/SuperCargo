@@ -5,6 +5,7 @@ import type { Placement } from '@shared/packer'
 import type { CargoGrid } from '@shared/cargoGrids'
 import { boxList, calculateBoxes } from '@shared/box'
 import { pickupAmounts } from '@shared/pickups'
+import { placeOf } from '@shared/markerResolve'
 import { splitDestination } from '../data/stations'
 import { activeContracts } from './manifest'
 
@@ -259,7 +260,7 @@ export function buildRouteModel(
   const byKey = new Map<string, number>()
 
   // forced start loads at depot
-  const startLoc = startLocation ? matchLocation(startLocation, locations) : null
+  const startLoc = startLocation ? placeOf(matchLocation(startLocation, locations), locations) : null
   let depot: number | undefined
   if (startLoc) {
     const split = splitDestination(startLoc.name)
@@ -280,7 +281,7 @@ export function buildRouteModel(
   }
 
   const nodeFor = (raw: string, isDest: boolean): number => {
-    const loc = matchLocation(raw, locations)
+    const loc = placeOf(matchLocation(raw, locations), locations)
     if (!isDest && depot !== undefined && sameLoc(loc, startLoc)) return depot
     const split = splitDestination(raw)
     // uexId 0 isn't unique
