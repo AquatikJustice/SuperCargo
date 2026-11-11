@@ -99,9 +99,9 @@ export default function SettingsPage(): React.ReactElement {
     setDataStatus(null)
     try {
       const fn = window.supercargo.refreshData
-      setDataStatus(fn ? await fn() : { reached: false, changed: false, updated: [] })
+      setDataStatus(fn ? await fn() : { reached: false, changed: false, updated: [], failed: [] })
     } catch {
-      setDataStatus({ reached: false, changed: false, updated: [] })
+      setDataStatus({ reached: false, changed: false, updated: [], failed: [] })
     } finally {
       setDataSyncing(false)
     }
@@ -695,6 +695,10 @@ function Pill({ color, text }: { color: string; text: string }): React.ReactElem
 
 function DataSyncPill({ result }: { result: DataSyncResult }): React.ReactElement {
   if (!result.reached) return <Pill color={C.amber} text="NO CONNECTION" />
+  if (result.failed.length) {
+    const n = result.failed.length
+    return <Pill color={C.amber} text={`${n} LIST${n === 1 ? '' : 'S'} DIDN'T UPDATE, TRY AGAIN SOON`} />
+  }
   if (result.changed) {
     const n = result.updated.length
     return <Pill color={C.green} text={`UPDATED ${n} LIST${n === 1 ? '' : 'S'}`} />

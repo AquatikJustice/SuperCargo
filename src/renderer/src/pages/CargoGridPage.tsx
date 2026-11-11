@@ -628,7 +628,7 @@ export default function CargoGridPage(): React.ReactElement {
   const turnInDestination = useStore((s) => s.turnInDestination)
   const unmarkTurnIn = useStore((s) => s.unmarkTurnIn)
   const clearAllPickedUp = useStore((s) => s.clearAllPickedUp)
-  const gridFacesSyncedAt = useStore((s) => s.gridFacesSyncedAt)
+  const gridFacesRev = useStore((s) => s.gridFacesRev)
 
   useEffect(() => {
     const st = useStore.getState()
@@ -638,13 +638,13 @@ export default function CargoGridPage(): React.ReactElement {
   const installed = installedModules[activeShip]
   const grids = useMemo(
     () => gridsFor(activeShip, installed),
-    [activeShip, installed, gridFacesSyncedAt]
+    [activeShip, installed, gridFacesRev]
   )
-  const frame = useMemo(() => shipFrame(activeShip), [activeShip, gridFacesSyncedAt])
+  const frame = useMemo(() => shipFrame(activeShip), [activeShip, gridFacesRev])
   // authored ships use real coords; the rest auto-center on the bbox
-  const anchored = useMemo(() => shipAnchored(activeShip), [activeShip, gridFacesSyncedAt])
+  const anchored = useMemo(() => shipAnchored(activeShip), [activeShip, gridFacesRev])
   // stash pad size, null when the ship has it off
-  const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesSyncedAt])
+  const offPad = useMemo(() => offGridFor(activeShip), [activeShip, gridFacesRev])
 
   const liveSteps = useMemo(
     () => (route ? buildLoadingSteps(contracts, route, order) : []),

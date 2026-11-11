@@ -548,6 +548,8 @@ export interface BayMarkup {
   rot?: [number, number, number]
   /** bay exists but the app must never show or fill it (Ironclad secure vaults); markup tool still shows it */
   hidden?: boolean
+  /** bay only exists with this roster module fitted */
+  moduleId?: string
 }
 
 /** authored markup for one ship: orientation + per-bay faces and layout fixes. */
@@ -672,6 +674,8 @@ export interface DataSyncResult {
   reached: boolean
   changed: boolean
   updated: string[]
+  /** lists that should have updated but didn't verify or download */
+  failed: string[]
 }
 
 export type UpdateState =

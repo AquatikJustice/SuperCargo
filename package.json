@@ -22,6 +22,8 @@
     "gen:icon": "node scripts/gen-icon.mjs",
     "gen:grids": "node scripts/gen-cargo-grids.mjs",
     "gen:uex": "node scripts/gen-uex-snapshots.mjs",
+    "data:check": "node scripts/check-data.mjs",
+    "data:fix": "node scripts/check-data.mjs --fix",
     "markup": "vite --config tools/grid-markup/vite.config.ts",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",

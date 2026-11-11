@@ -29,7 +29,8 @@ import type {
   CrewMember,
   CrewMirror,
   ManifestDoc,
-  CrewSnapshot
+  CrewSnapshot,
+  ShipMarkup
 } from '@shared/types'
 import { fixtureMap } from '@shared/hold'
 import { boxBreakdown, calculateBoxes } from '@shared/box'
@@ -258,8 +259,9 @@ interface StoreState {
   locations: Location[]
   locationsSyncedAt: string
   commodities: Commodity[]
-  /** bumps to re-derive grid faces */
   gridFacesSyncedAt: string
+  /** bumps to re-derive grid faces */
+  gridFacesRev: number
 
   ocrStatus: 'idle' | 'capturing' | 'recognizing'
   ocrResult: OcrResult | null
@@ -498,7 +500,22 @@ let leaderIdx: number | null = null
 
 let preCrew: { doc: ManifestDoc; loadingActive: boolean; loadingIdx: number; settings: AppSettings } | null = null
 
-export const useStore = create<StoreState>((set, get) => {
+export const useStore = create<StoreState>((set, get, api) => {
+  let facesSeen = ''
+  // markup for the ship mid-load waits until the load ends
+  let heldFaces: ShipMarkup[] | null = null
+  const applyFaces = (faces: ShipMarkup[], syncedAt: string): void => {
+    const st = get()
+    heldFaces = setGridFaces(faces, st.loadingActive ? st.settings.activeShip : undefined) ? faces : null
+    set((p) => ({ gridFacesSyncedAt: syncedAt, gridFacesRev: p.gridFacesRev + 1 }))
+    scheduleReroute(get().stopOrder)
+  }
+  api.subscribe((s, prev) => {
+    if (heldFaces && (!s.loadingActive || s.settings.activeShip !== prev.settings.activeShip))
+      applyFaces(heldFaces, s.gridFacesSyncedAt)
+  })
+  const askedFor = new Set<string>()
+
   const persist = (): void => {
     // main owns the file
     if (isCompactWindow) return
@@ -891,6 +908,7 @@ export const useStore = create<StoreState>((set, get) => {
     locationsSyncedAt: '',
     commodities: [],
     gridFacesSyncedAt: '',
+    gridFacesRev: 0,
     ocrStatus: 'idle',
     ocrResult: null,
     ocrWait: null,
@@ -928,7 +946,10 @@ export const useStore = create<StoreState>((set, get) => {
         window.supercargo.getUexGridFaces()
       ])
       // faces before grids for reconcile
-      if (faceRoster?.gridFaces) setGridFaces(faceRoster.gridFaces)
+      if (faceRoster?.gridFaces) {
+        setGridFaces(faceRoster.gridFaces)
+        facesSeen = JSON.stringify(faceRoster.gridFaces)
+      }
 
       const active = manifest.contracts
         .filter((c) => c.status === 'active')
@@ -1024,9 +1045,10 @@ export const useStore = create<StoreState>((set, get) => {
       }))
       track(window.supercargo.onContractShare((e) => get().crew.role !== 'member' && onShare(e)))
       track(window.supercargo.onGridFaces((r) => {
-        setGridFaces(r.gridFaces)
-        set({ gridFacesSyncedAt: r.syncedAt || String(Date.now()) })
-        scheduleReroute(get().stopOrder)
+        const seen = JSON.stringify(r.gridFaces)
+        if (seen === facesSeen) return
+        facesSeen = seen
+        applyFaces(r.gridFaces, r.syncedAt)
       }))
 
       track(window.supercargo.onWatcherStatus((s) => set({ watcher: s })))
@@ -1146,6 +1168,11 @@ export const useStore = create<StoreState>((set, get) => {
         crewPlan = plan
         crewPins = pins
         leaderIdx = snap.loadingIdx
+        // leader's ship is newer than our data
+        if (!gridsFor(snap.ship).length && !askedFor.has(snap.ship)) {
+          askedFor.add(snap.ship)
+          void window.supercargo.refreshData()
+        }
         set((st) => ({
           runId: doc.runId,
           contracts: doc.contracts,
