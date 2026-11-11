@@ -72,15 +72,16 @@ async function fetchText(url: string): Promise<string | null> {
 // reached=false means "couldn't check"
 export async function refreshFromRepo(): Promise<DataSyncResult> {
   const hashesText = await fetchText(`${RAW_BASE}/hashes.json`)
-  if (!hashesText) return { reached: false, changed: false, updated: [] }
+  if (!hashesText) return { reached: false, changed: false, updated: [], failed: [] }
   let hashes: Record<string, string>
   try {
     hashes = JSON.parse(hashesText)
   } catch {
-    return { reached: false, changed: false, updated: [] }
+    return { reached: false, changed: false, updated: [], failed: [] }
   }
 
   const updated: string[] = []
+  const failed: string[] = []
   for (const s of SPECS) {
     const want = hashes[s.key]
     if (!want) continue
@@ -93,21 +94,27 @@ export async function refreshFromRepo(): Promise<DataSyncResult> {
     if (have === want) continue
 
     const body = await fetchText(`${RAW_BASE}/${s.repo}`)
-    if (!body) continue
-    // guards a truncated download
-    if (sha256(body) !== want) continue
-    try {
-      const parsed = JSON.parse(body)
-      if (!Array.isArray(parsed[s.key])) continue
-    } catch {
+    // a bad hash or truncated download lands here too
+    let ok = !!body && sha256(body) === want
+    if (ok) {
+      try {
+        ok = Array.isArray(JSON.parse(body!)[s.key])
+      } catch {
+        ok = false
+      }
+    }
+    if (!ok) {
+      console.warn(`[data] ${s.repo} didn't verify, keeping the old copy`)
+      failed.push(s.key)
       continue
     }
     try {
-      fs.writeFileSync(cachePath(s.cache), body)
+      fs.writeFileSync(cachePath(s.cache), body!)
       updated.push(s.key)
     } catch (e) {
       console.warn(`[data] write ${s.cache} failed:`, (e as Error).message)
+      failed.push(s.key)
     }
   }
-  return { reached: true, changed: updated.length > 0, updated }
+  return { reached: true, changed: updated.length > 0, updated, failed }
 }

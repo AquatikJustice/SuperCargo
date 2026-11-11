@@ -151,7 +151,8 @@ export const CARGO_GRIDS: Record<string, ShipGrids> = {
 
 // authored markup (per-bay faces + layout fixes), synced like the uex lists
 // (markup tool -> data/uex/grid-faces.json); no markup until roster loads, packer falls back to dense pack
-type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'name' | 'maxSize' | 'autoLoad' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot' | 'hidden'>>
+type BayInfo = Partial<Pick<CargoGrid, 'faces' | 'name' | 'maxSize' | 'autoLoad' | 'group' | 'x' | 'y' | 'z' | 'w' | 'l' | 'h' | 'rot' | 'hidden' | 'moduleId'>>
+let RAW: Record<string, ShipMarkup> = {}
 let MARKUP: Record<string, Record<string, BayInfo>> = {}
 let FRAMES: Record<string, NonNullable<ShipMarkup['frame']>> = {}
 let OFF_GRIDS: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
@@ -160,23 +161,37 @@ let ANCHORED: Record<string, boolean> = {}
 /** built-in off-grid pad size, cells; used when a ship has no override */
 export const OFF_GRID_DEFAULT = { w: 16, l: 10, h: 6 }
 
-export function setGridFaces(ships: ShipMarkup[]): void {
+/** keep = ship mid-load; true when its new markup got held back */
+export function setGridFaces(ships: ShipMarkup[], keep?: string): boolean {
+  const raw: Record<string, ShipMarkup> = {}
+  for (const s of ships) raw[s.ship] = s
+  let held = false
+  if (keep) {
+    const k = canonShip(keep)
+    if (JSON.stringify(RAW[k]) !== JSON.stringify(raw[k])) {
+      held = true
+      if (RAW[k]) raw[k] = RAW[k]
+      else delete raw[k]
+    }
+  }
   const map: Record<string, Record<string, BayInfo>> = {}
   const frames: Record<string, NonNullable<ShipMarkup['frame']>> = {}
   const offGrids: Record<string, NonNullable<ShipMarkup['offGrid']>> = {}
   const anchored: Record<string, boolean> = {}
-  for (const s of ships) {
+  for (const s of Object.values(raw)) {
     const bays: Record<string, BayInfo> = {}
-    for (const b of s.bays) bays[b.id] = { faces: b.faces, name: b.name, maxSize: b.maxSize, autoLoad: b.autoLoad, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot, hidden: b.hidden }
+    for (const b of s.bays) bays[b.id] = { faces: b.faces, name: b.name, maxSize: b.maxSize, autoLoad: b.autoLoad, group: b.group, x: b.x, y: b.y, z: b.z, w: b.w, l: b.l, h: b.h, rot: b.rot, hidden: b.hidden, moduleId: b.moduleId }
     map[s.ship] = bays
     if (s.frame) frames[s.ship] = s.frame
     if (s.offGrid) offGrids[s.ship] = s.offGrid
     if (s.anchored) anchored[s.ship] = true
   }
+  RAW = raw
   MARKUP = map
   FRAMES = frames
   OFF_GRIDS = offGrids
   ANCHORED = anchored
+  return held
 }
 
 // 4.10.2 renamed the Connies "Mk IV"
@@ -248,12 +263,16 @@ function deriveFloor(faces?: Partial<Record<BayDir, BayFaceKind>>): BayDir | und
 
 export const bayLabel = (id: string): string => id.replace(/-/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase())
 
-// so a new ship needs no release
-function baysFromMarkup(bays: Record<string, BayInfo>): CargoGrid[] {
+const fitted = (moduleId: string | undefined, installed?: string[]): boolean =>
+  !moduleId || !installed || installed.includes(moduleId)
+
+// so a new ship or bay needs no release
+function baysFromMarkup(bays: [string, BayInfo][], installed?: string[]): CargoGrid[] {
   const out: CargoGrid[] = []
-  for (const [id, m] of Object.entries(bays)) {
+  for (const [id, m] of bays) {
     // unsized, nothing to pack into
     if (m.hidden || m.w === undefined || m.l === undefined || m.h === undefined) continue
+    if (!fitted(m.moduleId, installed)) continue
     out.push({
       id,
       name: m.name ?? bayLabel(id),
@@ -268,6 +287,7 @@ function baysFromMarkup(bays: Record<string, BayInfo>): CargoGrid[] {
       ...(m.autoLoad !== undefined ? { autoLoad: m.autoLoad } : {}),
       ...(m.group !== undefined ? { group: m.group } : {}),
       ...(m.rot !== undefined ? { rot: m.rot } : {}),
+      ...(m.moduleId !== undefined ? { moduleId: m.moduleId } : {}),
       faces: m.faces,
       exit: deriveExit(m.faces),
       ...(deriveFloor(m.faces) ? { floor: deriveFloor(m.faces) } : {}),
@@ -282,9 +302,11 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
   const key = canonShip(ship)
   const bays = MARKUP[key]
   const rec = CARGO_GRIDS[key]
-  if (!rec) return bays ? baysFromMarkup(bays) : []
+  if (!rec) return bays ? baysFromMarkup(Object.entries(bays), installed) : []
+  const known = new Set(rec.grids.map((g) => g.id))
+  const extra = bays ? baysFromMarkup(Object.entries(bays).filter(([id]) => !known.has(id)), installed) : []
   return rec.grids
-    .filter((g) => !g.moduleId || !installed || installed.includes(g.moduleId))
+    .filter((g) => fitted(bays?.[g.id]?.moduleId ?? g.moduleId, installed))
     .filter((g) => !bays?.[g.id]?.hidden)
     .map((g) => {
       const m = bays && bays[g.id]
@@ -302,11 +324,13 @@ export function gridsFor(ship: string, installed?: string[]): CargoGrid[] {
         ...(m.autoLoad !== undefined ? { autoLoad: m.autoLoad } : {}),
         ...(m.group !== undefined ? { group: m.group } : {}),
         ...(m.rot !== undefined ? { rot: m.rot } : {}),
+        ...(m.moduleId !== undefined ? { moduleId: m.moduleId } : {}),
         faces: m.faces,
         exit: deriveExit(m.faces),
         ...(deriveFloor(m.faces) ? { floor: deriveFloor(m.faces) } : {})
       }
     })
+    .concat(extra)
 }
 
 /** grids the packer may fill, gridsFor minus reference-only (secure/lift) bays */

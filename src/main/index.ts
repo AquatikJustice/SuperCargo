@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, session, globalShortcut, sc
 import * as path from 'node:path'
 import * as fs from 'node:fs'
 import { IPC } from '@shared/channels'
-import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot, CrewMember, CrewMirror } from '@shared/types'
+import type { AppSettings, ManifestDoc, HistoryDoc, OcrEditTally, OcrResult, OcrWaitState, BoxSizeReport, CrewSnapshot, CrewMember, CrewMirror, DataSyncResult } from '@shared/types'
 import { loadSettings, saveSettings, loadManifest, saveManifest, loadHistory, saveHistory, loadWindowState, saveWindowState } from './store'
 import { detectInstalls, orderChannels, channelFromPath } from './installDetect'
 import { LogWatcher } from './logWatcher'
@@ -237,15 +237,32 @@ function broadcast(channel: string, payload: unknown, exceptId?: number): void {
   }
 }
 
+// overlay + crew mirror need new ships too, not just main
 function pushRosters(): void {
   const ships = loadCachedRoster()
-  if (ships) send(IPC.evtShips, ships)
+  if (ships) broadcast(IPC.evtShips, ships)
   const locations = loadCachedLocations()
-  if (locations) send(IPC.evtLocations, locations)
+  if (locations) broadcast(IPC.evtLocations, locations)
   const commodities = loadCachedCommodities()
-  if (commodities) send(IPC.evtCommodities, commodities)
+  if (commodities) broadcast(IPC.evtCommodities, commodities)
   const gridFaces = loadCachedGridFaces()
-  if (gridFaces) send(IPC.evtGridFaces, gridFaces)
+  if (gridFaces) broadcast(IPC.evtGridFaces, gridFaces)
+}
+
+let dataSyncing: Promise<DataSyncResult> | null = null
+function syncData(): Promise<DataSyncResult> {
+  dataSyncing ??= refreshFromRepo()
+    .then((res) => {
+      if (res.changed) {
+        contractData.setOverrides(loadCachedContractOverrides())
+        pushRosters()
+      }
+      return res
+    })
+    .finally(() => {
+      dataSyncing = null
+    })
+  return dataSyncing
 }
 
 // watch dir, survives atomic rewrite
@@ -264,7 +281,7 @@ function watchGridFacesDev(): void {
       timer = setTimeout(() => {
         const faces = loadCachedGridFaces()
         if (faces) {
-          send(IPC.evtGridFaces, faces)
+          broadcast(IPC.evtGridFaces, faces)
           console.info('[dev] grid-faces saved, pushed live')
         }
       }, 150)
@@ -635,9 +652,12 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.dataRefresh, async () => {
     seedCacheIfNeeded()
-    const res = await refreshFromRepo()
-    contractData.setOverrides(loadCachedContractOverrides())
-    pushRosters()
+    const res = await syncData()
+    // the seed may have moved even when the repo didn't
+    if (!res.changed) {
+      contractData.setOverrides(loadCachedContractOverrides())
+      pushRosters()
+    }
     return res
   })
 
@@ -772,12 +792,9 @@ if (!gotLock) {
     contractData.setOverrides(loadCachedContractOverrides())
     pushRosters()
     watchGridFacesDev()
-    void refreshFromRepo().then((res) => {
-      if (res.changed) {
-        contractData.setOverrides(loadCachedContractOverrides())
-        pushRosters()
-      }
-    })
+    void syncData()
+    // new ships land mid-session, no relaunch
+    setInterval(() => void syncData(), 1000 * 60 * 15)
 
     initUpdater(() => mainWindow)
     if (app.isPackaged) {
