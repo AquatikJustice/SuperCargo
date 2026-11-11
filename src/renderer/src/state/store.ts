@@ -777,8 +777,8 @@ export const useStore = create<StoreState>((set, get) => {
     if (!contract) return
     archive(contract, status)
     commit(contracts.filter((c) => c.id !== id))
-    set({ isRouteAuto: true })
-    scheduleReroute()
+    // its stops drop out, the rest keep their order
+    scheduleReroute(get().stopOrder)
   }
   const queueEnd = (missionId: string, status: HistoryStatus): void => {
     pendingEnds.set(missionId, status)
@@ -849,7 +849,6 @@ export const useStore = create<StoreState>((set, get) => {
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
     commit([...contracts, opts.pendingOcr ? { ...contract, pendingOcr: true } : contract])
-    set({ isRouteAuto: true })
     if (!opts.pendingOcr) announce(contract.id)
     scheduleReroute()
     drainShare(contract.id)
@@ -1050,7 +1049,6 @@ export const useStore = create<StoreState>((set, get) => {
         const willOcr = get().settings.ocrAutoCapture && contractNeedsOcr(contract)
         // hold until capture resolves
         commit([...contracts, willOcr ? { ...contract, pendingOcr: true } : contract])
-        set({ isRouteAuto: true })
         // OCR-held contracts announce themselves when they resolve, not now
         if (!willOcr) announce(contract.id)
         scheduleReroute()
@@ -1395,7 +1393,7 @@ export const useStore = create<StoreState>((set, get) => {
         ref: contractRef(contracts.length)
       }
       commit([...contracts, contract])
-      set({ captureOpen: false, captureTargetId: null, view: 'manifest', isRouteAuto: true })
+      set({ captureOpen: false, captureTargetId: null, view: 'manifest' })
       announce(contract.id)
       scheduleReroute()
     },
@@ -1447,15 +1445,14 @@ export const useStore = create<StoreState>((set, get) => {
       })
       clearCaptureNet()
       commit(contracts)
-      set({ captureOpen: false, captureTargetId: null, view: 'manifest', isRouteAuto: true })
+      set({ captureOpen: false, captureTargetId: null, view: 'manifest' })
       scheduleReroute()
     },
 
     removeContract: (id) => {
       const contracts = get().contracts.filter((c) => c.id !== id)
       commit(contracts)
-      set({ isRouteAuto: true })
-      scheduleReroute()
+      scheduleReroute(get().stopOrder)
     },
 
     // soft turn-in, reversible until Complete
@@ -1476,8 +1473,7 @@ export const useStore = create<StoreState>((set, get) => {
       const contract = get().contracts.find((c) => c.id === id)
       if (contract) archive(contract, 'abandoned')
       commit(get().contracts.filter((c) => c.id !== id))
-      set({ isRouteAuto: true })
-      scheduleReroute()
+      scheduleReroute(get().stopOrder)
     },
 
     // file it ourselves when the game's done-event never lands (manual contracts, missed log)
@@ -1486,8 +1482,7 @@ export const useStore = create<StoreState>((set, get) => {
       if (!contract) return
       archive(finalizeDelivery(contract), 'completed')
       commit(get().contracts.filter((c) => c.id !== id))
-      set({ isRouteAuto: true })
-      scheduleReroute()
+      scheduleReroute(get().stopOrder)
     },
 
     updateHistoryReward: (id, reward) => {
@@ -1832,9 +1827,8 @@ export const useStore = create<StoreState>((set, get) => {
         }
       })
       commit(contracts)
-      // a real count changes what the tail can carry
-      set({ isRouteAuto: true })
-      scheduleReroute()
+      // a real count changes what the tail can carry, not the stop order
+      scheduleReroute(get().stopOrder)
     },
 
     setObjectiveDeliveredScu: (contractId, objectiveId, deliveredScu) => {
