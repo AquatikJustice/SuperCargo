@@ -34,6 +34,11 @@ extraResources:
     to: data/uex
     filter:
       - '*.json'
+  # OCR language data, so tesseract.js never fetches it from a CDN
+  - from: node_modules/@tesseract.js-data/eng/4.0.0_best_int
+    to: tessdata
+    filter:
+      - eng.traineddata.gz
 
 # tesseract.js loads its worker script + wasm core from disk at runtime; they
 # must live outside the asar archive or recognition fails in the packaged app.
