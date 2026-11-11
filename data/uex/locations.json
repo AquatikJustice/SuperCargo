@@ -312,7 +312,11 @@
       "code": "Checkmate",
       "maxContainerSize": 0,
       "uexId": 442,
-      "hasElevator": true
+      "hasElevator": true,
+      "x": 1833362390.019977,
+      "y": 10434543320.869617,
+      "z": 2570930.841284,
+      "system": "pyro"
     },
     {
       "name": "Covalex Distribution Center S1DC06",
