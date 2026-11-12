@@ -47,6 +47,7 @@ export function resolveLogLocation(raw: string, locations: Location[]): string {
   const untag = (s: string): string => s.replace(/\s*\([^)]*\)\s*$/, '')
 
   let hits = bySystem(locations.filter((l) => norm(l.name) === n))
+  if (!hits.length) hits = locations.filter((l) => l.aliases?.some((a) => norm(a) === n))
   if (!hits.length) hits = bySystem(locations.filter((l) => norm(untag(l.name)) === n))
   if (!hits.length && n.length >= 4) {
     hits = bySystem(
@@ -58,4 +59,18 @@ export function resolveLogLocation(raw: string, locations: Location[]): string {
   }
   if (hits.length) return hits[0].name
   return name
+}
+
+const TAG = /\s*\([^)]*\)\s*$/
+
+// a bare "Stanton Gateway" resolves to the first copy; the contract's other stops pick the system
+export function sameSystemGateway(name: string, stops: string[], locations: Location[]): string {
+  if (!TAG.test(name)) return name
+  const sysOf = (s: string): string | undefined => locations.find((l) => norm(l.name) === norm(s))?.system
+  const systems = new Set(stops.filter((s) => s && !TAG.test(s)).map(sysOf).filter(Boolean))
+  if (systems.size !== 1) return name
+  const [system] = systems
+  if (sysOf(name) === system) return name
+  const base = norm(name.replace(TAG, ''))
+  return locations.find((l) => l.system === system && TAG.test(l.name) && norm(l.name.replace(TAG, '')) === base)?.name ?? name
 }

@@ -14,7 +14,7 @@ import type {
   GridFacesRoster,
   ContractOverride
 } from '@shared/types'
-import { withExtraLocations, isContractCommodity, isRosterShip } from '@shared/uexMap'
+import { withExtraLocations, isRosterShip } from '@shared/uexMap'
 
 const VEHICLES_FILE = 'uex-vehicles.json'
 const LOCATIONS_FILE = 'uex-locations.json'
@@ -75,8 +75,7 @@ export function loadCachedCommodities(): CommodityRoster | null {
     const j = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<CommodityRoster>
     if (Array.isArray(j.commodities)) {
       return {
-        // old caches carry SHPA1-7
-        commodities: (j.commodities as Commodity[]).filter(isContractCommodity),
+        commodities: j.commodities as Commodity[],
         syncedAt: typeof j.syncedAt === 'string' ? j.syncedAt : ''
       }
     }

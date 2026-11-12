@@ -1,6 +1,7 @@
 // parse contract text to objectives; fuzzy matching is a separate step (fuzzy.ts)
 
 import { bestMatch, similarity } from './fuzzy'
+import { matchCommodity } from './commodity'
 import type { Commodity, Location, MatchResult, OcrObjective, OcrWord } from './types'
 
 export interface RawObjective {
@@ -38,8 +39,16 @@ const RE_LIST_SPLIT = /[-•·]?\s*(?:freight\s+)?\w{0,2}levator\s+at\s+/i
 const BOX_PATTERNS = [
   // most reliable, so check first
   /(\d+)\s*scu\s+(?:cargo\s+)?containers?/i,
-  /(?:all\s+)?(\d+)\s*scu\s+or\s+smaller/i,
+  /(?:all\s+)?(\d+)\s*scu\s+(?:in\s+size\s+)?or\s+smaller/i,
   /max(?:imum)?\s+(?:container|box)[^0-9]{0,24}(\d+)\s*scu/i,
+  /max(?:imum)?\s+size\s+of\s+(?:the\s+)?(?:cargo\s+)?containers?\s+is\s+(\d+)\s*scu/i,
+  // snapBoxSize takes any number, so every one of these names a container
+  /containers?\b[^.\d]{0,24}?\b(?:up\s+to|at\s+most|as\s+big\s+as|(?:no\s+)?(?:bigger|larger)\s+than)\s+(\d+)\s*scu/i,
+  /(?:largest|biggest)\s+(?:cargo\s+)?container\b[^.\d]{0,60}?\bis\s+(\d+)\s*scu/i,
+  /container\s+size\s+(?:at|of|is)\s+(\d+)\s*scu/i,
+  /anything\s+(?:bigger|larger)\s+than\s+(\d+)\s*scu/i,
+  /ship\s+that\s+can\s+(?:carry|handle)\s+(?:a\s+)?(\d+)\s*scu\b(?!\s+of\b)/i,
+  /can\s+store\s+(\d+)\s*scu\s+at\s+the\s+very\s+least/i,
   /(?:be|will\s+be)\s+(\d+)\s*scu/i
 ]
 
@@ -486,6 +495,16 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
     return { input, match: null, score: 0, suggestions: bestMatch(input, names).suggestions }
   }
 
+  // jump point names and the like; strict, they differ by one system word
+  const owner = new Map(locations.flatMap((l) => (l.aliases ?? []).map((a) => [a, l.name] as const)))
+  if (owner.size) {
+    const alias = bestMatch(input, [...owner.keys()], { threshold: 0.85 })
+    if (alias.match) {
+      const name = owner.get(alias.match) as string
+      return { input, match: name, score: alias.score, suggestions: [name] }
+    }
+  }
+
   // no body qualifier: anchor on a distinctive word, else whole-string fuzzy
   const anchor = anchorMatch(input, locations)
   if (anchor) return { input, match: anchor.name, score: anchor.score, suggestions: [anchor.name] }
@@ -555,11 +574,10 @@ export function matchObjectives(
   commodities: Commodity[],
   locations: Location[]
 ): OcrObjective[] {
-  const commodityNames = commodities.map((c) => c.name)
   const objs = raw.map((o) => {
     const destination = resolveLocation(o.destination, locations)
     return {
-      commodity: bestMatch(o.commodity, commodityNames),
+      commodity: matchCommodity(o.commodity, commodities),
       scuAmount: o.scuAmount,
       destination,
       pickups: o.pickups?.map((p) => preferSameSystem(resolveLocation(p, locations), destination.match, locations))

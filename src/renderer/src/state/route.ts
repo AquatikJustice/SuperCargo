@@ -136,7 +136,9 @@ export function matchLocation(raw: string, locations: Location[]): Location | nu
     if (byCode) return byCode
   }
   const n = norm(raw)
-  const byExact = locations.find((l) => norm(l.name) === n || norm(l.code) === n)
+  const byExact =
+    locations.find((l) => norm(l.name) === n || norm(l.code) === n) ??
+    locations.find((l) => l.aliases?.some((a) => norm(a) === n))
   if (byExact) return byExact
   // one name contains the other
   const byContains = locations.find((l) => {

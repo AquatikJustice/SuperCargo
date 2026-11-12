@@ -43,6 +43,7 @@ import { isRosterShip } from '@shared/uexMap'
 import { withModules } from '@shared/shipModules'
 import { isSystemDestination } from '@shared/contract'
 import { resolveLogLocation } from '@shared/logLocation'
+import { commodityName } from '@shared/commodity'
 import { gridCapacity, gridsFor, loadableGrids, setGridFaces, type CargoGrid } from '@shared/cargoGrids'
 import { activeContracts, destinationsInOrder, toHistoryEntry } from './manifest'
 import { computeRoutePlan, type RoutePlan } from './route'
@@ -856,12 +857,13 @@ export const useStore = create<StoreState>((set, get, api) => {
     contract.pickup = resolveLogLocation(contract.pickup, get().locations)
     if (opts.maxBoxSize != null) contract.maxBoxSize = opts.maxBoxSize
     if (opts.boxSizeConfirmed != null) contract.boxSizeConfirmed = opts.boxSizeConfirmed
-    contract.objectives = item.objectives.map((o) =>
-      makeObjective(
-        { commodity: o.commodity, scuAmount: o.scuAmount, destination: resolveLogLocation(o.destination, get().locations) },
-        objectiveBoxSize(contract, o.commodity)
+    contract.objectives = item.objectives.map((o) => {
+      const commodity = commodityName(o.commodity, get().commodities)
+      return makeObjective(
+        { commodity, scuAmount: o.scuAmount, destination: resolveLogLocation(o.destination, get().locations) },
+        objectiveBoxSize(contract, commodity)
       )
-    )
+    })
     contract.objectives = applyMarkerBackfill([contract], get().locations)[0].objectives
     // non-pending scan = final set; pending settles after OCR
     if (!opts.pendingOcr) contract.objectivesSettled = true
@@ -1103,18 +1105,20 @@ export const useStore = create<StoreState>((set, get, api) => {
         const c = contracts[idx]
         // once settled, ignore re-logged objectives (cross-system ones dupe)
         if (c.objectivesSettled) return
-        const destination = resolveLogLocation(e.destination, get().locations)
+        const { locations, commodities } = get()
+        const destination = resolveLogLocation(e.destination, locations)
+        const commodity = commodityName(e.commodity, commodities)
         // key on scu too, so same commodity+dest can register twice (#27); exact re-emits still dedup
         // resolve stored ones too, else a re-emit against an old verbose row dupes
-        const ek = `${e.commodity.trim().toLowerCase()}|${destination.toLowerCase()}|${e.scuAmount}`
+        const ek = `${commodity.toLowerCase()}|${destination.toLowerCase()}|${e.scuAmount}`
         const exists = c.objectives.some(
           (o) =>
-            `${o.commodity.trim().toLowerCase()}|${resolveLogLocation(o.destination, get().locations).toLowerCase()}|${o.scuAmount}` === ek
+            `${commodityName(o.commodity, commodities).toLowerCase()}|${resolveLogLocation(o.destination, locations).toLowerCase()}|${o.scuAmount}` === ek
         )
         if (exists) return
         const objectives = [
           ...c.objectives,
-          makeObjective({ commodity: e.commodity, scuAmount: e.scuAmount, destination }, objectiveBoxSize(c, e.commodity))
+          makeObjective({ commodity, scuAmount: e.scuAmount, destination }, objectiveBoxSize(c, commodity))
         ]
         // a bare-system drop can often be recovered from the dropoff marker coords, no screenshot needed
         const withCoords = applyMarkerBackfill([{ ...c, objectives }], get().locations)[0]
@@ -1415,7 +1419,7 @@ export const useStore = create<StoreState>((set, get, api) => {
         status: 'active',
         objectives: input.objectives
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
-          .map((o) => makeObjective(o, input.maxBoxSize)),
+          .map((o) => makeObjective({ ...o, commodity: commodityName(o.commodity, get().commodities) }, input.maxBoxSize)),
         dataSource: 'manual',
         ref: contractRef(contracts.length)
       }
@@ -1438,6 +1442,7 @@ export const useStore = create<StoreState>((set, get, api) => {
         }
         const rebuilt = objectives
           .filter((o) => o.commodity.trim() && o.destination.trim() && o.scuAmount > 0)
+          .map((o) => ({ ...o, commodity: commodityName(o.commodity, get().commodities) }))
           .map((o) => {
             const kept = prior.get(sig(o.commodity, o.destination, o.scuAmount))?.shift()
             const shaped = makeObjective(o, maxBoxSize)
