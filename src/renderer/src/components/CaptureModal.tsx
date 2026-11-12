@@ -31,8 +31,11 @@ function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
 }
 
+// the game's broken slot names no stop, blank makes it a required pick
 const pickupValue = (p: MatchResult): string | null =>
-  p.match ?? (isBrokenSlotToken(p.input) ? p.input : null)
+  p.match ?? (isBrokenSlotToken(p.input) ? '' : null)
+
+const hasBlankPickup = (r: ObjRow): boolean => !!r.pickups?.some((p) => !p.trim())
 
 const looksLikeContract = (text: string): boolean => {
   const t = text.toLowerCase()
@@ -40,7 +43,7 @@ const looksLikeContract = (text: string): boolean => {
 }
 
 function rowFromOcr(o: OcrObjective): ObjRow {
-  const pickups = o.pickups?.map(pickupValue).filter((x): x is string => !!x)
+  const pickups = o.pickups?.map(pickupValue).filter((x): x is string => x !== null)
   const commodity = seedField(o.commodity)
   const destination = seedField(o.destination)
   return {
@@ -178,7 +181,7 @@ export default function CaptureModal(): React.ReactElement | null {
             // an unmatched read must not blank the logged destination
             if (d.value) row = { ...row, destination: d.value, ocrDestination: d.hint }
           }
-          const read = hit?.pickups?.map(pickupValue).filter((x): x is string => !!x)
+          const read = hit?.pickups?.map(pickupValue).filter((x): x is string => x !== null)
           return fillPickup(row, read)
         })
       )
@@ -260,7 +263,7 @@ export default function CaptureModal(): React.ReactElement | null {
   const incompleteRows = rows.filter(
     (r) =>
       (r.commodity.trim() || r.destination.trim() || r.scuAmount > 0) &&
-      !(r.commodity.trim() && r.destination.trim() && r.scuAmount > 0)
+      (!(r.commodity.trim() && r.destination.trim() && r.scuAmount > 0) || hasBlankPickup(r))
   )
   const canSubmit = validRows.length > 0 && incompleteRows.length === 0
 
