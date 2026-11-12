@@ -102,7 +102,7 @@ function extractMaxBox(descRaw: string): number | undefined {
 }
 
 function extractReputation(titleRaw: string, descRaw: string): number | undefined {
-  const t = /\[\s*(\d+)(?:\s*\/\s*\d+)?\s*rep\s*\]/i.exec(titleRaw)
+  const t = /\[\s*(\d+)(?:\s*\/\s*\d+)*\s*rep\s*\]/i.exec(titleRaw)
   if (t) return parseInt(t[1], 10)
   const d = /reputation\s+awarded[:\s]*<?\/?EM[^>]*>?\s*:?\s*(\d+)/i.exec(
     descRaw.replace(/<\/?EM[^>]*>/gi, ' ')

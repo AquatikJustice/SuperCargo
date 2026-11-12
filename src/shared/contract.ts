@@ -20,7 +20,7 @@ export function cleanTitle(raw: string): string {
   return raw
     .replace(/<\/?EM[^>]*>/gi, '')
     .replace(/\[BP\]\*?/gi, '')
-    .replace(/\[\s*\d+\s*rep\s*\]/gi, '')
+    .replace(/\[\s*\d+(?:\s*\/\s*\d+)*\s*rep\s*\]/gi, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/[\s:]+$/, '') // log appends a trailing ": "
     .trim()
