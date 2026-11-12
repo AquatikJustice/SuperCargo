@@ -11,7 +11,7 @@ interface.
 
 ## Download
 
-Grab the latest build (**v0.9.1**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
+Grab the latest build (**v0.9.2**) from the [Releases page](https://github.com/AquatikJustice/SuperCargo/releases).
 
 - **Windows installer** (`SuperCargo-Setup-*.exe`) installs and auto-updates.
 - **Windows portable** (`SuperCargo-Portable-*.exe`) is a single exe with no install.
@@ -42,8 +42,8 @@ If you hit problems, please open an issue with your distro and what happened.
   3D hold, and what to drop along the way. Drag any box anywhere at any step, and undo any move.
 - **3D cargo grid.** A packed view of your hold, color-coded by destination, loaded in delivery
   order so you never dig one stop out from under another.
-- **Current ship list.** New ships and their cargo grids come with the regular data updates, no new
-  version needed.
+- **Current ship list.** New ships and their cargo grids, modular ones included, arrive with the
+  regular data updates while the app is open, no new version needed.
 - **Personal storage.** Park Stor-All crates in your hold; the planner packs and routes around them.
 - **Off-grid cargo.** Carry loose boxes on a pad beside your bays and drag them on and off any time.
 - **Route optimization.** Orders your stops to cut travel, and shows the run's total distance. Drag
@@ -69,7 +69,8 @@ If you hit problems, please open an issue with your distro and what happened.
   contracts and earnings.
 - **Compact overlay.** A small always-on-top "next stop" card you can pin over the game, with
   adjustable size, opacity, and corner.
-- **StarStrings compatible.** When it's present, blueprint chances and reputation show up.
+- **Vanilla or StarStrings.** Reads contracts the same with the game's own text or StarStrings. With
+  StarStrings, blueprint chances and reputation show up too.
 
 ## Screenshots
 
