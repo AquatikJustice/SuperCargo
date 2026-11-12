@@ -60,6 +60,23 @@ for (const [key, file] of Object.entries(FILES)) {
   }
 }
 
+const loose = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+for (const [list, label] of [[docs.locations?.locations, 'locations.json'], [docs.commodities?.commodities, 'commodities.json']]) {
+  const owner = new Map((list ?? []).map((x) => [loose(x.name), x.name]))
+  for (const x of list ?? []) {
+    if (x.aliases === undefined) continue
+    if (!Array.isArray(x.aliases) || x.aliases.some((a) => typeof a !== 'string' || !a.trim())) {
+      errors.push(`${label}: ${x.name} aliases should be a list of names`)
+      continue
+    }
+    for (const a of x.aliases) {
+      const other = owner.get(loose(a))
+      if (other && other !== x.name) errors.push(`${label}: alias "${a}" on ${x.name} clashes with ${other}`)
+      owner.set(loose(a), x.name)
+    }
+  }
+}
+
 const ships = docs.ships?.ships ?? []
 const faces = docs.gridFaces?.gridFaces ?? []
 app.setGridFaces(faces)

@@ -502,6 +502,8 @@ export interface Location {
   operator?: string
   /** parent moon/planet, e.g. "Cellin" */
   body?: string
+  /** other names the game uses for this spot, e.g. "Nyx - Pyro Jump Point" */
+  aliases?: string[]
 }
 
 export interface LocationRoster {
@@ -514,6 +516,8 @@ export interface Commodity {
   code: string // e.g. "HYDF"
   kind: string // e.g. "Gas", "Metal"
   uexId: number
+  /** vanilla vs StarStrings wording, e.g. "Raw Ice" */
+  aliases?: string[]
 }
 
 export interface CommodityRoster {

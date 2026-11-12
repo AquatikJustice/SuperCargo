@@ -126,21 +126,10 @@ export interface UexCommodity {
   is_visible?: number | string
 }
 
-// drop buy-only sized variants, keep generic
-const SIZED_SHIP_AMMO = /^ship ammunition - size \d+$/i
-
-export function isContractCommodity(c: { name?: string; code?: string }): boolean {
-  const name = String(c.name || '').trim()
-  if (SIZED_SHIP_AMMO.test(name)) return false
-  if (/^SHPA[1-7]$/i.test(String(c.code || '').trim())) return false
-  return true
-}
-
 export function commoditiesToList(data: UexCommodity[]): Commodity[] {
   const byName = new Map<string, Commodity>()
   for (const c of data) {
     if (c.is_visible !== undefined && num(c.is_visible) === 0) continue
-    if (!isContractCommodity(c)) continue
     const name = String(c.name || '').trim()
     if (!name || byName.has(name)) continue
     byName.set(name, {

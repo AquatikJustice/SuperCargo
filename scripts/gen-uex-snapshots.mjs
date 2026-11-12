@@ -67,6 +67,22 @@ function keepHandAdded(fresh) {
   return [...fresh, ...kept].sort((a, b) => a.name.localeCompare(b.name))
 }
 
+// hand-written aliases survive a regen, so do hand-added commodities
+function keepAuthored(file, fresh) {
+  const prev = path.join(OUT_DIR, `${file}.json`)
+  if (!fs.existsSync(prev)) return fresh
+  const byName = new Map(fresh.map((x) => [norm(x.name), x]))
+  for (const old of JSON.parse(fs.readFileSync(prev, 'utf8'))[file]) {
+    const hit = byName.get(norm(old.name))
+    if (hit && old.aliases?.length) hit.aliases = old.aliases
+    if (!hit && file === 'commodities' && old.uexId === 0) {
+      fresh.push(old)
+      console.log(`  kept hand-added commodity: ${old.name}`)
+    }
+  }
+  return file === 'commodities' ? fresh.sort((a, b) => a.name.localeCompare(b.name)) : fresh
+}
+
 async function fetchJson(url, label) {
   const res = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`${label}: HTTP ${res.status}`)
@@ -391,9 +407,10 @@ async function main() {
     let data = s.map(await fetchData(s.endpoint, token))
     let source = `${BASE}/${s.endpoint}`
     if (s.key === 'ships') data = keepHandAdded(data)
+    if (s.key === 'commodities') data = keepAuthored('commodities', data)
     if (s.key === 'locations') {
       const built = buildLocations(data, starmap, trade)
-      data = built.list
+      data = keepAuthored('locations', built.list)
       source = `${source} + scunpacked starmap_positions + trade_locations`
       console.log(
         `  locations: ${data.length} total, ${built.located} with coords, +${built.added} game-file facilities, +${built.gateways} gateways`

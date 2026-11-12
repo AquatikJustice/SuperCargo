@@ -1,6 +1,7 @@
 // parse contract text to objectives; fuzzy matching is a separate step (fuzzy.ts)
 
 import { bestMatch, similarity } from './fuzzy'
+import { matchCommodity } from './commodity'
 import type { Commodity, Location, MatchResult, OcrObjective, OcrWord } from './types'
 
 export interface RawObjective {
@@ -494,6 +495,16 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
     return { input, match: null, score: 0, suggestions: bestMatch(input, names).suggestions }
   }
 
+  // jump point names and the like; strict, they differ by one system word
+  const owner = new Map(locations.flatMap((l) => (l.aliases ?? []).map((a) => [a, l.name] as const)))
+  if (owner.size) {
+    const alias = bestMatch(input, [...owner.keys()], { threshold: 0.85 })
+    if (alias.match) {
+      const name = owner.get(alias.match) as string
+      return { input, match: name, score: alias.score, suggestions: [name] }
+    }
+  }
+
   // no body qualifier: anchor on a distinctive word, else whole-string fuzzy
   const anchor = anchorMatch(input, locations)
   if (anchor) return { input, match: anchor.name, score: anchor.score, suggestions: [anchor.name] }
@@ -563,11 +574,10 @@ export function matchObjectives(
   commodities: Commodity[],
   locations: Location[]
 ): OcrObjective[] {
-  const commodityNames = commodities.map((c) => c.name)
   const objs = raw.map((o) => {
     const destination = resolveLocation(o.destination, locations)
     return {
-      commodity: bestMatch(o.commodity, commodityNames),
+      commodity: matchCommodity(o.commodity, commodities),
       scuAmount: o.scuAmount,
       destination,
       pickups: o.pickups?.map((p) => preferSameSystem(resolveLocation(p, locations), destination.match, locations))

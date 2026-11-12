@@ -1,6 +1,7 @@
 import type { HaulingContract, Location, MarkerPoint } from './types'
 import { isSystemDestination } from './contract'
 import { normalize } from './fuzzy'
+import { sameSystemGateway } from './logLocation'
 
 export interface ResolvedDropoff {
   index: number
@@ -78,7 +79,7 @@ function pickupFill(c: HaulingContract, locations: Location[]): string[] | null 
   return names.every((n): n is string => !!n) ? names : null
 }
 
-// fill in stops the log left as a bare system
+// fill in stops the log left as a bare system or an untagged gateway
 export function applyMarkerBackfill(contracts: HaulingContract[], locations: Location[]): HaulingContract[] {
   if (!locations.length) return contracts
   let changed = false
@@ -93,9 +94,20 @@ export function applyMarkerBackfill(contracts: HaulingContract[], locations: Loc
     }
     const pickups = pickupFill({ ...c, objectives }, locations)
     if (pickups) objectives = [{ ...objectives[0], pickups }]
-    if (objectives === c.objectives) return c
+    let pickup = pickups?.length === 1 && !c.pickup ? pickups[0] : c.pickup
+    const stops = [pickup, ...objectives.flatMap((o) => [o.destination, ...(o.pickups ?? [])])]
+    const gate = (n: string): string => sameSystemGateway(n, stops, locations)
+    const aligned = objectives.map((o) => {
+      const destination = gate(o.destination)
+      const ps = o.pickups?.map(gate)
+      const moved = destination !== o.destination || ps?.some((p, i) => p !== o.pickups?.[i])
+      return moved ? { ...o, destination, pickups: ps } : o
+    })
+    if (aligned.some((o, i) => o !== objectives[i])) objectives = aligned
+    if (pickup) pickup = gate(pickup)
+    if (objectives === c.objectives && pickup === c.pickup) return c
     changed = true
-    return { ...c, objectives, pickup: pickups?.length === 1 && !c.pickup ? pickups[0] : c.pickup }
+    return { ...c, objectives, pickup }
   })
   return changed ? next : contracts
 }
