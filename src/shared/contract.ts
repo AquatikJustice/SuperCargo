@@ -4,7 +4,7 @@ export interface ParsedTitle {
   pickup: string
 }
 
-// broken slot token stays raw so it's fixable
+// game bug prints the slot name instead of the stop
 const PLACEHOLDER_RE = /^(?:location|destination)\s*\d*\s*address\s*\d*$/i
 
 export function isBrokenSlotToken(s: string): boolean {
