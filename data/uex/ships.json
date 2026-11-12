@@ -177,6 +177,20 @@
       ]
     },
     {
+      "name": "Anvil Liberator",
+      "scu": 400,
+      "uexId": 0,
+      "containerSizes": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32
+      ]
+    },
+    {
       "name": "Anvil Paladin",
       "scu": 4,
       "uexId": 249,
@@ -493,6 +507,14 @@
       "scu": 32,
       "uexId": 262,
       "containerSizes": []
+    },
+    {
+      "name": "Gatac Hyun",
+      "scu": 32,
+      "uexId": 0,
+      "containerSizes": [
+        8
+      ]
     },
     {
       "name": "Gatac Railen",
@@ -984,6 +1006,28 @@
         16,
         24,
         32
+      ]
+    },
+    {
+      "name": "RSI Galaxy",
+      "scu": 576,
+      "uexId": 0,
+      "containerSizes": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32
+      ],
+      "baseScu": 64,
+      "modules": [
+        {
+          "id": "rsi-galaxy-cargo",
+          "name": "Cargo Module",
+          "scu": 512
+        }
       ]
     },
     {
