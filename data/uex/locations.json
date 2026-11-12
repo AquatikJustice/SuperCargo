@@ -1170,7 +1170,10 @@
       "x": 32993982418.742573,
       "y": -38151730072.59026,
       "z": 6727.802807,
-      "system": "pyro"
+      "system": "pyro",
+      "aliases": [
+        "Pyro - Nyx Jump Point"
+      ]
     },
     {
       "name": "Nyx Gateway (Stanton)",
@@ -1181,7 +1184,11 @@
       "x": -62284323873.65362,
       "y": 23467575725.722538,
       "z": 20198379369.281647,
-      "system": "stanton"
+      "system": "stanton",
+      "aliases": [
+        "Stanton - Nyx Jump Point",
+        "Stanton - Magnus Jump Point"
+      ]
     },
     {
       "name": "Orbituary",
@@ -1328,7 +1335,10 @@
       "x": -12000044529.892805,
       "y": 20784580528.598274,
       "z": -38674.228082999995,
-      "system": "nyx"
+      "system": "nyx",
+      "aliases": [
+        "Nyx - Pyro Jump Point"
+      ]
     },
     {
       "name": "Pyro Gateway (Stanton)",
@@ -1339,7 +1349,10 @@
       "x": 3310495680.0181007,
       "y": -27979395047.870785,
       "z": -2676322341.089648,
-      "system": "stanton"
+      "system": "stanton",
+      "aliases": [
+        "Stanton-Pyro Jump Point"
+      ]
     },
     {
       "name": "Rappel",
@@ -1773,7 +1786,11 @@
       "x": -13499931610.233513,
       "y": -23382701964.218426,
       "z": -36662.089647999994,
-      "system": "nyx"
+      "system": "nyx",
+      "aliases": [
+        "Nyx - Stanton Jump Point",
+        "Nyx - Castra Jump Point"
+      ]
     },
     {
       "name": "Stanton Gateway (Pyro)",
@@ -1784,7 +1801,10 @@
       "x": -37609223453.24672,
       "y": 37435743642.387474,
       "z": 6727.802807,
-      "system": "pyro"
+      "system": "pyro",
+      "aliases": [
+        "Pyro-Stanton Jump Point"
+      ]
     },
     {
       "name": "Starlight Service Station",
@@ -1849,7 +1869,10 @@
       "x": 51118210044.76286,
       "y": -5270029473.660545,
       "z": -4339552358.888522,
-      "system": "stanton"
+      "system": "stanton",
+      "aliases": [
+        "Stanton - Terra Jump Point"
+      ]
     },
     {
       "name": "The Golden Riviera",

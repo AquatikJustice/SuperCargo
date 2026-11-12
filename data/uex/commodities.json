@@ -290,6 +290,24 @@
       "uexId": 19
     },
     {
+      "name": "Construction Pieces",
+      "code": "",
+      "kind": "Scrap",
+      "uexId": 0
+    },
+    {
+      "name": "Construction Rubble",
+      "code": "",
+      "kind": "Scrap",
+      "uexId": 0
+    },
+    {
+      "name": "Construction Salvage",
+      "code": "",
+      "kind": "Scrap",
+      "uexId": 0
+    },
+    {
       "name": "Copper",
       "code": "COPP",
       "kind": "Metal",
@@ -509,7 +527,11 @@
       "name": "Hephaestanite (Raw)",
       "code": "HEPH",
       "kind": "Mineral",
-      "uexId": 40
+      "uexId": 40,
+      "aliases": [
+        "Hephaestanite (R)",
+        "Heph (Raw)"
+      ]
     },
     {
       "name": "HexaPolyMesh Coating",
@@ -539,7 +561,10 @@
       "name": "Ice (Raw)",
       "code": "ICEW",
       "kind": "Liquid",
-      "uexId": 125
+      "uexId": 125,
+      "aliases": [
+        "Raw Ice"
+      ]
     },
     {
       "name": "Inert Materials",
@@ -773,7 +798,10 @@
       "name": "Ouratite (Raw)",
       "code": "OURW",
       "kind": "Minteral",
-      "uexId": 210
+      "uexId": 210,
+      "aliases": [
+        "Raw Ouratite"
+      ]
     },
     {
       "name": "Partillium",
@@ -950,6 +978,30 @@
       "uexId": 128
     },
     {
+      "name": "Ship Ammunition - Size 1",
+      "code": "",
+      "kind": "Ammunition",
+      "uexId": 0
+    },
+    {
+      "name": "Ship Ammunition - Size 2",
+      "code": "",
+      "kind": "Ammunition",
+      "uexId": 0
+    },
+    {
+      "name": "Ship Ammunition - Size 3",
+      "code": "",
+      "kind": "Ammunition",
+      "uexId": 0
+    },
+    {
+      "name": "Ship Ammunition - Size 4",
+      "code": "",
+      "kind": "Ammunition",
+      "uexId": 0
+    },
+    {
       "name": "Ship Decoy Countermeasures",
       "code": "SHPDC",
       "kind": "Ammunition",
@@ -971,7 +1023,10 @@
       "name": "Silicon (Raw)",
       "code": "SILI",
       "kind": "Raw Materials",
-      "uexId": 161
+      "uexId": 161,
+      "aliases": [
+        "Raw Silicon"
+      ]
     },
     {
       "name": "Silnex",
