@@ -16,7 +16,7 @@ export interface ResolvedDropoff {
 // different frame and don't join). float print rounding is well under a meter, so a tight window.
 const Z_EPSILON = 1
 
-// a city and its spaceport share one point: one stop, the spaceport
+// city and spaceport share a point; spaceport wins
 export function placeOf<T extends Location | null>(loc: T, locations: Location[]): T {
   if (!loc || typeof loc.z !== 'number') return loc
   const here = locations.filter((l) => l.x === loc.x && l.y === loc.y && l.z === loc.z)
@@ -79,7 +79,7 @@ function pickupFill(c: HaulingContract, locations: Location[]): string[] | null 
   return names.every((n): n is string => !!n) ? names : null
 }
 
-// fill in stops the log left as a bare system or an untagged gateway
+// bare systems and untagged gateways
 export function applyMarkerBackfill(contracts: HaulingContract[], locations: Location[]): HaulingContract[] {
   if (!locations.length) return contracts
   let changed = false

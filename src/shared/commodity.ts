@@ -1,7 +1,7 @@
 import { bestMatch, normalize } from './fuzzy'
 import type { Commodity, MatchResult } from './types'
 
-// StarStrings marks illegal goods "<EM3>[!]</EM3> Maze"; ocr reads the bang as 1/l/I
+// StarStrings "[!] Maze"; ocr reads ! as 1/l/I
 export function stripMarkup(raw: string): string {
   return raw
     .replace(/<\/?EM\d*>/gi, '')

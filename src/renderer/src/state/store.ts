@@ -1645,14 +1645,14 @@ export const useStore = create<StoreState>((set, get, api) => {
           })
         }
       })
-      // un-ticking keeps the pins: the boxes are still where they were loaded
+      // un-ticking keeps the pins, boxes haven't moved
       if (picked) {
         // you're where you loaded; drop the trip suffix ('manual' = no routed stop, position unknown)
         const nk = pickupKey.includes('#') ? pickupKey.slice(0, pickupKey.lastIndexOf('#')) : pickupKey
         if (nk && nk !== 'manual' && nk !== get().currentLocation) set({ currentLocation: nk })
       }
       commit(updated)
-      // un-ticked cargo the plan thought aboard needs its pickup routed again, same stop order
+      // cargo the plan thought aboard needs its pickup again
       if (!picked && !get().route?.steps.some((s) => s.loadRefs.some((r) => r.objectiveId === objectiveId))) {
         scheduleReroute(get().stopOrder)
       }
@@ -1859,7 +1859,7 @@ export const useStore = create<StoreState>((set, get, api) => {
         }
       })
       commit(contracts)
-      // a real count changes what the tail can carry, not the stop order
+      // count changes capacity, not stop order
       scheduleReroute(get().stopOrder)
     },
 

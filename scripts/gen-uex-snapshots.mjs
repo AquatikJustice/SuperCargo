@@ -67,7 +67,7 @@ function keepHandAdded(fresh) {
   return [...fresh, ...kept].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-// hand-written aliases survive a regen, so do hand-added commodities
+// keep hand-written aliases and commodities
 function keepAuthored(file, fresh) {
   const prev = path.join(OUT_DIR, `${file}.json`)
   if (!fs.existsSync(prev)) return fresh
@@ -357,7 +357,7 @@ function buildLocations(locations, starmap, trade) {
   const gateways = buildGateways(trade, entities)
   out.push(...gateways)
 
-  // UEX and trade_locations miss most cities; the starmap has each as a landing zone
+  // uex misses most cities, the starmap doesn't
   for (const city of new Set(Object.values(SPACEPORT_CITY))) {
     if (out.some((l) => norm(l.name) === norm(city))) continue
     const l = { name: city, code: '', maxContainerSize: 0, uexId: 0, hasElevator: true }

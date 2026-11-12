@@ -32,7 +32,7 @@ export interface RouteInput {
   deferred?: Set<number>
   /** job indices already physically aboard: pickups happened, only deliveries remain */
   aboard?: Set<number>
-  /** job indices the user grabbed early: they load at their pickup's first visit, room or not */
+  /** load at their pickup's first visit, room or not */
   grabbed?: Set<number>
   /** permanent crates parked in the hold; their space is never plannable */
   fixtures?: ReadonlyMap<string, Placement>
@@ -606,7 +606,7 @@ function planMultiTrip(input: RouteInput): RouteResult {
       const plan = planHold(input.bays, passEvents(walk.stops, all, seeded), { fixtures: input.fixtures })
       const bad = new Set<number>()
       for (const s of plan.snaps) for (const b of s.unplaced) bad.add(Number(b.id.split('#')[0]))
-      // aboard jobs are already on the ship, grabbed ones load now regardless
+      // these load regardless of room
       for (const i of [...aboardSet, ...grabbed]) bad.delete(i)
       if (bad.size < best.homeless) best = { walk, homeless: bad.size }
       if (!bad.size || round >= 2) break

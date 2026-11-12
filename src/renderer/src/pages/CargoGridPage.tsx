@@ -1158,7 +1158,7 @@ export default function CargoGridPage(): React.ReactElement {
       const boxes = visit.flatMap((v, vi) => loadingPack.stepBoxes[k + vi] ?? []).filter((bx) => bx.objectiveId && idSet.has(bx.objectiveId))
       const scu = boxes.reduce((sum, bx) => sum + bx.size, 0)
       if (!scu) return null
-      // what the grid can't seat can ride off grid, if the ship has the room
+      // unseated boxes ride off grid if there's room
       const stash = offPad ? offPad.w * offPad.l * offPad.h : 0
       for (let i = loadIdx; i < k; i++) {
         const snap = loadingPack.snaps[i]
@@ -2013,7 +2013,7 @@ export default function CargoGridPage(): React.ReactElement {
     for (const p of snap.placements) active.add(boxKey(p.box))
     for (const u of snap.unplaced) active.add(boxKey(u))
     for (const b of snap.loose) active.add(boxKey(b))
-    // still to load is not delivered; a re-opened pickup keeps its spots
+    // later loads keep their spots
     for (const step of loadingPack.stepBoxes.slice(loadIdx + 1)) for (const b of step) active.add(boxKey(b))
     for (const key of Object.keys(loadedPins)) if (!active.has(key)) clearLoadedPin(key)
     const moved: Record<string, LoadedPin> = {}
@@ -2256,7 +2256,7 @@ export default function CargoGridPage(): React.ReactElement {
                 }
                 // re-opens the step you land on; the back-movement effect unwinds the rest
                 const prev = loadSteps[loadIdx - 1]
-                // back at that stop, so the re-plan starts there instead of queueing a revisit
+                // re-plan from that stop, no revisit
                 if (prev && !prev.start) setCurrentLocation(prev.nodeKey)
                 if (prev?.kind === 'load')
                   for (const oid of prev.loadIds) {

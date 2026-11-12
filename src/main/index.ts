@@ -237,7 +237,7 @@ function broadcast(channel: string, payload: unknown, exceptId?: number): void {
   }
 }
 
-// overlay + crew mirror need new ships too, not just main
+// overlay and crew mirror need them too
 function pushRosters(): void {
   const ships = loadCachedRoster()
   if (ships) broadcast(IPC.evtShips, ships)
@@ -653,7 +653,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.dataRefresh, async () => {
     seedCacheIfNeeded()
     const res = await syncData()
-    // the seed may have moved even when the repo didn't
+    // seed can move without a repo change
     if (!res.changed) {
       contractData.setOverrides(loadCachedContractOverrides())
       pushRosters()

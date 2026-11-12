@@ -42,7 +42,7 @@ const BOX_PATTERNS = [
   /(?:all\s+)?(\d+)\s*scu\s+(?:in\s+size\s+)?or\s+smaller/i,
   /max(?:imum)?\s+(?:container|box)[^0-9]{0,24}(\d+)\s*scu/i,
   /max(?:imum)?\s+size\s+of\s+(?:the\s+)?(?:cargo\s+)?containers?\s+is\s+(\d+)\s*scu/i,
-  // snapBoxSize takes any number, so every one of these names a container
+  // each names a container; any number snaps
   /containers?\b[^.\d]{0,24}?\b(?:up\s+to|at\s+most|as\s+big\s+as|(?:no\s+)?(?:bigger|larger)\s+than)\s+(\d+)\s*scu/i,
   /(?:largest|biggest)\s+(?:cargo\s+)?container\b[^.\d]{0,60}?\bis\s+(\d+)\s*scu/i,
   /container\s+size\s+(?:at|of|is)\s+(\d+)\s*scu/i,
@@ -495,7 +495,7 @@ export function resolveLocation(raw: string, locations: Location[]): MatchResult
     return { input, match: null, score: 0, suggestions: bestMatch(input, names).suggestions }
   }
 
-  // jump point names and the like; strict, they differ by one system word
+  // strict: jump points differ by one word
   const owner = new Map(locations.flatMap((l) => (l.aliases ?? []).map((a) => [a, l.name] as const)))
   if (owner.size) {
     const alias = bestMatch(input, [...owner.keys()], { threshold: 0.85 })

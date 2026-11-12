@@ -51,7 +51,7 @@ export interface SetAside {
 type Axis = 'x' | 'y' | 'z'
 type Way = { axis: Axis; dir: -1 | 1 }
 
-// every side cargo can leave by: doors and aisles off the floor's axis
+// doors, plus aisles off the floor's axis
 function waysOut(g: CargoGrid): Way[] {
   const floorAxis = (g.floor ?? 'y-')[0]
   const ways: Way[] = []

@@ -299,7 +299,7 @@ export function buildRouteModel(
       nodes.push({
         key,
         label: loc?.name || raw.trim(),
-        // a location's code is a UEX nickname, not a station code
+        // location codes are uex nicknames
         code: loc ? splitDestination(loc.name).code : split.code,
         region: split.region,
         uexId: loc?.uexId,
@@ -348,7 +348,7 @@ export function buildRouteModel(
       pickups.forEach((pu, i) => {
         const pickupNode = nodeFor(pu || '(unknown pickup)', false)
         if (pickupNode === destNode) return
-        // off-grid boxes still travel, they just take no grid room
+        // off-grid boxes travel, no grid room
         const want = parked.filter((p) => pickups.length === 1 || p.node === nodes[pickupNode].key).map((p) => p.size)
         const off: number[] = []
         const boxes = perPickup[i].filter((b) => {
@@ -483,10 +483,10 @@ export function computeRoutePlan(
     if (leoIdx !== undefined) cityToLeo.set(i, leoIdx)
   })
 
-  // a mid-walk re-plan starts from wherever the ship is, not the depot
+  // mid-walk re-plan starts where the ship is
   const startNode = startKey !== undefined ? model.nodes.findIndex((n) => n.key === startKey) : -1
 
-  // saved key order, new stops last; new work where the ship sits goes first
+  // saved order, new stops last, ship's stop first
   let fixedOrder: number[] | undefined
   if (manualOrder && manualOrder.length) {
     const byKey = new Map(model.nodes.map((n, i) => [n.key, i]))

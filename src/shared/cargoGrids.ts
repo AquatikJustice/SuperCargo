@@ -161,7 +161,7 @@ let ANCHORED: Record<string, boolean> = {}
 /** built-in off-grid pad size, cells; used when a ship has no override */
 export const OFF_GRID_DEFAULT = { w: 16, l: 10, h: 6 }
 
-/** keep = ship mid-load; true when its new markup got held back */
+/** keep: ship being loaded; true if its markup was held */
 export function setGridFaces(ships: ShipMarkup[], keep?: string): boolean {
   const raw: Record<string, ShipMarkup> = {}
   for (const s of ships) raw[s.ship] = s
@@ -266,7 +266,7 @@ export const bayLabel = (id: string): string => id.replace(/-/g, ' ').replace(/\
 const fitted = (moduleId: string | undefined, installed?: string[]): boolean =>
   !moduleId || !installed || installed.includes(moduleId)
 
-// so a new ship or bay needs no release
+// new ships and bays need no release
 function baysFromMarkup(bays: [string, BayInfo][], installed?: string[]): CargoGrid[] {
   const out: CargoGrid[] = []
   for (const [id, m] of bays) {

@@ -76,10 +76,10 @@ interface BayCtx {
   upFlip: boolean
   /** stacks hug the high side of the cross axis */
   wallHigh: boolean
-  /** cargo can also leave out the low/high side (aisle or side door) */
+  /** aisle or side door on the low/high side */
   openLo: boolean
   openHi: boolean
-  /** or out a second door at the far end */
+  /** second door at the far end */
   openFar: boolean
 }
 
@@ -213,7 +213,7 @@ function sideClear(bay: BayCtx, r: Slot, others: Slot[]): boolean {
 const farClear = (bay: BayCtx, r: Slot, others: Slot[]): boolean =>
   bay.openFar && !others.some((q) => laneClash(q, r) && q.d > r.d)
 
-// out of door order is fine if whichever leaves first has another way out
+// out of order is ok with another way out
 function leavesAround(bay: BayCtx, rivals: Slot[], t: Slot, r: Slot, pad: number): boolean {
   if (spans(t.d - pad, t.d + t.dl + pad, r.d, r.d + r.dl)) return false
   const first = r.drop < t.drop ? r : t
@@ -367,7 +367,7 @@ function scanSpot(bay: BayCtx, rivals: Slot[], probe: Slot, gap: number, d0: num
   return narrow
 }
 
-// slide in at its level or from a side, else lower into an open column; overhead cargo blocks it
+// slide in or lower in; overhead cargo blocks
 function canInsert(bay: BayCtx, aboard: Slot[], t: Slot, aside = true): boolean {
   if (!aboard.some((r) => laneClash(t, r) && r.d < t.d)) return true
   if (aside && (sideClear(bay, t, aboard) || farClear(bay, t, aboard))) return true
@@ -408,7 +408,7 @@ function makesSandwich(bay: BayCtx, rivals: Slot[], t: Slot, aside: boolean): bo
       const otherSide = (lo: boolean): boolean =>
         rivals.some((q) => q !== r && (q.anchor || q.drop > r.drop) && side(q, r, onC, lo))
       if (!((tLo && (tHi || otherSide(false))) || (tHi && otherSide(true)))) continue
-      // flank bug looks fixed in game; a front-back pinch can still go out the side
+      // pinched cargo can go out the side now
       const staying = (): Slot[] => rivals.concat(t).filter((q) => q !== r && q.load < r.drop && q.drop > r.drop)
       if (aside && !onC && !r.anchor && sideClear(bay, r, staying())) continue
       return true
@@ -474,7 +474,7 @@ function findSpot(
           for (const r of rivals) {
             if (!laneClash(t, r)) continue
             const pad = r.stop !== t.stop ? gap : 0
-            // earlier drop peels first, sits nearer the exit, unless it has another way out
+            // earlier drop nearer the exit, or another way out
             const inWay = (r.drop < t.drop && r.d + r.dl + pad > t.d) || (r.drop > t.drop && t.d + t.dl + pad > r.d)
             if (inWay && !(relax.aside && leavesAround(bay, rivals, t, r, pad))) { ok = false; break }
           }

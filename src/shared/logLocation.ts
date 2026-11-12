@@ -63,7 +63,7 @@ export function resolveLogLocation(raw: string, locations: Location[]): string {
 
 const TAG = /\s*\([^)]*\)\s*$/
 
-// a bare "Stanton Gateway" resolves to the first copy; the contract's other stops pick the system
+// bare gateway names take the other stops' system
 export function sameSystemGateway(name: string, stops: string[], locations: Location[]): string {
   if (!TAG.test(name)) return name
   const sysOf = (s: string): string | undefined => locations.find((l) => norm(l.name) === norm(s))?.system

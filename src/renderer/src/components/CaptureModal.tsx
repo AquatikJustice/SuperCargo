@@ -31,7 +31,7 @@ function seedField(m: MatchResult): { value: string; hint: OcrHintInfo } {
   return { value, hint: { raw: m.input, score: m.score, matched: !!m.match, guess } }
 }
 
-// the game's broken slot names no stop, blank makes it a required pick
+// broken slot names no stop; blank forces a pick
 const pickupValue = (p: MatchResult): string | null =>
   p.match ?? (isBrokenSlotToken(p.input) ? '' : null)
 

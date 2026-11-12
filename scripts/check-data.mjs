@@ -1,4 +1,4 @@
-// run before pushing data/uex; --fix rehashes and adds missing roster entries
+// run before pushing data/uex; --fix repairs
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -163,7 +163,7 @@ for (const [key, file] of Object.entries(FILES)) {
     /* reported above */
   }
 }
-// a new syncedAt keeps 0.9.1 clients from showing a stale grid
+// else 0.9.1 clients keep a stale grid
 if (fix && docs.gridFaces && want.gridFaces !== hashes.gridFaces) {
   docs.gridFaces.syncedAt = new Date().toISOString()
   write(FILES.gridFaces, docs.gridFaces)
