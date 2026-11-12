@@ -1,6 +1,6 @@
 {
   "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
-  "syncedAt": "2026-10-09",
+  "syncedAt": "2026-11-12T19:15:33.155Z",
   "gridFaces": [
     {
       "ship": "Drake Ironclad",
@@ -4109,6 +4109,111 @@
         "y": 0,
         "z": -5.5
       }
+    },
+    {
+      "ship": "Anvil Liberator",
+      "bays": [
+        {
+          "id": "garage-a",
+          "name": "Garage A",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 6,
+          "l": 8,
+          "h": 4,
+          "maxSize": 32
+        },
+        {
+          "id": "garage-b",
+          "name": "Garage B",
+          "x": 7,
+          "y": 0,
+          "z": 0,
+          "w": 4,
+          "l": 8,
+          "h": 4,
+          "maxSize": 32
+        },
+        {
+          "id": "hangar",
+          "name": "Hangar",
+          "x": 12,
+          "y": 0,
+          "z": 0,
+          "w": 4,
+          "l": 5,
+          "h": 4,
+          "maxSize": 16
+        }
+      ]
+    },
+    {
+      "ship": "Gatac Hyun",
+      "bays": [
+        {
+          "id": "main",
+          "name": "Cargo",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 4,
+          "l": 4,
+          "h": 2,
+          "maxSize": 8
+        }
+      ]
+    },
+    {
+      "ship": "RSI Galaxy",
+      "bays": [
+        {
+          "id": "rear-left",
+          "name": "Rear Left",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 2,
+          "l": 4,
+          "h": 4,
+          "maxSize": 16
+        },
+        {
+          "id": "rear-right",
+          "name": "Rear Right",
+          "x": 3,
+          "y": 0,
+          "z": 0,
+          "w": 2,
+          "l": 4,
+          "h": 4,
+          "maxSize": 16
+        },
+        {
+          "id": "module-left",
+          "name": "Cargo Module Left",
+          "x": 6,
+          "y": 0,
+          "z": 0,
+          "w": 4,
+          "l": 16,
+          "h": 4,
+          "maxSize": 32,
+          "moduleId": "rsi-galaxy-cargo"
+        },
+        {
+          "id": "module-right",
+          "name": "Cargo Module Right",
+          "x": 11,
+          "y": 0,
+          "z": 0,
+          "w": 4,
+          "l": 16,
+          "h": 4,
+          "maxSize": 32,
+          "moduleId": "rsi-galaxy-cargo"
+        }
+      ]
     }
   ]
 }
