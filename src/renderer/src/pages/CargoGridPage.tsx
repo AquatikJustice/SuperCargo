@@ -27,6 +27,7 @@ import TurnInModal, { type TurnInItem } from '../components/TurnInModal'
 import LoadBar from '../components/LoadBar'
 
 const GAP = 0.08
+const NO_MODULES: string[] = []
 
 const BOX_GRAY = '#787d82'
 const BOX_GRAY_LOADED = '#5b6065'
@@ -635,7 +636,7 @@ export default function CargoGridPage(): React.ReactElement {
     if (st.layout) st.unlockLayout()
   }, [])
 
-  const installed = installedModules[activeShip]
+  const installed = installedModules[activeShip] ?? NO_MODULES
   const grids = useMemo(
     () => gridsFor(activeShip, installed),
     [activeShip, installed, gridFacesRev]
