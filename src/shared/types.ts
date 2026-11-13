@@ -502,7 +502,7 @@ export interface Location {
   operator?: string
   /** parent moon/planet, e.g. "Cellin" */
   body?: string
-  /** other names the game uses for this spot, e.g. "Nyx - Pyro Jump Point" */
+  /** other names the game uses, e.g. "Nyx - Pyro Jump Point" */
   aliases?: string[]
 }
 
