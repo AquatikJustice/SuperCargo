@@ -1010,7 +1010,7 @@
     },
     {
       "name": "RSI Galaxy",
-      "scu": 576,
+      "scu": 720,
       "uexId": 0,
       "containerSizes": [
         1,
@@ -1026,7 +1026,7 @@
         {
           "id": "rsi-galaxy-cargo",
           "name": "Cargo Module",
-          "scu": 512
+          "scu": 656
         }
       ]
     },

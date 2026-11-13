@@ -1,6 +1,6 @@
 {
-  "source": "SuperCargo grid-markup tool (npm run markup) - authored bay faces, ship frame, and layout fixes",
-  "syncedAt": "2026-11-12T19:15:33.155Z",
+  "source": "SuperCargo Grid Markup",
+  "syncedAt": "2026-11-13T01:11:57.495Z",
   "gridFaces": [
     {
       "ship": "Drake Ironclad",
@@ -4116,37 +4116,70 @@
         {
           "id": "garage-a",
           "name": "Garage A",
-          "x": 0,
+          "x": 2,
           "y": 0,
-          "z": 0,
-          "w": 6,
-          "l": 8,
+          "z": -3.75,
+          "w": 8,
+          "l": 6,
           "h": 4,
-          "maxSize": 32
+          "maxSize": 32,
+          "faces": {
+            "x-": "exit",
+            "y-": "floor",
+            "x+": "wall",
+            "z-": "wall",
+            "z+": "wall",
+            "y+": "wall"
+          }
         },
         {
           "id": "garage-b",
           "name": "Garage B",
-          "x": 7,
+          "x": 2,
           "y": 0,
-          "z": 0,
-          "w": 4,
-          "l": 8,
+          "z": -9.75,
+          "w": 8,
+          "l": 4,
           "h": 4,
-          "maxSize": 32
+          "maxSize": 32,
+          "faces": {
+            "x-": "exit",
+            "z-": "wall",
+            "z+": "wall",
+            "x+": "wall",
+            "y-": "floor",
+            "y+": "wall"
+          }
         },
         {
           "id": "hangar",
           "name": "Hangar",
-          "x": 12,
+          "x": 2,
           "y": 0,
-          "z": 0,
-          "w": 4,
-          "l": 5,
+          "z": 5.75,
+          "w": 5,
+          "l": 4,
           "h": 4,
-          "maxSize": 16
+          "maxSize": 16,
+          "faces": {
+            "x+": "wall",
+            "x-": "exit",
+            "y-": "floor",
+            "z+": "wall",
+            "z-": "wall",
+            "y+": "wall"
+          }
         }
-      ]
+      ],
+      "anchored": true,
+      "offGrid": {
+        "on": true,
+        "x": -12,
+        "y": 0,
+        "z": -10,
+        "w": 10,
+        "l": 20
+      }
     },
     {
       "ship": "Gatac Hyun",
@@ -4170,50 +4203,109 @@
         {
           "id": "rear-left",
           "name": "Rear Left",
-          "x": 0,
+          "x": -7,
           "y": 0,
-          "z": 0,
+          "z": 8,
           "w": 2,
           "l": 4,
           "h": 4,
-          "maxSize": 16
+          "maxSize": 16,
+          "faces": {
+            "y-": "floor",
+            "x-": "wall",
+            "x+": "exit",
+            "y+": "wall",
+            "z-": "wall",
+            "z+": "wall"
+          }
         },
         {
           "id": "rear-right",
           "name": "Rear Right",
-          "x": 3,
+          "x": 5,
           "y": 0,
-          "z": 0,
+          "z": 8,
           "w": 2,
           "l": 4,
           "h": 4,
-          "maxSize": 16
+          "maxSize": 16,
+          "faces": {
+            "y-": "floor",
+            "x-": "exit",
+            "z+": "wall",
+            "x+": "wall",
+            "y+": "wall",
+            "z-": "wall"
+          }
         },
         {
           "id": "module-left",
           "name": "Cargo Module Left",
-          "x": 6,
+          "x": -9,
           "y": 0,
-          "z": 0,
+          "z": -12,
           "w": 4,
           "l": 16,
           "h": 4,
           "maxSize": 32,
-          "moduleId": "rsi-galaxy-cargo"
+          "moduleId": "rsi-galaxy-cargo",
+          "faces": {
+            "x-": "wall",
+            "z-": "aisle",
+            "x+": "exit",
+            "y+": "aisle",
+            "z+": "wall",
+            "y-": "floor"
+          }
         },
         {
           "id": "module-right",
           "name": "Cargo Module Right",
-          "x": 11,
+          "x": 5,
           "y": 0,
-          "z": 0,
+          "z": -12,
           "w": 4,
           "l": 16,
           "h": 4,
           "maxSize": 32,
-          "moduleId": "rsi-galaxy-cargo"
+          "moduleId": "rsi-galaxy-cargo",
+          "faces": {
+            "x+": "wall",
+            "z-": "aisle",
+            "y+": "aisle",
+            "x-": "exit",
+            "z+": "wall",
+            "y-": "floor"
+          }
+        },
+        {
+          "id": "cargo-lift",
+          "name": "Cargo Lift",
+          "x": -3,
+          "y": 0,
+          "z": -10,
+          "w": 6,
+          "l": 12,
+          "h": 2,
+          "maxSize": 32,
+          "moduleId": "rsi-galaxy-cargo",
+          "faces": {
+            "y+": "aisle",
+            "z+": "wall",
+            "x-": "exit",
+            "x+": "exit",
+            "z-": "wall",
+            "y-": "floor"
+          }
         }
-      ]
+      ],
+      "anchored": true,
+      "offGrid": {
+        "on": true,
+        "x": 11,
+        "y": 0,
+        "z": -6
+      }
     }
   ]
 }
