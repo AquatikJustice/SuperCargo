@@ -61,7 +61,7 @@ export default function ManifestPage(): React.ReactElement {
   const derivedContracts = useMemo(() => deriveContracts(activeContracts(contracts)), [contracts])
 
   // usable bays only, no elevators or secure storage
-  const capMax = gridCapacity(activeShip, installedModules[activeShip])
+  const capMax = gridCapacity(activeShip, installedModules[activeShip] ?? [])
   const storAlls = useStore((s) => s.storAlls)
   const reserved = (storAlls[activeShip] ?? []).reduce((a, c) => a + c.size, 0)
   // mid-walk the cursor indexes the walk, not the route

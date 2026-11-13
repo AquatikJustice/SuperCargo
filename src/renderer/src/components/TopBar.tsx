@@ -536,9 +536,10 @@ function ShipPicker({ narrow }: { narrow?: boolean }): React.ReactElement {
   const needsGrid = useMemo(() => (name: string) => !hasGridMarkup(name), [gridFacesRev])
   const activeNeedsGrid = needsGrid(shipName)
   const ship = ships.find((s) => s.name === shipName)
-  const scu = shipCapacity(ship, installedModules[shipName])
   const modules = ship?.modules ?? []
-  const installed = installedModules[shipName] ?? modules.map((m) => m.id)
+  // nothing fitted until the player says so
+  const installed = installedModules[shipName] ?? []
+  const scu = shipCapacity(ship, installed)
 
   const toggleModule = (id: string): void => {
     if (!ship?.modules) return

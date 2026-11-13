@@ -590,7 +590,7 @@ export const useStore = create<StoreState>((set, get, api) => {
 
   const holdGrids = (): CargoGrid[] => {
     const { settings } = get()
-    return gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
+    return gridsFor(settings.activeShip, settings.installedModules[settings.activeShip] ?? [])
   }
 
   const commit = (contracts: HaulingContract[], order?: string[]): void => {
@@ -623,7 +623,7 @@ export const useStore = create<StoreState>((set, get, api) => {
   })
   const doReroute = async (seed?: string[]): Promise<void> => {
     const { contracts, locations, settings, startLocation, currentLocation, isRouteAuto, stopOrder, deferredObjectives, grabbedObjectives, looseBoxes, looseAt, storAlls } = get()
-    const installed = settings.installedModules[settings.activeShip]
+    const installed = settings.installedModules[settings.activeShip] ?? []
     const capacity = gridCapacity(settings.activeShip, installed)
     const bays = loadableGrids(settings.activeShip, installed)
     const crates = storAlls[settings.activeShip]
@@ -755,7 +755,7 @@ export const useStore = create<StoreState>((set, get, api) => {
     // snapshot inputs for replay
     entry.replay = {
       ship: s.settings.activeShip,
-      installedModules: s.settings.installedModules[s.settings.activeShip],
+      installedModules: s.settings.installedModules[s.settings.activeShip] ?? [],
       startLocation: s.startLocation,
       order: s.order,
       stopOrder: s.stopOrder,
@@ -985,7 +985,7 @@ export const useStore = create<StoreState>((set, get, api) => {
         })
       }
 
-      const grids = gridsFor(settings.activeShip, settings.installedModules[settings.activeShip])
+      const grids = gridsFor(settings.activeShip, settings.installedModules[settings.activeShip] ?? [])
       const layout =
         active.length && manifest.layout ? reconcileLayout(active, manifest.layout, grids) : null
 
